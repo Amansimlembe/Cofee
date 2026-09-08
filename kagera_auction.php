@@ -140,8 +140,8 @@ function ensure_kagera_table() {
 }
 
 /* =========================================================
-   MINIMAL XLSX READER
-   Does not require PHP ZipArchive.
+   XLSX READER
+   Uses the system unzip utility; ZipArchive is not required.
    ========================================================= */
 function kagera_unzip($file, $entry) {
     $cmd = 'unzip -p ' . escapeshellarg($file) . ' ' . escapeshellarg($entry) . ' 2>/dev/null';
@@ -177,50 +177,213 @@ function kagera_col_index($letters) {
 }
 
 function kagera_parse_xlsx($file) {
-    $shared = kagera_shared_strings(kagera_unzip($file, 'xl/sharedStrings.xml') ?: '');
-    $sheet = kagera_unzip($file, 'xl/worksheets/sheet1.xml');
+    /*
+     * XLSX is a ZIP package. Render's PHP image may not have the
+     * ZipArchive extension enabled, so use the system unzip utility
+     * instead. This also avoids the previous "first worksheet" failure.
+     */
+    if (!is_file($file) || !is_readable($file)) {
+        throw new Exception("The uploaded Excel file could not be read.");
+    }
+
+    $unzip = function ($entry) use ($file) {
+        $cmd = 'unzip -p ' . escapeshellarg($file) . ' ' . escapeshellarg($entry) . ' 2>/dev/null';
+        $result = shell_exec($cmd);
+        return ($result !== null && $result !== '') ? $result : false;
+    };
+
+    $workbookXml = $unzip("xl/workbook.xml");
+    $relsXml = $unzip("xl/_rels/workbook.xml.rels");
+
+    if ($workbookXml === false) {
+        throw new Exception("The .xlsx file does not contain xl/workbook.xml.");
+    }
+
+    /*
+     * Resolve the first worksheet. First try workbook.xml + relationships.
+     * If that structure is unusual, fall back to the first worksheet XML
+     * actually contained in the XLSX archive.
+     */
+    $sheetPath = false;
+
+    if ($relsXml !== false) {
+        $workbook = @simplexml_load_string($workbookXml);
+        $rels = @simplexml_load_string($relsXml);
+
+        if ($workbook !== false && $rels !== false) {
+            $workbook->registerXPathNamespace(
+                "main",
+                "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+            );
+
+            $sheets = $workbook->xpath("//main:sheets/main:sheet");
+
+            if ($sheets && isset($sheets[0])) {
+                $firstSheet = $sheets[0];
+                $rid = (string)$firstSheet->attributes(
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+                )->id;
+
+                if ($rid !== '') {
+                    /*
+                     * Do not depend on a namespace-aware XPath for the
+                     * relationships file. Read the Relationship directly.
+                     */
+                    $ridEscaped = preg_quote($rid, '/');
+
+                    if (preg_match(
+                        '/<Relationship\b[^>]*\bId=["\']' . $ridEscaped .
+                        '["\'][^>]*\bTarget=["\']([^"\']+)["\'][^>]*\/?>/i',
+                        $relsXml,
+                        $m
+                    )) {
+                        $target = str_replace("\\", "/", $m[1]);
+                        $target = ltrim($target, "/");
+
+                        if (strpos($target, "xl/") !== 0) {
+                            $target = "xl/" . $target;
+                        }
+
+                        $sheetPath = $target;
+                    }
+                }
+            }
+        }
+    }
+
+    /*
+     * Fallback: find the first worksheet physically stored in the XLSX.
+     */
+    if ($sheetPath === false) {
+        $listCmd = 'unzip -Z1 ' . escapeshellarg($file) . ' 2>/dev/null';
+        $entries = shell_exec($listCmd);
+
+        if ($entries !== null) {
+            $candidateSheets = [];
+
+            foreach (preg_split('/\R/', trim($entries)) as $entry) {
+                $entry = trim($entry);
+
+                if (preg_match('#^xl/worksheets/[^/]+\.xml$#i', $entry)) {
+                    $candidateSheets[] = $entry;
+                }
+            }
+
+            if (!empty($candidateSheets)) {
+                sort($candidateSheets, SORT_NATURAL);
+                $sheetPath = $candidateSheets[0];
+            }
+        }
+    }
+
+    if ($sheetPath === false) {
+        throw new Exception("Unable to locate the first worksheet in the .xlsx file.");
+    }
+
+    $sheetXml = $unzip($sheetPath);
+
+    if ($sheetXml === false) {
+        throw new Exception("Unable to read the first worksheet from the .xlsx file.");
+    }
+
+    /*
+     * Read shared strings. They are optional in XLSX.
+     */
+    $sharedStrings = [];
+    $sharedXml = $unzip("xl/sharedStrings.xml");
+
+    if ($sharedXml !== false) {
+        $shared = @simplexml_load_string($sharedXml);
+
+        if ($shared !== false) {
+            $shared->registerXPathNamespace(
+                "main",
+                "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+            );
+
+            foreach ($shared->xpath("//main:si") as $si) {
+                $value = '';
+
+                foreach ($si->xpath(".//main:t") as $t) {
+                    $value .= (string)$t;
+                }
+
+                $sharedStrings[] = $value;
+            }
+        }
+    }
+
+    /*
+     * Parse worksheet rows.
+     */
+    $sheet = @simplexml_load_string($sheetXml);
 
     if ($sheet === false) {
-        throw new Exception('Unable to read the first worksheet from the .xlsx file.');
+        throw new Exception("Unable to parse the first worksheet.");
+    }
+
+    $sheet->registerXPathNamespace(
+        "main",
+        "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    );
+
+    $rowNodes = $sheet->xpath("//main:sheetData/main:row");
+
+    if (!$rowNodes) {
+        throw new Exception("The first worksheet contains no readable rows.");
     }
 
     $rows = [];
-    preg_match_all('/<row\b[^>]*>(.*?)<\/row>/is', $sheet, $rowMatches);
 
-    foreach ($rowMatches[1] ?? [] as $rowXml) {
+    foreach ($rowNodes as $rowNode) {
         $cells = [];
-        preg_match_all('/<c\b([^>]*)>(.*?)<\/c>/is', $rowXml, $matches, PREG_SET_ORDER);
 
-        foreach ($matches as $m) {
-            $attrs = $m[1];
-            $body = $m[2];
-            if (!preg_match('/\br=["\']([A-Z]+)\d+["\']/i', $attrs, $ref)) continue;
-
-            $idx = kagera_col_index($ref[1]);
-            $type = '';
-            if (preg_match('/\bt=["\']([^"\']+)["\']/i', $attrs, $tm)) {
-                $type = strtolower($tm[1]);
-            }
-
+        foreach ($rowNode->xpath("./main:c") as $cell) {
+            $ref = (string)$cell["r"];
+            $type = (string)$cell["t"];
             $value = '';
-            if ($type === 'inlineStr') {
-                preg_match_all('/<t\b[^>]*>(.*?)<\/t>/is', $body, $tmatches);
-                foreach ($tmatches[1] ?? [] as $part) $value .= kagera_xml_decode($part);
-            } elseif (preg_match('/<v\b[^>]*>(.*?)<\/v>/is', $body, $vm)) {
-                $value = kagera_xml_decode($vm[1]);
-                if ($type === 's') $value = $shared[(int)$value] ?? '';
-                elseif ($type === 'b') $value = $value === '1' ? 'TRUE' : 'FALSE';
+
+            if ($type === "inlineStr") {
+                foreach ($cell->xpath(".//main:t") as $t) {
+                    $value .= (string)$t;
+                }
+            } elseif ($type === "s") {
+                $index = (int)((string)$cell->v);
+                $value = $sharedStrings[$index] ?? '';
+            } elseif ($type === "b") {
+                $value = ((string)$cell->v === "1") ? "TRUE" : "FALSE";
+            } else {
+                $value = isset($cell->v) ? (string)$cell->v : '';
+
+                /*
+                 * A formula cell can have its calculated result in <v>.
+                 * The calculated result is what the import needs.
+                 */
+                if ($value === '' && isset($cell->f)) {
+                    $value = '';
+                }
             }
 
-            $cells[$idx] = trim($value);
+            if (preg_match('/^([A-Z]+)\d+$/i', $ref, $m)) {
+                $column = kagera_col_index($m[1]);
+                $cells[$column] = $value;
+            }
         }
 
-        if ($cells) {
+        if (!empty($cells)) {
             $max = max(array_keys($cells));
             $row = array_fill(0, $max + 1, '');
-            foreach ($cells as $i => $v) $row[$i] = $v;
+
+            foreach ($cells as $index => $value) {
+                $row[$index] = $value;
+            }
+
             $rows[] = $row;
         }
+    }
+
+    if (empty($rows)) {
+        throw new Exception("The first worksheet is empty or could not be read.");
     }
 
     return $rows;

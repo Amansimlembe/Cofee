@@ -1518,6 +1518,22 @@ submenu names.
         </section>
 
 
+        <!-- KAGERA AUCTION -->
+
+        <section
+            id="kagera-auction"
+            class="section kagera-page-section">
+
+            <iframe
+                id="kageraAuctionFrame"
+                src="about:blank"
+                title="Kagera Auction"
+                class="kagera-auction-frame">
+            </iframe>
+
+        </section>
+
+        
         <!-- CLEAN AUCTION -->
 
         <section
@@ -1539,21 +1555,6 @@ submenu names.
 
         </section>
 
-
-        <!-- KAGERA AUCTION -->
-
-        <section
-            id="kagera-auction"
-            class="section kagera-page-section">
-
-            <iframe
-                id="kageraAuctionFrame"
-                src="about:blank"
-                title="Kagera Auction"
-                class="kagera-auction-frame">
-            </iframe>
-
-        </section>
 
 
         <!-- DIRECT EXPORT -->
