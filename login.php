@@ -1,8 +1,134 @@
 <?php
-
 session_start();
 
-require_once __DIR__ . '/config.php';
+/*
+|--------------------------------------------------------------------------
+| RENDER DATABASE CONNECTION
+|--------------------------------------------------------------------------
+| Render provides DATABASE_URL automatically when PostgreSQL is linked
+| to this Web Service.
+*/
+
+$databaseUrl = getenv("DATABASE_URL");
+
+if (!$databaseUrl) {
+    die("Database connection is not configured.");
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| CONNECT TO RENDER POSTGRESQL
+|--------------------------------------------------------------------------
+*/
+
+try {
+
+    $db = parse_url($databaseUrl);
+
+    $host = $db["host"];
+    $port = $db["port"] ?? 5432;
+    $dbname = ltrim($db["path"], "/");
+    $user = $db["user"];
+    $password = $db["pass"];
+
+    $dsn = "pgsql:host={$host};port={$port};dbname={$dbname}";
+
+    $pdo = new PDO(
+        $dsn,
+        $user,
+        $password,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        ]
+    );
+
+} catch (PDOException $e) {
+
+    die("Unable to connect to the database.");
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| AUTOMATICALLY CREATE USERS TABLE
+|--------------------------------------------------------------------------
+| This runs automatically when login.php is accessed.
+| CREATE TABLE IF NOT EXISTS prevents duplicate-table errors.
+*/
+
+try {
+
+    $createTable = "
+        CREATE TABLE IF NOT EXISTS users (
+            id BIGSERIAL PRIMARY KEY,
+            username VARCHAR(100) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+    ";
+
+    $pdo->exec($createTable);
+
+} catch (PDOException $e) {
+
+    die("Unable to initialize the database.");
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| CREATE DEFAULT ADMIN USER AUTOMATICALLY
+|--------------------------------------------------------------------------
+| This creates the first administrator if one does not already exist.
+|
+| Username: admin
+| Password: admin123
+|
+| The password is stored as a secure hash.
+|--------------------------------------------------------------------------
+*/
+
+try {
+
+    $checkUser = $pdo->prepare(
+        "SELECT id FROM users WHERE username = :username LIMIT 1"
+    );
+
+    $checkUser->execute([
+        ":username" => "admin"
+    ]);
+
+    if (!$checkUser->fetch()) {
+
+        $hashedPassword = password_hash(
+            "admin123",
+            PASSWORD_DEFAULT
+        );
+
+        $insertUser = $pdo->prepare("
+            INSERT INTO users (username, password)
+            VALUES (:username, :password)
+        ");
+
+        $insertUser->execute([
+            ":username" => "admin",
+            ":password" => $hashedPassword
+        ]);
+    }
+
+} catch (PDOException $e) {
+
+    die("Unable to initialize the administrator account.");
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| LOGIN PROCESS
+|--------------------------------------------------------------------------
+*/
 
 $login_error = "";
 
@@ -13,55 +139,52 @@ if (isset($_POST["login"])) {
 
     if ($username === "" || $password === "") {
 
-        $login_error = "Please enter your username and password.";
+        $login_error = "Please enter username and password.";
 
     } else {
 
-        $url = SUPABASE_URL . "/rest/v1/users"
-             . "?select=id,username,password"
-             . "&username=eq." . rawurlencode($username);
+        try {
 
-        $context = stream_context_create([
-            "http" => [
-                "method" => "GET",
-                "header" =>
-                    "apikey: " . SUPABASE_KEY . "\r\n" .
-                    "Authorization: Bearer " . SUPABASE_KEY . "\r\n" .
-                    "Content-Type: application/json\r\n",
-                "ignore_errors" => true,
-                "timeout" => 15
-            ]
-        ]);
+            /*
+            |--------------------------------------------------------------
+            | FIND USER
+            |--------------------------------------------------------------
+            */
 
-        $response = @file_get_contents(
-            $url,
-            false,
-            $context
-        );
+            $stmt = $pdo->prepare("
+                SELECT id, username, password
+                FROM users
+                WHERE username = :username
+                LIMIT 1
+            ");
 
-        if ($response === false) {
+            $stmt->execute([
+                ":username" => $username
+            ]);
 
-            $login_error = "Unable to connect to Supabase.";
+            $user = $stmt->fetch();
 
-        } else {
 
-            $users = json_decode($response, true);
+            /*
+            |--------------------------------------------------------------
+            | VERIFY PASSWORD
+            |--------------------------------------------------------------
+            */
 
             if (
-                is_array($users) &&
-                count($users) === 1 &&
-                isset($users[0]["password"]) &&
-                password_verify(
-                    $password,
-                    $users[0]["password"]
-                )
+                $user &&
+                password_verify($password, $user["password"])
             ) {
 
-                session_regenerate_id(true);
+                /*
+                |----------------------------------------------------------
+                | LOGIN SUCCESS
+                |----------------------------------------------------------
+                */
 
                 $_SESSION["logged_in"] = true;
-                $_SESSION["username"] = $users[0]["username"];
-                $_SESSION["user_id"] = $users[0]["id"];
+                $_SESSION["user_id"] = $user["id"];
+                $_SESSION["username"] = $user["username"];
 
                 header("Location: index.php");
                 exit;
@@ -70,9 +193,14 @@ if (isset($_POST["login"])) {
 
                 $login_error = "Invalid username or password.";
             }
+
+        } catch (PDOException $e) {
+
+            $login_error = "Unable to process login.";
         }
     }
 }
+
 
 /*
 |--------------------------------------------------------------------------
@@ -83,20 +211,16 @@ if (isset($_POST["login"])) {
 if (isset($_GET["logout"])) {
 
     session_unset();
-
     session_destroy();
 
-    header(
-        "Location: login.php"
-    );
-
+    header("Location: login.php");
     exit;
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| CHECK LOGIN
+| CHECK LOGIN STATUS
 |--------------------------------------------------------------------------
 */
 
@@ -105,6 +229,7 @@ $is_logged_in =
     $_SESSION["logged_in"] === true;
 
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 
