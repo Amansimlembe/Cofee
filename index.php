@@ -39,6 +39,8 @@ Coffee Sales Data Analysis System
 
     width: 270px;
 
+    --sidebar-width: 270px;
+
     height: 100vh;
 
     background: #3e2723;
@@ -63,6 +65,8 @@ Coffee Sales Data Analysis System
 .sidebar.collapsed {
 
     width: 78px;
+
+    --sidebar-width: 78px;
 
 }
 
@@ -147,14 +151,22 @@ Coffee Sales Data Analysis System
 
     list-style: none;
 
-    padding: 18px 10px;
+    padding: 20px 10px;
+
+    margin: 0;
 
 }
 
 
 .menu-item {
 
-    margin-bottom: 5px;
+    margin-bottom: 10px;
+
+}
+
+.menu-item:last-child {
+
+    margin-bottom: 0;
 
 }
 
@@ -438,15 +450,17 @@ submenu names.
 
 .sidebar-toggle {
 
-    position: absolute;
+    position: fixed;
 
     top: 20px;
 
-    right: -13px;
+    left: calc(var(--sidebar-width) - 14px);
 
-    width: 28px;
+    width: 30px;
 
-    height: 28px;
+    height: 30px;
+
+    padding: 0;
 
     border-radius: 50%;
 
@@ -459,7 +473,7 @@ submenu names.
 
     cursor: pointer;
 
-    z-index: 1100;
+    z-index: 2000;
 
     display: flex;
 
@@ -467,12 +481,19 @@ submenu names.
 
     justify-content: center;
 
-    font-size: 12px;
+    font-size: 13px;
+
+    line-height: 1;
+
+    box-sizing: border-box;
 
     box-shadow:
-        0 2px 7px rgba(0,0,0,0.2);
+        0 2px 7px rgba(0,0,0,0.25);
 
-    transition: 0.3s ease;
+    transition:
+        left 0.3s ease,
+        background 0.2s ease,
+        transform 0.2s ease;
 
 }
 
@@ -480,6 +501,8 @@ submenu names.
 .sidebar-toggle:hover {
 
     background: #8d6e63;
+
+    transform: scale(1.05);
 
 }
 
@@ -936,6 +959,8 @@ submenu names.
     .sidebar {
 
         width: 78px;
+
+        --sidebar-width: 78px;
 
     }
 
