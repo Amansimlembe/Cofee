@@ -449,52 +449,42 @@ submenu names.
 ========================================================= */
 
 .sidebar-toggle {
-
     position: fixed;
-
-    top: 20px;
-
+    top: 18px;
     left: calc(var(--sidebar-width) - 15px);
-
-    width: 30px;
-
-    height: 30px;
-
+    width: 32px;
+    height: 32px;
     padding: 0;
-
+    border: 1px solid rgba(255,255,255,0.75);
     border-radius: 50%;
-
-    border:
-        2px solid white;
-
-    background: #6d4c41;
-
-    color: white;
-
+    background: #4e342e;
+    color: #ffffff;
     cursor: pointer;
-
     z-index: 2000;
-
     display: flex;
-
     align-items: center;
-
     justify-content: center;
-
-    font-size: 13px;
-
+    font-size: 12px;
+    font-weight: 700;
     line-height: 1;
-
     box-sizing: border-box;
-
-    box-shadow:
-        0 2px 7px rgba(0,0,0,0.25);
-
+    box-shadow: 0 3px 10px rgba(0,0,0,0.25);
     transition:
         left 0.3s ease,
         background 0.2s ease,
+        box-shadow 0.2s ease,
         transform 0.2s ease;
+}
 
+.sidebar-toggle:hover {
+    background: #6d4c41;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.32);
+    transform: scale(1.04);
+}
+
+.sidebar-toggle:focus-visible {
+    outline: 2px solid #d7ccc8;
+    outline-offset: 2px;
 }
 
 
