@@ -1,3 +1,4 @@
+
 FROM php:8.3-apache
 
 RUN apt-get update \
@@ -9,12 +10,16 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY . /var/www/html/
-
 WORKDIR /var/www/html
 
-RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader \
-    && a2enmod rewrite
+COPY composer.json /var/www/html/composer.json
+
+RUN composer validate --no-check-publish \
+    && composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+
+COPY . /var/www/html/
+
+RUN a2enmod rewrite
 
 EXPOSE 10000
 
