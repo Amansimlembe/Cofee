@@ -73,8 +73,8 @@ try {
 |--------------------------------------------------------------------------
 */
 
-$admin_username = "admin";
-$admin_password = "admin123";
+$admin_username = "aman@coffee.com";
+$admin_password = "Ammy@123";
 
 $check_admin = $pdo->prepare("
     SELECT id
