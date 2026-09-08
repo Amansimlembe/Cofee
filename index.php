@@ -255,7 +255,7 @@ Coffee Sales Data Analysis System
 
     flex: 0 0 auto;
 
-    margin-left: 14px;
+    margin-left: 41px;
 
     margin-right: 4px;
 
