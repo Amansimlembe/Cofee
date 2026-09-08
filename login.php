@@ -32,8 +32,13 @@ try {
         ? ltrim($db["path"], "/")
         : "";
 
-    $db_user = $db["user"] ?? "";
-    $db_password = $db["pass"] ?? "";
+    $db_user = isset($db["user"])
+        ? rawurldecode($db["user"])
+        : "";
+
+    $db_password = isset($db["pass"])
+        ? rawurldecode($db["pass"])
+        : "";
 
     $pdo = new PDO(
         "pgsql:host={$db_host};port={$db_port};dbname={$db_name}",
@@ -69,40 +74,83 @@ try {
 
 /*
 |--------------------------------------------------------------------------
-| CREATE DEFAULT ADMIN ACCOUNT
+| CREATE 5 DEFAULT USER ACCOUNTS
+|--------------------------------------------------------------------------
+| These accounts are automatically inserted into Render PostgreSQL
+| when they do not already exist.
 |--------------------------------------------------------------------------
 */
 
-$admin_username = "aman@coffee.com";
-$admin_password = "Ammy@123";
+$default_users = [
 
-$check_admin = $pdo->prepare("
+    [
+        "username" => "aman@coffee.com",
+        "password" => "Ammy@123"
+    ],
+
+    [
+        "username" => "mtitu@coffee.com",
+        "password" => "Mtitu@123"
+    ],
+
+    [
+        "username" => "vayinga@coffee.com",
+        "password" => "Vayinga@123"
+    ],
+
+    [
+        "username" => "officer@coffee.com",
+        "password" => "Officer@123"
+    ],
+
+    [
+        "username" => "admin@coffee.com",
+        "password" => "Admin@123"
+    ],
+     [
+        "username" => "coffee@coffee.com",
+        "password" => "Coffee@123"
+    ]
+
+];
+
+
+/*
+|--------------------------------------------------------------------------
+| INSERT USERS IF THEY DO NOT EXIST
+|--------------------------------------------------------------------------
+*/
+
+$check_user = $pdo->prepare("
     SELECT id
     FROM users
     WHERE username = :username
     LIMIT 1
 ");
 
-$check_admin->execute([
-    ":username" => $admin_username
-]);
+$create_user = $pdo->prepare("
+    INSERT INTO users (username, password)
+    VALUES (:username, :password)
+");
 
-if (!$check_admin->fetch()) {
+foreach ($default_users as $account) {
 
-    $hashed_password = password_hash(
-        $admin_password,
-        PASSWORD_DEFAULT
-    );
-
-    $create_admin = $pdo->prepare("
-        INSERT INTO users (username, password)
-        VALUES (:username, :password)
-    ");
-
-    $create_admin->execute([
-        ":username" => $admin_username,
-        ":password" => $hashed_password
+    $check_user->execute([
+        ":username" => $account["username"]
     ]);
+
+    if (!$check_user->fetch()) {
+
+        $hashed_password = password_hash(
+            $account["password"],
+            PASSWORD_DEFAULT
+        );
+
+        $create_user->execute([
+            ":username" => $account["username"],
+            ":password" => $hashed_password
+        ]);
+    }
 }
 
 
@@ -134,6 +182,8 @@ if (isset($_POST["login"])) {
         $user &&
         password_verify($password, $user["password"])
     ) {
+
+        session_regenerate_id(true);
 
         $_SESSION["logged_in"] = true;
         $_SESSION["user_id"] = $user["id"];
