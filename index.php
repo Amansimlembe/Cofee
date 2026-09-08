@@ -54,7 +54,7 @@ Coffee Sales Data Analysis System
     box-shadow:
         3px 0 15px rgba(0,0,0,0.12);
 
-    overflow-x: hidden;
+    overflow-x: visible;
 
     overflow-y: auto;
 }
@@ -83,7 +83,7 @@ Coffee Sales Data Analysis System
 
     justify-content: center;
 
-    padding: 15px;
+    padding: 15px 52px 15px 15px;
 
     background: #2b1b18;
 
@@ -362,9 +362,7 @@ Coffee Sales Data Analysis System
 
 
 .sidebar.collapsed .submenu {
-
     display: none !important;
-
 }
 
 
@@ -387,10 +385,29 @@ submenu names.
 */
 
 .sidebar.collapsed
-.menu-item:hover .collapsed-tooltip {
+.menu-item:hover  .collapsed-tooltip {
+    display: none;
+    position: fixed;
+    left: 78px;
+    top: auto;
+    background: #2b1b18;
+    color: white;
+    min-width: 210px;
+    padding: 8px;
+    border-radius: 0 8px 8px 0;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+    z-index: 3000;
+    box-sizing: border-box;
+}
 
-    display: block;
-
+/* Invisible hover bridge removes the gap between the icon and tooltip. */
+.collapsed-tooltip::before {
+    content: "";
+    position: absolute;
+    left: -12px;
+    top: 0;
+    width: 12px;
+    height: 100%;
 }
 
 
@@ -448,14 +465,15 @@ submenu names.
    SIDEBAR TOGGLE
 ========================================================= */
 
-.sidebar-toggle {
-    position: fixed;
-    top: 18px;
-    left: calc(var(--sidebar-width) - 15px);
-    width: 32px;
-    height: 32px;
+ .sidebar-toggle {
+    position: absolute;
+    top: 29px;
+    right: 12px;
+    left: auto;
+    width: 30px;
+    height: 30px;
     padding: 0;
-    border: 1px solid rgba(255,255,255,0.75);
+    border: 1px solid rgba(255,255,255,0.8);
     border-radius: 50%;
     background: #4e342e;
     color: #ffffff;
@@ -468,9 +486,8 @@ submenu names.
     font-weight: 700;
     line-height: 1;
     box-sizing: border-box;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.28);
     transition:
-        left 0.3s ease,
         background 0.2s ease,
         box-shadow 0.2s ease,
         transform 0.2s ease;
@@ -478,7 +495,7 @@ submenu names.
 
 .sidebar-toggle:hover {
     background: #6d4c41;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.32);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.34);
     transform: scale(1.04);
 }
 
@@ -1630,6 +1647,9 @@ function toggleSidebar() {
 
     sidebar.classList.toggle("collapsed");
 
+    document.querySelectorAll(".collapsed-tooltip").forEach(function(tooltip) {
+        tooltip.style.display = "";
+    });
 
     if (
         sidebar.classList.contains("collapsed")
@@ -1649,6 +1669,67 @@ function toggleSidebar() {
 /* =========================================================
    SUBMENU
 ========================================================= */
+
+function positionCollapsedTooltip(menuItem) {
+    const tooltip = menuItem.querySelector(".collapsed-tooltip");
+
+    if (!tooltip) return;
+
+    const rect = menuItem.getBoundingClientRect();
+    const tooltipHeight = tooltip.offsetHeight;
+    const viewportPadding = 10;
+
+    let top = rect.top;
+
+    if (top + tooltipHeight > window.innerHeight - viewportPadding) {
+        top = window.innerHeight - tooltipHeight - viewportPadding;
+    }
+
+    if (top < viewportPadding) {
+        top = viewportPadding;
+    }
+
+    tooltip.style.top = top + "px";
+}
+
+document.querySelectorAll(".sidebar .menu-item").forEach(function(menuItem) {
+    const tooltip = menuItem.querySelector(".collapsed-tooltip");
+
+    if (!tooltip) return;
+
+    menuItem.addEventListener("mouseenter", function() {
+        if (document.getElementById("sidebar").classList.contains("collapsed")) {
+            tooltip.style.display = "block";
+            positionCollapsedTooltip(menuItem);
+        }
+    });
+
+    menuItem.addEventListener("mouseleave", function(event) {
+        if (!tooltip.contains(event.relatedTarget)) {
+            tooltip.style.display = "";
+        }
+    });
+
+    tooltip.addEventListener("mouseenter", function() {
+        if (document.getElementById("sidebar").classList.contains("collapsed")) {
+            tooltip.style.display = "block";
+            positionCollapsedTooltip(menuItem);
+        }
+    });
+
+    tooltip.addEventListener("mouseleave", function() {
+        tooltip.style.display = "";
+    });
+});
+
+window.addEventListener("resize", function() {
+    document.querySelectorAll(".sidebar.collapsed .menu-item").forEach(function(menuItem) {
+        const tooltip = menuItem.querySelector(".collapsed-tooltip");
+        if (tooltip && tooltip.style.display === "block") {
+            positionCollapsedTooltip(menuItem);
+        }
+    });
+});
 
 function toggleSubmenu(element) {
 
