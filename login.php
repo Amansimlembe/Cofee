@@ -3,50 +3,33 @@ session_start();
 
 /*
 |--------------------------------------------------------------------------
-| RENDER DATABASE CONNECTION
+| RENDER POSTGRESQL CONNECTION
 |--------------------------------------------------------------------------
-| Render provides DATABASE_URL automatically when PostgreSQL is linked
-| to this Web Service.
 */
 
-$databaseUrl = getenv("DATABASE_URL");
+$databaseUrl = getenv('DATABASE_URL');
 
 if (!$databaseUrl) {
-    die("Database connection is not configured.");
+    die('DATABASE_URL is missing. Please connect your Render PostgreSQL database to this Web Service.');
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| CONNECT TO RENDER POSTGRESQL
-|--------------------------------------------------------------------------
-*/
 
 try {
 
-    $db = parse_url($databaseUrl);
+    $pdo = new PDO($databaseUrl);
 
-    $host = $db["host"];
-    $port = $db["port"] ?? 5432;
-    $dbname = ltrim($db["path"], "/");
-    $user = $db["user"];
-    $password = $db["pass"];
+    $pdo->setAttribute(
+        PDO::ATTR_ERRMODE,
+        PDO::ERRMODE_EXCEPTION
+    );
 
-    $dsn = "pgsql:host={$host};port={$port};dbname={$dbname}";
-
-    $pdo = new PDO(
-        $dsn,
-        $user,
-        $password,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
-        ]
+    $pdo->setAttribute(
+        PDO::ATTR_DEFAULT_FETCH_MODE,
+        PDO::FETCH_ASSOC
     );
 
 } catch (PDOException $e) {
 
-    die("Unable to connect to the database.");
+    die('Unable to connect to Render PostgreSQL database.');
 }
 
 
@@ -54,79 +37,54 @@ try {
 |--------------------------------------------------------------------------
 | AUTOMATICALLY CREATE USERS TABLE
 |--------------------------------------------------------------------------
-| This runs automatically when login.php is accessed.
-| CREATE TABLE IF NOT EXISTS prevents duplicate-table errors.
 */
 
-try {
-
-    $createTable = "
-        CREATE TABLE IF NOT EXISTS users (
-            id BIGSERIAL PRIMARY KEY,
-            username VARCHAR(100) NOT NULL UNIQUE,
-            password VARCHAR(255) NOT NULL,
-            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        );
-    ";
-
-    $pdo->exec($createTable);
-
-} catch (PDOException $e) {
-
-    die("Unable to initialize the database.");
-}
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS users (
+        id BIGSERIAL PRIMARY KEY,
+        username VARCHAR(100) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    )
+");
 
 
 /*
 |--------------------------------------------------------------------------
-| CREATE DEFAULT ADMIN USER AUTOMATICALLY
-|--------------------------------------------------------------------------
-| This creates the first administrator if one does not already exist.
-|
-| Username: admin
-| Password: admin123
-|
-| The password is stored as a secure hash.
+| AUTOMATICALLY CREATE ADMIN ACCOUNT
 |--------------------------------------------------------------------------
 */
 
-try {
+$stmt = $pdo->prepare(
+    "SELECT id FROM users WHERE username = :username LIMIT 1"
+);
 
-    $checkUser = $pdo->prepare(
-        "SELECT id FROM users WHERE username = :username LIMIT 1"
+$stmt->execute([
+    ':username' => 'admin'
+]);
+
+if (!$stmt->fetch()) {
+
+    $hashedPassword = password_hash(
+        'admin123',
+        PASSWORD_DEFAULT
     );
 
-    $checkUser->execute([
-        ":username" => "admin"
+    $stmt = $pdo->prepare("
+        INSERT INTO users (username, password)
+        VALUES (:username, :password)
+    ");
+
+    $stmt->execute([
+        ':username' => 'admin',
+        ':password' => $hashedPassword
     ]);
-
-    if (!$checkUser->fetch()) {
-
-        $hashedPassword = password_hash(
-            "admin123",
-            PASSWORD_DEFAULT
-        );
-
-        $insertUser = $pdo->prepare("
-            INSERT INTO users (username, password)
-            VALUES (:username, :password)
-        ");
-
-        $insertUser->execute([
-            ":username" => "admin",
-            ":password" => $hashedPassword
-        ]);
-    }
-
-} catch (PDOException $e) {
-
-    die("Unable to initialize the administrator account.");
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| LOGIN PROCESS
+| LOGIN
 |--------------------------------------------------------------------------
 */
 
@@ -143,60 +101,36 @@ if (isset($_POST["login"])) {
 
     } else {
 
-        try {
+        $stmt = $pdo->prepare("
+            SELECT id, username, password
+            FROM users
+            WHERE username = :username
+            LIMIT 1
+        ");
 
-            /*
-            |--------------------------------------------------------------
-            | FIND USER
-            |--------------------------------------------------------------
-            */
+        $stmt->execute([
+            ':username' => $username
+        ]);
 
-            $stmt = $pdo->prepare("
-                SELECT id, username, password
-                FROM users
-                WHERE username = :username
-                LIMIT 1
-            ");
+        $user = $stmt->fetch();
 
-            $stmt->execute([
-                ":username" => $username
-            ]);
+        if (
+            $user &&
+            password_verify($password, $user["password"])
+        ) {
 
-            $user = $stmt->fetch();
+            session_regenerate_id(true);
 
+            $_SESSION["logged_in"] = true;
+            $_SESSION["user_id"] = $user["id"];
+            $_SESSION["username"] = $user["username"];
 
-            /*
-            |--------------------------------------------------------------
-            | VERIFY PASSWORD
-            |--------------------------------------------------------------
-            */
+            header("Location: index.php");
+            exit;
 
-            if (
-                $user &&
-                password_verify($password, $user["password"])
-            ) {
+        } else {
 
-                /*
-                |----------------------------------------------------------
-                | LOGIN SUCCESS
-                |----------------------------------------------------------
-                */
-
-                $_SESSION["logged_in"] = true;
-                $_SESSION["user_id"] = $user["id"];
-                $_SESSION["username"] = $user["username"];
-
-                header("Location: index.php");
-                exit;
-
-            } else {
-
-                $login_error = "Invalid username or password.";
-            }
-
-        } catch (PDOException $e) {
-
-            $login_error = "Unable to process login.";
+            $login_error = "Invalid username or password.";
         }
     }
 }
@@ -216,18 +150,6 @@ if (isset($_GET["logout"])) {
     header("Location: login.php");
     exit;
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| CHECK LOGIN STATUS
-|--------------------------------------------------------------------------
-*/
-
-$is_logged_in =
-    isset($_SESSION["logged_in"]) &&
-    $_SESSION["logged_in"] === true;
-
 ?>
 
 <!DOCTYPE html>
