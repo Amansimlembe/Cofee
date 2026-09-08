@@ -150,23 +150,6 @@ function kagera_unzip($file, $entry) {
     return $output;
 }
 
-function kagera_xml_decode($s) {
-    return html_entity_decode((string)$s, ENT_QUOTES | ENT_XML1, 'UTF-8');
-}
-
-function kagera_shared_strings($xml) {
-    $out = [];
-    if (!$xml) return $out;
-    preg_match_all('/<si\b[^>]*>(.*?)<\/si>/is', $xml, $items);
-    foreach ($items[1] ?? [] as $item) {
-        $value = '';
-        preg_match_all('/<t\b[^>]*>(.*?)<\/t>/is', $item, $parts);
-        foreach ($parts[1] ?? [] as $part) $value .= kagera_xml_decode($part);
-        $out[] = $value;
-    }
-    return $out;
-}
-
 function kagera_col_index($letters) {
     $n = 0;
     $letters = strtoupper($letters);
@@ -176,35 +159,191 @@ function kagera_col_index($letters) {
     return $n - 1;
 }
 
-function kagera_parse_xlsx($file) {
-    /*
-     * XLSX is a ZIP package. Render's PHP image may not have the
-     * ZipArchive extension enabled, so use the system unzip utility
-     * instead. This also avoids the previous "first worksheet" failure.
-     */
+function kagera_clean_cell($value) {
+    if ($value === null) return '';
+    $value = (string)$value;
+    $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $value);
+    return trim($value);
+}
+
+function kagera_parse_with_phpspreadsheet($file) {
+    $autoloaders = [
+        __DIR__ . '/vendor/autoload.php',
+        dirname(__DIR__) . '/vendor/autoload.php'
+    ];
+
+    $autoloaded = false;
+
+    foreach ($autoloaders as $autoload) {
+        if (is_file($autoload)) {
+            require_once $autoload;
+            $autoloaded = class_exists('\PhpOffice\PhpSpreadsheet\IOFactory');
+            if ($autoloaded) break;
+        }
+    }
+
+    if (!$autoloaded) {
+        return false;
+    }
+
+    try {
+        $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($file);
+        $reader->setReadDataOnly(true);
+
+        // Read only the first worksheet, as required by this page.
+        if (method_exists($reader, 'setLoadSheetsOnly')) {
+            $reader->setLoadSheetsOnly(0);
+        }
+
+        $spreadsheet = $reader->load($file);
+        $sheet = $spreadsheet->getSheet(0);
+        $highestRow = $sheet->getHighestDataRow();
+        $highestColumn = $sheet->getHighestDataColumn();
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
+
+        $rows = [];
+
+        for ($r = 1; $r <= $highestRow; $r++) {
+            $row = [];
+
+            for ($c = 1; $c <= $highestColumnIndex; $c++) {
+                $cell = $sheet->getCellByColumnAndRow($c, $r);
+                $value = $cell->getValue();
+
+                // Preserve displayed date/time values rather than raw Excel
+                // serial numbers where PhpSpreadsheet can format them.
+                if ($value !== null && $value !== '' &&
+                    \PhpOffice\PhpSpreadsheet\Shared\Date::isDateTime($cell)) {
+                    $value = $cell->getFormattedValue();
+                }
+
+                $row[] = kagera_clean_cell($value);
+            }
+
+            if (count(array_filter($row, fn($v) => $v !== '')) > 0) {
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
+    } catch (Throwable $e) {
+        throw new Exception("Unable to read the Excel workbook: " . $e->getMessage());
+    }
+}
+
+function kagera_parse_csv($file) {
+    $handle = fopen($file, 'rb');
+
+    if (!$handle) {
+        throw new Exception("Unable to open the CSV file.");
+    }
+
+    $first = fgets($handle);
+    if ($first === false) {
+        fclose($handle);
+        throw new Exception("The CSV file is empty.");
+    }
+
+    $first = preg_replace('/^\xEF\xBB\xBF/', '', $first);
+
+    // Detect comma, semicolon, tab, or pipe-delimited files.
+    $delimiters = [',', ';', "\t", '|'];
+    $bestDelimiter = ',';
+    $bestCount = -1;
+
+    foreach ($delimiters as $delimiter) {
+        $count = substr_count($first, $delimiter);
+        if ($count > $bestCount) {
+            $bestCount = $count;
+            $bestDelimiter = $delimiter;
+        }
+    }
+
+    rewind($handle);
+
+    $rows = [];
+
+    while (($row = fgetcsv($handle, 0, $bestDelimiter)) !== false) {
+        $row = array_map('kagera_clean_cell', $row);
+
+        if (count(array_filter($row, fn($v) => $v !== '')) > 0) {
+            $rows[] = $row;
+        }
+    }
+
+    fclose($handle);
+
+    return $rows;
+}
+
+function kagera_parse_xml_spreadsheet($file) {
+    $xml = file_get_contents($file);
+
+    if ($xml === false || stripos($xml, '<Workbook') === false) {
+        throw new Exception("Unable to read the Excel XML workbook.");
+    }
+
+    $xml = preg_replace('/^\xEF\xBB\xBF/', '', $xml);
+
+    libxml_use_internal_errors(true);
+    $dom = new DOMDocument();
+
+    if (!$dom->loadXML($xml)) {
+        throw new Exception("The Excel XML workbook is invalid.");
+    }
+
+    $xpath = new DOMXPath($dom);
+    $xpath->registerNamespace('ss', 'urn:schemas-microsoft-com:office:spreadsheet');
+
+    $rows = [];
+
+    foreach ($xpath->query('//ss:Worksheet[1]//ss:Table/ss:Row') as $rowNode) {
+        $row = [];
+        $column = 0;
+
+        foreach ($xpath->query('./ss:Cell', $rowNode) as $cell) {
+            $index = $cell->getAttributeNS('urn:schemas-microsoft-com:office:spreadsheet', 'Index');
+
+            if ($index !== '') {
+                $column = ((int)$index) - 1;
+            }
+
+            $dataNode = $xpath->query('./ss:Data', $cell)->item(0);
+            $row[$column] = $dataNode ? kagera_clean_cell($dataNode->textContent) : '';
+
+            $column++;
+        }
+
+        if (count(array_filter($row, fn($v) => $v !== '')) > 0) {
+            $max = max(array_keys($row));
+            $normalized = array_fill(0, $max + 1, '');
+
+            foreach ($row as $i => $value) {
+                $normalized[$i] = $value;
+            }
+
+            $rows[] = $normalized;
+        }
+    }
+
+    return $rows;
+}
+
+function kagera_parse_xlsx_native($file) {
     if (!is_file($file) || !is_readable($file)) {
         throw new Exception("The uploaded Excel file could not be read.");
     }
 
-    $unzip = function ($entry) use ($file) {
-        $cmd = 'unzip -p ' . escapeshellarg($file) . ' ' . escapeshellarg($entry) . ' 2>/dev/null';
-        $result = shell_exec($cmd);
-        return ($result !== null && $result !== '') ? $result : false;
-    };
-
-    $workbookXml = $unzip("xl/workbook.xml");
-    $relsXml = $unzip("xl/_rels/workbook.xml.rels");
+    $workbookXml = kagera_unzip($file, "xl/workbook.xml");
 
     if ($workbookXml === false) {
-        throw new Exception("The .xlsx file does not contain xl/workbook.xml.");
+        throw new Exception("This OOXML workbook could not be opened.");
     }
 
-    /*
-     * Resolve the first worksheet. First try workbook.xml + relationships.
-     * If that structure is unusual, fall back to the first worksheet XML
-     * actually contained in the XLSX archive.
-     */
+    $relsXml = kagera_unzip($file, "xl/_rels/workbook.xml.rels");
     $sheetPath = false;
+
+    libxml_use_internal_errors(true);
 
     if ($relsXml !== false) {
         $workbook = @simplexml_load_string($workbookXml);
@@ -220,15 +359,12 @@ function kagera_parse_xlsx($file) {
 
             if ($sheets && isset($sheets[0])) {
                 $firstSheet = $sheets[0];
+
                 $rid = (string)$firstSheet->attributes(
                     "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
                 )->id;
 
                 if ($rid !== '') {
-                    /*
-                     * Do not depend on a namespace-aware XPath for the
-                     * relationships file. Read the Relationship directly.
-                     */
                     $ridEscaped = preg_quote($rid, '/');
 
                     if (preg_match(
@@ -251,12 +387,10 @@ function kagera_parse_xlsx($file) {
         }
     }
 
-    /*
-     * Fallback: find the first worksheet physically stored in the XLSX.
-     */
     if ($sheetPath === false) {
-        $listCmd = 'unzip -Z1 ' . escapeshellarg($file) . ' 2>/dev/null';
-        $entries = shell_exec($listCmd);
+        $entries = shell_exec(
+            'unzip -Z1 ' . escapeshellarg($file) . ' 2>/dev/null'
+        );
 
         if ($entries !== null) {
             $candidateSheets = [];
@@ -269,7 +403,7 @@ function kagera_parse_xlsx($file) {
                 }
             }
 
-            if (!empty($candidateSheets)) {
+            if ($candidateSheets) {
                 sort($candidateSheets, SORT_NATURAL);
                 $sheetPath = $candidateSheets[0];
             }
@@ -277,20 +411,17 @@ function kagera_parse_xlsx($file) {
     }
 
     if ($sheetPath === false) {
-        throw new Exception("Unable to locate the first worksheet in the .xlsx file.");
+        throw new Exception("Unable to locate a worksheet in the .xlsx/.xlsm workbook.");
     }
 
-    $sheetXml = $unzip($sheetPath);
+    $sheetXml = kagera_unzip($file, $sheetPath);
 
     if ($sheetXml === false) {
-        throw new Exception("Unable to read the first worksheet from the .xlsx file.");
+        throw new Exception("Unable to read the first worksheet from the Excel workbook.");
     }
 
-    /*
-     * Read shared strings. They are optional in XLSX.
-     */
     $sharedStrings = [];
-    $sharedXml = $unzip("xl/sharedStrings.xml");
+    $sharedXml = kagera_unzip($file, "xl/sharedStrings.xml");
 
     if ($sharedXml !== false) {
         $shared = @simplexml_load_string($sharedXml);
@@ -308,14 +439,11 @@ function kagera_parse_xlsx($file) {
                     $value .= (string)$t;
                 }
 
-                $sharedStrings[] = $value;
+                $sharedStrings[] = kagera_clean_cell($value);
             }
         }
     }
 
-    /*
-     * Parse worksheet rows.
-     */
     $sheet = @simplexml_load_string($sheetXml);
 
     if ($sheet === false) {
@@ -330,7 +458,7 @@ function kagera_parse_xlsx($file) {
     $rowNodes = $sheet->xpath("//main:sheetData/main:row");
 
     if (!$rowNodes) {
-        throw new Exception("The first worksheet contains no readable rows.");
+        throw new Exception("The first worksheet is empty.");
     }
 
     $rows = [];
@@ -354,23 +482,15 @@ function kagera_parse_xlsx($file) {
                 $value = ((string)$cell->v === "1") ? "TRUE" : "FALSE";
             } else {
                 $value = isset($cell->v) ? (string)$cell->v : '';
-
-                /*
-                 * A formula cell can have its calculated result in <v>.
-                 * The calculated result is what the import needs.
-                 */
-                if ($value === '' && isset($cell->f)) {
-                    $value = '';
-                }
             }
 
             if (preg_match('/^([A-Z]+)\d+$/i', $ref, $m)) {
                 $column = kagera_col_index($m[1]);
-                $cells[$column] = $value;
+                $cells[$column] = kagera_clean_cell($value);
             }
         }
 
-        if (!empty($cells)) {
+        if ($cells) {
             $max = max(array_keys($cells));
             $row = array_fill(0, $max + 1, '');
 
@@ -378,15 +498,51 @@ function kagera_parse_xlsx($file) {
                 $row[$index] = $value;
             }
 
-            $rows[] = $row;
+            if (count(array_filter($row, fn($v) => $v !== '')) > 0) {
+                $rows[] = $row;
+            }
         }
     }
 
-    if (empty($rows)) {
-        throw new Exception("The first worksheet is empty or could not be read.");
+    if (!$rows) {
+        throw new Exception("The first worksheet contains no readable rows.");
     }
 
     return $rows;
+}
+
+function kagera_parse_excel($file, $extension) {
+    $extension = strtolower($extension);
+
+    // Preferred parser: PhpSpreadsheet supports XLS, XLSX, XLSM, XLTX,
+    // XLTM, CSV and other common spreadsheet formats.
+    $spreadsheetRows = kagera_parse_with_phpspreadsheet($file);
+
+    if ($spreadsheetRows !== false && !empty($spreadsheetRows)) {
+        return $spreadsheetRows;
+    }
+
+    if (in_array($extension, ['csv', 'txt'], true)) {
+        return kagera_parse_csv($file);
+    }
+
+    if (in_array($extension, ['xml'], true)) {
+        return kagera_parse_xml_spreadsheet($file);
+    }
+
+    if (in_array($extension, ['xlsx', 'xlsm', 'xltx', 'xltm'], true)) {
+        return kagera_parse_xlsx_native($file);
+    }
+
+    if ($extension === 'xls') {
+        throw new Exception(
+            "Legacy .xls files require PhpSpreadsheet. The Render deployment must include vendor/autoload.php with phpoffice/phpspreadsheet installed."
+        );
+    }
+
+    throw new Exception(
+        "Unsupported spreadsheet format. Supported formats: .xlsx, .xls, .xlsm, .xltx, .xltm, .csv, .txt and Excel XML (.xml)."
+    );
 }
 
 function kagera_norm($value) {
@@ -429,11 +585,16 @@ function handle_kagera_upload() {
 
     $ext = strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
 
-    if ($ext !== "xlsx") {
-        kagera_json(false, "Please save the Kagera Auction workbook as .xlsx and upload it again.");
+    $allowed = ["xlsx", "xls", "xlsm", "xltx", "xltm", "csv", "txt", "xml"];
+
+    if (!in_array($ext, $allowed, true)) {
+        kagera_json(
+            false,
+            "Unsupported file format. Supported formats: .xlsx, .xls, .xlsm, .xltx, .xltm, .csv, .txt and Excel XML (.xml)."
+        );
     }
 
-    $rows = kagera_parse_xlsx($file["tmp_name"]);
+    $rows = kagera_parse_excel($file["tmp_name"], $ext);
 
     if (count($rows) < 2) {
         kagera_json(false, "The Excel file does not contain enough data.");
@@ -1036,7 +1197,7 @@ body.sidebar-collapsed .kagera-main {
                             type="file"
                             id="kageraExcelFile"
                             name="kagera_excel"
-                            accept=".xlsx,.xls"
+                            accept=".xlsx,.xls,.xlsm,.xltx,.xltm,.csv,.txt,.xml"
                             required>
 
                         <label
@@ -1048,7 +1209,7 @@ body.sidebar-collapsed .kagera-main {
                             <span class="kagera-file-text">
                                 <strong>Select Excel File</strong>
                                 <small id="kageraFileName">
-                                    Supported format: .xlsx
+                                    Supported formats: .xlsx, .xls, .xlsm, .xltx, .xltm, .csv, .xml
                                 </small>
                             </span>
 
@@ -1143,7 +1304,7 @@ const kageraUploadStatus = document.getElementById("kageraUploadStatus");
 
 if (kageraExcelFile) {
     kageraExcelFile.addEventListener("change", function () {
-        kageraFileName.textContent = this.files.length ? this.files[0].name : "Supported format: .xlsx";
+        kageraFileName.textContent = this.files.length ? this.files[0].name : "Supported formats: .xlsx, .xls, .xlsm, .xltx, .xltm, .csv, .xml";
     });
 }
 
@@ -1185,7 +1346,7 @@ if (kageraUploadForm) {
             const result = await readKageraJson(response);
             showKageraStatus(result.message || "Results uploaded successfully.", "success");
             kageraUploadForm.reset();
-            kageraFileName.textContent = "Supported format: .xlsx";
+            kageraFileName.textContent = "Supported formats: .xlsx, .xls, .xlsm, .xltx, .xltm, .csv, .xml";
             await loadKageraResults();
         } catch (error) {
             showKageraStatus(error.message || "Unable to upload the Excel file.", "error");
