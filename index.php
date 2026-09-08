@@ -1,4 +1,3 @@
-
 <?php
 session_start();
 
@@ -40,6 +39,8 @@ Coffee Sales Data Analysis System
 
     width: 270px;
 
+    --sidebar-width: 270px;
+
     height: 100vh;
 
     background: #3e2723;
@@ -53,8 +54,9 @@ Coffee Sales Data Analysis System
     box-shadow:
         3px 0 15px rgba(0,0,0,0.12);
 
-    /* Allow toggle button to stick out; scroll only the menu area */
-    overflow: visible;
+    overflow-x: hidden;
+
+    overflow-y: auto;
 }
 
 
@@ -63,6 +65,8 @@ Coffee Sales Data Analysis System
 .sidebar.collapsed {
 
     width: 78px;
+
+    --sidebar-width: 78px;
 
 }
 
@@ -147,21 +151,22 @@ Coffee Sales Data Analysis System
 
     list-style: none;
 
-    padding: 18px 10px;
+    padding: 20px 10px;
 
-    /* Scrollable menu area so sidebar can stay overflow:visible for the toggle */
-    max-height: calc(100vh - 90px);
-
-    overflow-y: auto;
-
-    overflow-x: hidden;
+    margin: 0;
 
 }
 
 
 .menu-item {
 
-    margin-bottom: 5px;
+    margin-bottom: 10px;
+
+}
+
+.menu-item:last-child {
+
+    margin-bottom: 0;
 
 }
 
@@ -445,15 +450,17 @@ submenu names.
 
 .sidebar-toggle {
 
-    position: absolute;
+    position: fixed;
 
-    top: 28px;
+    top: 20px;
 
-    right: -14px;
+    left: calc(var(--sidebar-width) - 15px);
 
     width: 30px;
 
     height: 30px;
+
+    padding: 0;
 
     border-radius: 50%;
 
@@ -466,7 +473,7 @@ submenu names.
 
     cursor: pointer;
 
-    z-index: 1100;
+    z-index: 2000;
 
     display: flex;
 
@@ -476,13 +483,17 @@ submenu names.
 
     font-size: 13px;
 
+    line-height: 1;
+
+    box-sizing: border-box;
+
     box-shadow:
-        0 2px 8px rgba(0,0,0,0.25);
+        0 2px 7px rgba(0,0,0,0.25);
 
-    transition: 0.3s ease;
-
-    /* Ensure the button is never clipped */
-    overflow: visible;
+    transition:
+        left 0.3s ease,
+        background 0.2s ease,
+        transform 0.2s ease;
 
 }
 
@@ -491,7 +502,7 @@ submenu names.
 
     background: #8d6e63;
 
-    transform: scale(1.08);
+    transform: scale(1.05);
 
 }
 
@@ -701,7 +712,7 @@ submenu names.
 
 .content {
 
-    padding: 30px 30px 50px;
+    padding: 30px;
 
 }
 
@@ -792,16 +803,12 @@ submenu names.
 
     display: none;
 
-    margin-bottom: 32px;
-
 }
 
 
 .section.active {
 
     display: block;
-
-    margin-bottom: 32px;
 
 }
 
@@ -812,7 +819,7 @@ submenu names.
 
 .page-header {
 
-    margin-bottom: 28px;
+    margin-bottom: 25px;
 
 }
 
@@ -848,9 +855,7 @@ submenu names.
     grid-template-columns:
         repeat(3, 1fr);
 
-    gap: 24px;
-
-    margin-bottom: 28px;
+    gap: 20px;
 
 }
 
@@ -904,14 +909,12 @@ submenu names.
 
     background: white;
 
-    padding: 32px;
+    padding: 30px;
 
     border-radius: 10px;
 
     box-shadow:
         0 2px 12px rgba(0,0,0,0.06);
-
-    margin-bottom: 24px;
 
 }
 
@@ -922,7 +925,7 @@ submenu names.
 
     font-size: 23px;
 
-    margin-bottom: 14px;
+    margin-bottom: 10px;
 
 }
 
@@ -932,8 +935,6 @@ submenu names.
     color: #777;
 
     font-size: 14px;
-
-    line-height: 1.6;
 
 }
 
@@ -958,6 +959,8 @@ submenu names.
     .sidebar {
 
         width: 78px;
+
+        --sidebar-width: 78px;
 
     }
 
