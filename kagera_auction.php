@@ -30,7 +30,7 @@ function kagera_db()
 {
     static $db = null;
 
-    if ($db instanceof mysqli) {
+    if (class_exists("mysqli") && $db instanceof mysqli) {
         return $db;
     }
 
@@ -56,6 +56,10 @@ function kagera_db()
         throw new Exception(
             "Database configuration is missing. Set DATABASE_URL or DB_HOST, DB_PORT, DB_USER, DB_PASS and DB_NAME."
         );
+    }
+
+    if (!class_exists("mysqli")) {
+        throw new Exception("PHP MySQLi extension is not enabled on this server.");
     }
 
     $db = new mysqli($host, $user, $pass, $name, $port);
@@ -90,31 +94,99 @@ function ensure_kagera_table()
     $db = kagera_db();
     $table = kagera_table();
 
+    /*
+     * The Kagera Auction results table is created automatically in Render
+     * the first time this page is opened or an upload/fetch is requested.
+     * These are the application data columns required by the Kagera table.
+     * id and record_key are internal columns and are not displayed.
+     */
     $sql = "
         CREATE TABLE IF NOT EXISTS {$table} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            record_key CHAR(64) NOT NULL,
+            lot_no VARCHAR(100) NULL,
             auction_no VARCHAR(50) NULL,
             date_sold VARCHAR(50) NULL,
-            lot_number VARCHAR(100) NULL,
             sell_mark VARCHAR(255) NULL,
-            invoice VARCHAR(100) NULL,
-            packages DECIMAL(15,2) NULL,
+            warehouse VARCHAR(255) NULL,
+            warehouse_location VARCHAR(255) NULL,
             net_weight DECIMAL(15,2) NULL,
             grade VARCHAR(100) NULL,
             grade2 VARCHAR(100) NULL,
             price DECIMAL(15,4) NULL,
             buyer_name VARCHAR(255) NULL,
-            warehouse VARCHAR(255) NULL,
-            status VARCHAR(100) NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            UNIQUE KEY uq_kagera_invoice (invoice),
-            KEY idx_kagera_auction_no (auction_no)
+            UNIQUE KEY uq_kagera_record_key (record_key),
+            KEY idx_kagera_auction_no (auction_no),
+            KEY idx_kagera_lot_no (lot_no)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ";
 
     if (!$db->query($sql)) {
-        throw new Exception("Unable to prepare Kagera database table: " . $db->error);
+        throw new Exception("Unable to create Kagera Auction table: " . $db->error);
+    }
+
+    /* Add newly required columns to an existing Kagera table automatically. */
+    $requiredColumns = [
+        "record_key" => "CHAR(64) NULL AFTER id",
+        "lot_no" => "VARCHAR(100) NULL AFTER record_key",
+        "auction_no" => "VARCHAR(50) NULL",
+        "date_sold" => "VARCHAR(50) NULL",
+        "sell_mark" => "VARCHAR(255) NULL",
+        "warehouse" => "VARCHAR(255) NULL",
+        "warehouse_location" => "VARCHAR(255) NULL",
+        "net_weight" => "DECIMAL(15,2) NULL",
+        "grade" => "VARCHAR(100) NULL",
+        "grade2" => "VARCHAR(100) NULL",
+        "price" => "DECIMAL(15,4) NULL",
+        "buyer_name" => "VARCHAR(255) NULL"
+    ];
+
+    foreach ($requiredColumns as $column => $definition) {
+        $safeColumn = $db->real_escape_string($column);
+        $check = $db->query("SHOW COLUMNS FROM {$table} LIKE '{$safeColumn}'");
+
+        if (!$check) {
+            throw new Exception("Unable to inspect Kagera Auction table: " . $db->error);
+        }
+
+        if ($check->num_rows === 0) {
+            if (!$db->query("ALTER TABLE {$table} ADD COLUMN `{$column}` {$definition}")) {
+                $check->free();
+                throw new Exception("Unable to add Kagera column {$column}: " . $db->error);
+            }
+        }
+
+        $check->free();
+    }
+
+    /* Populate the internal key for existing rows before enforcing uniqueness. */
+    $existingKeyCheck = $db->query("SELECT id FROM {$table} WHERE record_key IS NULL OR record_key = '' LIMIT 1000");
+    if ($existingKeyCheck) {
+        while ($existing = $existingKeyCheck->fetch_assoc()) {
+            $id = (int)$existing["id"];
+            $key = hash("sha256", "legacy-kagera|" . $id);
+            $stmt = $db->prepare("UPDATE {$table} SET record_key = ? WHERE id = ?");
+            if ($stmt) {
+                $stmt->bind_param("si", $key, $id);
+                $stmt->execute();
+                $stmt->close();
+            }
+        }
+        $existingKeyCheck->free();
+    }
+
+    /* Ensure the internal unique key exists on older installations. */
+    $keyCheck = $db->query("SHOW INDEX FROM {$table} WHERE Key_name = 'uq_kagera_record_key'");
+    if ($keyCheck && $keyCheck->num_rows === 0) {
+        if (!$db->query("ALTER TABLE {$table} ADD UNIQUE KEY uq_kagera_record_key (record_key)")) {
+            $keyCheck->free();
+            throw new Exception("Unable to create Kagera record key: " . $db->error);
+        }
+    }
+    if ($keyCheck instanceof mysqli_result) {
+        $keyCheck->free();
     }
 }
 
@@ -184,133 +256,259 @@ function kagera_cell_value($cell, $sharedStrings)
     return trim($value);
 }
 
-function kagera_parse_xlsx($filePath)
+function kagera_zip_read_entries($filePath)
 {
-    if (!class_exists("ZipArchive")) {
-        throw new Exception("PHP ZipArchive is required to read .xlsx files.");
-    }
-
-    $zip = new ZipArchive();
-
-    if ($zip->open($filePath) !== true) {
+    /* XLSX is a ZIP container. This reader uses only PHP's file/zlib
+       functions, so ZipArchive and SimpleXML are not required. */
+    $fp = fopen($filePath, "rb");
+    if (!$fp) {
         throw new Exception("Unable to open the Excel file.");
     }
 
-    $sharedStrings = [];
+    $fileSize = filesize($filePath);
+    $tailSize = min($fileSize, 65557);
+    fseek($fp, $fileSize - $tailSize);
+    $tail = fread($fp, $tailSize);
 
-    $sharedXml = $zip->getFromName("xl/sharedStrings.xml");
+    $eocd = strrpos($tail, "PK\x05\x06");
+    if ($eocd === false) {
+        fclose($fp);
+        throw new Exception("Invalid .xlsx file: ZIP directory was not found.");
+    }
 
-    if ($sharedXml !== false) {
-        $xml = simplexml_load_string($sharedXml);
-        if ($xml !== false) {
-            $xml->registerXPathNamespace("x", "http://schemas.openxmlformats.org/spreadsheetml/2006/main");
+    $info = unpack(
+        "vdisk/vdisk_start/ventries_disk/ventries_total/Vcentral_size/Vcentral_offset/vcomment_length",
+        substr($tail, $eocd + 4, 18)
+    );
 
-            $items = $xml->xpath("//x:si");
+    $centralOffset = (int)$info["central_offset"];
+    $centralSize = (int)$info["central_size"];
 
-            foreach ($items ?: [] as $item) {
-                $parts = $item->xpath(".//x:t");
-                $str = "";
+    if ($centralOffset < 0 || $centralSize < 0 || $centralOffset + $centralSize > $fileSize) {
+        fclose($fp);
+        throw new Exception("Invalid .xlsx file: ZIP directory is outside the file.");
+    }
 
-                foreach ($parts ?: [] as $part) {
-                    $str .= (string)$part;
-                }
+    fseek($fp, $centralOffset);
+    $central = fread($fp, $centralSize);
+    fclose($fp);
 
-                $sharedStrings[] = $str;
-            }
+    $entries = [];
+    $pos = 0;
+    $length = strlen($central);
+
+    while ($pos + 46 <= $length) {
+        if (substr($central, $pos, 4) !== "PK\x01\x02") {
+            break;
+        }
+
+        $h = unpack(
+            "vversion_made/vversion_needed/vflag/vmethod/vmtime/vmdate/Vcrc/Vcsize/Vusize/vnamelen/veflen/vcommentlen/vdisk/vintattr/Vextattr/Vlhoff",
+            substr($central, $pos + 4, 42)
+        );
+
+        $nameStart = $pos + 46;
+        $name = substr($central, $nameStart, (int)$h["namelen"]);
+
+        $entries[$name] = [
+            "method" => (int)$h["method"],
+            "flag" => (int)$h["flag"],
+            "compressed_size" => (int)$h["csize"],
+            "local_offset" => (int)$h["lhoff"]
+        ];
+
+        $pos = $nameStart
+            + (int)$h["namelen"]
+            + (int)$h["eflen"]
+            + (int)$h["commentlen"];
+    }
+
+    if (!$entries) {
+        throw new Exception("Invalid .xlsx file: no ZIP entries were found.");
+    }
+
+    return $entries;
+}
+
+function kagera_zip_extract($filePath, $entries, $name)
+{
+    if (!isset($entries[$name])) {
+        return false;
+    }
+
+    $entry = $entries[$name];
+
+    if (($entry["flag"] & 0x0001) !== 0) {
+        throw new Exception("The Excel file is encrypted and cannot be read.");
+    }
+
+    $fp = fopen($filePath, "rb");
+    if (!$fp) {
+        throw new Exception("Unable to open the Excel file.");
+    }
+
+    fseek($fp, $entry["local_offset"]);
+    $localHeader = fread($fp, 30);
+
+    if (strlen($localHeader) < 30 || substr($localHeader, 0, 4) !== "PK\x03\x04") {
+        fclose($fp);
+        throw new Exception("Invalid XLSX local file header.");
+    }
+
+    $local = unpack(
+        "vversion/vflag/vmethod/vmtime/vmdate/Vcrc/Vcsize/Vusize/vnamelen/veflen",
+        substr($localHeader, 4, 26)
+    );
+
+    $dataOffset = $entry["local_offset"] + 30 + (int)$local["namelen"] + (int)$local["eflen"];
+    fseek($fp, $dataOffset);
+    $compressed = fread($fp, $entry["compressed_size"]);
+    fclose($fp);
+
+    if ($entry["method"] === 0) {
+        return $compressed;
+    }
+
+    if ($entry["method"] === 8) {
+        $data = @gzinflate($compressed);
+        if ($data === false) {
+            throw new Exception("Unable to decompress XLSX data.");
+        }
+        return $data;
+    }
+
+    throw new Exception("Unsupported XLSX compression method.");
+}
+
+function kagera_xml_text($value)
+{
+    return html_entity_decode(
+        strip_tags((string)$value),
+        ENT_QUOTES | ENT_XML1,
+        "UTF-8"
+    );
+}
+
+function kagera_parse_shared_strings($xml)
+{
+    $shared = [];
+
+    if (!$xml) {
+        return $shared;
+    }
+
+    preg_match_all('/<si\b[^>]*>(.*?)<\/si>/is', $xml, $matches);
+
+    foreach ($matches[1] ?? [] as $item) {
+        preg_match_all('/<t\b[^>]*>(.*?)<\/t>/is', $item, $texts);
+        $value = "";
+
+        foreach ($texts[1] ?? [] as $part) {
+            $value .= kagera_xml_text($part);
+        }
+
+        $shared[] = $value;
+    }
+
+    return $shared;
+}
+
+function kagera_parse_xlsx($filePath)
+{
+    $entries = kagera_zip_read_entries($filePath);
+    $sharedStrings = kagera_parse_shared_strings(
+        kagera_zip_extract($filePath, $entries, "xl/sharedStrings.xml") ?: ""
+    );
+
+    $workbookXml = kagera_zip_extract($filePath, $entries, "xl/workbook.xml");
+    $relsXml = kagera_zip_extract($filePath, $entries, "xl/_rels/workbook.xml.rels");
+
+    if ($workbookXml === false || $relsXml === false) {
+        throw new Exception("Invalid XLSX workbook: required workbook files are missing.");
+    }
+
+    /* Find the first worksheet relationship, without SimpleXML. */
+    if (!preg_match('/<sheet\b[^>]*r:id=["\']([^"\']+)["\'][^>]*>/i', $workbookXml, $sheetMatch)) {
+        if (!preg_match('/<sheet\b[^>]*r:[^=]+=["\']([^"\']+)["\'][^>]*>/i', $workbookXml, $sheetMatch)) {
+            throw new Exception("Unable to locate the first worksheet.");
         }
     }
 
-    $workbookXml = $zip->getFromName("xl/workbook.xml");
-    $relsXml = $zip->getFromName("xl/_rels/workbook.xml.rels");
-
-    if ($workbookXml === false || $relsXml === false) {
-        $zip->close();
-        throw new Exception("Invalid XLSX workbook.");
-    }
-
-    $workbook = simplexml_load_string($workbookXml);
-    $rels = simplexml_load_string($relsXml);
-
-    if ($workbook === false || $rels === false) {
-        $zip->close();
-        throw new Exception("Unable to read the XLSX workbook.");
-    }
-
-    $workbook->registerXPathNamespace(
-        "x",
-        "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-    );
-
-    $rels->registerXPathNamespace(
-        "r",
-        "http://schemas.openxmlformats.org/package/2006/relationships"
-    );
-
-    $sheets = $workbook->xpath("//x:sheets/x:sheet");
-
-    if (!$sheets) {
-        $zip->close();
-        throw new Exception("No worksheet was found in the Excel file.");
-    }
-
-    $firstSheet = $sheets[0];
-    $relationshipId = (string)$firstSheet->attributes(
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-    )->id;
+    $relationshipId = $sheetMatch[1];
 
     $target = "";
+    preg_match_all('/<Relationship\b[^>]*>/i', $relsXml, $relMatches);
 
-    foreach ($rels->Relationship as $rel) {
-        if ((string)$rel["Id"] === $relationshipId) {
-            $target = (string)$rel["Target"];
+    foreach ($relMatches[0] ?? [] as $rel) {
+        if (
+            preg_match('/\bId=["\']([^"\']+)["\']/i', $rel, $idMatch) &&
+            $idMatch[1] === $relationshipId &&
+            preg_match('/\bTarget=["\']([^"\']+)["\']/i', $rel, $targetMatch)
+        ) {
+            $target = $targetMatch[1];
             break;
         }
     }
 
     if (!$target) {
-        $zip->close();
-        throw new Exception("Unable to locate the first worksheet.");
+        throw new Exception("Unable to resolve the first worksheet.");
     }
 
-    $target = ltrim($target, "/");
-
+    $target = ltrim(str_replace('\\', '/', $target), '/');
     if (strpos($target, "xl/") !== 0) {
-        $target = "xl/" . $target;
+        $target = "xl/" . ltrim($target, "/");
     }
 
-    $sheetXml = $zip->getFromName($target);
-
-    $zip->close();
+    $sheetXml = kagera_zip_extract($filePath, $entries, $target);
 
     if ($sheetXml === false) {
-        throw new Exception("Unable to read the worksheet.");
+        /* Most workbooks use sheet1.xml; use it as a safe fallback. */
+        $sheetXml = kagera_zip_extract($filePath, $entries, "xl/worksheets/sheet1.xml");
     }
 
-    $sheet = simplexml_load_string($sheetXml);
-
-    if ($sheet === false) {
-        throw new Exception("Invalid worksheet data.");
+    if ($sheetXml === false) {
+        throw new Exception("Unable to read the first worksheet.");
     }
-
-    $sheet->registerXPathNamespace(
-        "x",
-        "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-    );
 
     $rows = [];
+    preg_match_all('/<row\b[^>]*>(.*?)<\/row>/is', $sheetXml, $rowMatches);
 
-    foreach ($sheet->xpath("//x:sheetData/x:row") ?: [] as $row) {
+    foreach ($rowMatches[1] ?? [] as $rowXml) {
         $cells = [];
+        preg_match_all('/<c\b([^>]*)>(.*?)<\/c>/is', $rowXml, $cellMatches, PREG_SET_ORDER);
 
-        foreach ($row->xpath("./x:c") ?: [] as $cell) {
-            $ref = (string)$cell["r"];
+        foreach ($cellMatches as $cellMatch) {
+            $attributes = $cellMatch[1];
+            $content = $cellMatch[2];
 
-            if (!preg_match('/^([A-Z]+)\d+$/i', $ref, $match)) {
+            if (!preg_match('/\br=["\']([A-Z]+)\d+["\']/i', $attributes, $refMatch)) {
                 continue;
             }
 
-            $column = kagera_column_letter_to_number($match[1]);
-            $cells[$column] = kagera_cell_value($cell, $sharedStrings);
+            $column = kagera_column_letter_to_number($refMatch[1]);
+            $type = "";
+            if (preg_match('/\bt=["\']([^"\']+)["\']/i', $attributes, $typeMatch)) {
+                $type = strtolower($typeMatch[1]);
+            }
+
+            $value = "";
+
+            if ($type === "inlinestr") {
+                preg_match_all('/<t\b[^>]*>(.*?)<\/t>/is', $content, $textMatches);
+                foreach ($textMatches[1] ?? [] as $part) {
+                    $value .= kagera_xml_text($part);
+                }
+            } elseif (preg_match('/<v\b[^>]*>(.*?)<\/v>/is', $content, $vMatch)) {
+                $value = kagera_xml_text($vMatch[1]);
+
+                if ($type === "s") {
+                    $value = $sharedStrings[(int)$value] ?? "";
+                } elseif ($type === "b") {
+                    $value = $value === "1" ? "TRUE" : "FALSE";
+                }
+            }
+
+            $cells[$column] = trim($value);
         }
 
         if ($cells) {
@@ -328,9 +526,6 @@ function kagera_parse_xlsx($filePath)
     return $rows;
 }
 
-/* ---------------------------------------------------------
-   HEADER NORMALIZATION
---------------------------------------------------------- */
 function kagera_normalize_header($value)
 {
     $value = strtolower(trim((string)$value));
@@ -418,7 +613,7 @@ function handle_kagera_upload()
     } else {
         kagera_json(
             false,
-            "Legacy .xls files require PhpSpreadsheet. Upload .xlsx or install PhpSpreadsheet in the project."
+            "Legacy .xls files require PhpSpreadsheet. Please upload the workbook as .xlsx on this server."
         );
     }
 
@@ -426,26 +621,48 @@ function handle_kagera_upload()
         kagera_json(false, "The Excel file does not contain enough data.");
     }
 
-    $headerRow = array_map("kagera_normalize_header", $rows[0]);
+    /* Locate the actual header row. Some Kagera workbooks have a title row
+       above the column headings, while others start directly with headings. */
+    $headerIndex = null;
+    $maxHeaderScan = min(count($rows), 6);
+
+    for ($r = 0; $r < $maxHeaderScan; $r++) {
+        $candidate = array_map("kagera_normalize_header", $rows[$r]);
+        $headerSignals = [
+            "lot_no", "lot_number", "auction_no", "auction_number",
+            "date_sold", "sell_mark", "warehouse", "net_weight",
+            "grade", "price", "buyer_name"
+        ];
+        if (count(array_intersect($headerSignals, $candidate)) >= 2) {
+            $headerIndex = $r;
+            break;
+        }
+    }
+
+    if ($headerIndex === null) {
+        throw new Exception("The Excel file must contain a header row with an Invoice column.");
+    }
+
+    $headerRow = array_map("kagera_normalize_header", $rows[$headerIndex]);
 
     $columns = [
+        "lot_no" => kagera_find_column($headerRow, [
+            "lot_no", "lot_number", "lot"
+        ]),
         "auction_no" => kagera_find_column($headerRow, [
             "auction_no", "auction_number", "auction", "auction_no."
         ]),
         "date_sold" => kagera_find_column($headerRow, [
-            "date_sold", "date_sold", "date"
-        ]),
-        "lot_number" => kagera_find_column($headerRow, [
-            "lot_number", "lot_no", "lot"
+            "date_sold", "date"
         ]),
         "sell_mark" => kagera_find_column($headerRow, [
             "sell_mark", "sellmark", "mark"
         ]),
-        "invoice" => kagera_find_column($headerRow, [
-            "invoice", "invoice_no", "invoice_number"
+        "warehouse" => kagera_find_column($headerRow, [
+            "warehouse", "warehouse_name"
         ]),
-        "packages" => kagera_find_column($headerRow, [
-            "packages", "package", "no_of_packages", "no_packages"
+        "warehouse_location" => kagera_find_column($headerRow, [
+            "warehouse_location", "warehouse_location_name", "location", "warehouse_loc"
         ]),
         "net_weight" => kagera_find_column($headerRow, [
             "net_weight", "net_weight_kg", "net_kg", "kgs", "kg"
@@ -462,20 +679,12 @@ function handle_kagera_upload()
         "buyer_name" => kagera_find_column($headerRow, [
             "buyer_name", "buyer", "buyer_name_"
         ]),
-        "warehouse" => kagera_find_column($headerRow, [
-            "warehouse", "warehouse_name"
-        ]),
-        "status" => kagera_find_column($headerRow, [
-            "status"
+        /* Optional source fields are accepted for compatibility with existing Excel files. */
+        "invoice" => kagera_find_column($headerRow, [
+            "invoice", "invoice_no", "invoice_number"
         ])
     ];
 
-    if ($columns["invoice"] === null) {
-        kagera_json(
-            false,
-            "The Excel file must contain an Invoice column."
-        );
-    }
 
     ensure_kagera_table();
 
@@ -485,34 +694,32 @@ function handle_kagera_upload()
     $sql = "
         INSERT INTO {$table}
         (
+            record_key,
+            lot_no,
             auction_no,
             date_sold,
-            lot_number,
             sell_mark,
-            invoice,
-            packages,
+            warehouse,
+            warehouse_location,
             net_weight,
             grade,
             grade2,
             price,
-            buyer_name,
-            warehouse,
-            status
+            buyer_name
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
+            lot_no = VALUES(lot_no),
             auction_no = VALUES(auction_no),
             date_sold = VALUES(date_sold),
-            lot_number = VALUES(lot_number),
             sell_mark = VALUES(sell_mark),
-            packages = VALUES(packages),
+            warehouse = VALUES(warehouse),
+            warehouse_location = VALUES(warehouse_location),
             net_weight = VALUES(net_weight),
             grade = VALUES(grade),
             grade2 = VALUES(grade2),
             price = VALUES(price),
-            buyer_name = VALUES(buyer_name),
-            warehouse = VALUES(warehouse),
-            status = VALUES(status)
+            buyer_name = VALUES(buyer_name)
     ";
 
     $stmt = $db->prepare($sql);
@@ -523,7 +730,7 @@ function handle_kagera_upload()
 
     $inserted = 0;
 
-    for ($i = 1; $i < count($rows); $i++) {
+    for ($i = $headerIndex + 1; $i < count($rows); $i++) {
         $row = $rows[$i];
 
         $get = function ($key) use ($row, $columns) {
@@ -531,44 +738,60 @@ function handle_kagera_upload()
             return $index !== null ? trim((string)($row[$index] ?? "")) : "";
         };
 
+        $lotNo = $get("lot_no");
         $auctionNo = $get("auction_no");
         $dateSold = $get("date_sold");
-        $lotNumber = $get("lot_number");
         $sellMark = $get("sell_mark");
-        $invoice = $get("invoice");
-        $packages = kagera_parse_number($get("packages"));
+        $warehouse = $get("warehouse");
+        $warehouseLocation = $get("warehouse_location");
         $netWeight = kagera_parse_number($get("net_weight"));
         $grade = $get("grade");
         $grade2 = $get("grade2");
         $price = kagera_parse_number($get("price"));
         $buyerName = $get("buyer_name");
-        $warehouse = $get("warehouse");
-        $status = $get("status");
 
-        if ($invoice === "") {
+        /* Generate a stable key from the displayed business fields. */
+        $recordKey = hash(
+            "sha256",
+            implode("|", [
+                $lotNo,
+                $auctionNo,
+                $dateSold,
+                $sellMark,
+                $warehouse,
+                $warehouseLocation,
+                $netWeight ?? "",
+                $grade,
+                $grade2,
+                $price ?? "",
+                $buyerName
+            ])
+        );
+
+        /* Ignore completely blank Excel rows. */
+        if ($lotNo === "" && $auctionNo === "" && $sellMark === "" && $buyerName === "") {
             continue;
         }
 
         $stmt->bind_param(
-            "sssssddsssdss",
+            "sssssssdssds",
+            $recordKey,
+            $lotNo,
             $auctionNo,
             $dateSold,
-            $lotNumber,
             $sellMark,
-            $invoice,
-            $packages,
+            $warehouse,
+            $warehouseLocation,
             $netWeight,
             $grade,
             $grade2,
             $price,
-            $buyerName,
-            $warehouse,
-            $status
+            $buyerName
         );
 
         if (!$stmt->execute()) {
             $stmt->close();
-            kagera_json(false, "Unable to save invoice {$invoice}: " . $db->error);
+            kagera_json(false, "Unable to save Kagera Auction record: " . $db->error);
         }
 
         $inserted++;
@@ -594,19 +817,17 @@ function handle_kagera_fetch()
 
     $sql = "
         SELECT
+            lot_no,
             auction_no,
             date_sold,
-            lot_number,
             sell_mark,
-            invoice,
-            packages,
+            warehouse,
+            warehouse_location,
             net_weight,
             grade,
             grade2,
             price,
-            buyer_name,
-            warehouse,
-            status
+            buyer_name
         FROM {$table}
         ORDER BY id DESC
     ";
@@ -637,15 +858,19 @@ function handle_kagera_fetch()
 --------------------------------------------------------- */
 $kageraAction = $_GET["action"] ?? "";
 
-if ($kageraAction === "fetch") {
-    handle_kagera_fetch();
-}
+try {
+    if ($kageraAction === "fetch") {
+        handle_kagera_fetch();
+    }
 
-if (
-    $_SERVER["REQUEST_METHOD"] === "POST" &&
-    isset($_FILES["kagera_excel"])
-) {
-    handle_kagera_upload();
+    if (
+        $_SERVER["REQUEST_METHOD"] === "POST" &&
+        isset($_FILES["kagera_excel"])
+    ) {
+        handle_kagera_upload();
+    }
+} catch (Throwable $e) {
+    kagera_json(false, $e->getMessage());
 }
 ?>
 
@@ -1168,26 +1393,23 @@ body.sidebar-collapsed .kagera-main {
 
                     <thead>
                         <tr>
-                            <th>#</th>
+                            <th>Lot No</th>
                             <th>Auction No.</th>
                             <th>Date Sold</th>
-                            <th>Lot Number</th>
                             <th>Sell Mark</th>
-                            <th>Invoice</th>
-                            <th>Packages</th>
+                            <th>Warehouse</th>
+                            <th>Warehouse Location</th>
                             <th>Net Weight (Kg)</th>
                             <th>Grade</th>
                             <th>Grade2</th>
                             <th>Price</th>
                             <th>Buyer Name</th>
-                            <th>Warehouse</th>
-                            <th>Status</th>
                         </tr>
                     </thead>
 
                     <tbody id="kageraResultsBody">
                         <tr>
-                            <td colspan="14" class="kagera-empty-state">
+                            <td colspan="11" class="kagera-empty-state">
                                 No Kagera Auction results loaded.
                             </td>
                         </tr>
@@ -1302,7 +1524,7 @@ async function loadKageraResults() {
     if (!body) return;
 
     body.innerHTML =
-        '<tr><td colspan="14" class="kagera-empty-state">' +
+        '<tr><td colspan="11" class="kagera-empty-state">' +
         'Loading results...' +
         '</td></tr>';
 
@@ -1322,7 +1544,7 @@ async function loadKageraResults() {
 
         if (!result.data || !result.data.length) {
             body.innerHTML =
-                '<tr><td colspan="14" class="kagera-empty-state">' +
+                '<tr><td colspan="11" class="kagera-empty-state">' +
                 'No Kagera Auction results loaded.' +
                 '</td></tr>';
             return;
@@ -1331,26 +1553,23 @@ async function loadKageraResults() {
         body.innerHTML =
             result.data.map(function (row, index) {
                 return "<tr>" +
-                    "<td>" + escapeKageraHtml(index + 1) + "</td>" +
+                    "<td>" + escapeKageraHtml(row.lot_no ?? "") + "</td>" +
                     "<td>" + escapeKageraHtml(row.auction_no ?? "") + "</td>" +
                     "<td>" + escapeKageraHtml(row.date_sold ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.lot_number ?? "") + "</td>" +
                     "<td>" + escapeKageraHtml(row.sell_mark ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.invoice ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.packages ?? "") + "</td>" +
+                    "<td>" + escapeKageraHtml(row.warehouse ?? "") + "</td>" +
+                    "<td>" + escapeKageraHtml(row.warehouse_location ?? "") + "</td>" +
                     "<td>" + escapeKageraHtml(row.net_weight ?? "") + "</td>" +
                     "<td>" + escapeKageraHtml(row.grade ?? "") + "</td>" +
                     "<td>" + escapeKageraHtml(row.grade2 ?? "") + "</td>" +
                     "<td>" + escapeKageraHtml(row.price ?? "") + "</td>" +
                     "<td>" + escapeKageraHtml(row.buyer_name ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.warehouse ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.status ?? "") + "</td>" +
                     "</tr>";
             }).join("");
 
     } catch (error) {
         body.innerHTML =
-            '<tr><td colspan="14" class="kagera-empty-state">' +
+            '<tr><td colspan="11" class="kagera-empty-state">' +
             escapeKageraHtml(
                 error.message ||
                 "Unable to load results."
