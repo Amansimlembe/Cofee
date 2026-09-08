@@ -83,7 +83,7 @@ Coffee Sales Data Analysis System
 
     justify-content: center;
 
-    padding: 15px 52px 15px 15px;
+    padding: 15px 52px 15px 20px;
 
     background: #2b1b18;
 
@@ -226,6 +226,8 @@ Coffee Sales Data Analysis System
 
     gap: 13px;
 
+    min-width: 0;
+
 }
 
 
@@ -251,7 +253,19 @@ Coffee Sales Data Analysis System
 
 .arrow {
 
+    flex: 0 0 auto;
+
+    margin-left: 14px;
+
+    margin-right: 4px;
+
+    width: 14px;
+
+    text-align: center;
+
     font-size: 10px;
+
+    line-height: 1;
 
     transition:
         transform 0.25s ease;
@@ -274,7 +288,7 @@ Coffee Sales Data Analysis System
 
     justify-content: center;
 
-    padding: 11px 5px;
+    padding: 11px 8px;
 
 }
 
@@ -305,7 +319,7 @@ Coffee Sales Data Analysis System
     display: none;
 
     margin:
-        3px 0 7px 37px;
+        4px 12px 9px 37px;
 
     border-left:
         1px solid rgba(255,255,255,0.15);
