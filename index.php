@@ -961,6 +961,39 @@ submenu names.
 
 
 /* =========================================================
+   KAGERA AUCTION PAGE
+========================================================= */
+
+.kagera-page-section {
+    width: 100%;
+    min-height: calc(100vh - 130px);
+    padding: 0;
+    overflow: hidden;
+}
+
+.kagera-auction-frame {
+    display: block;
+    width: 100%;
+    min-height: calc(100vh - 130px);
+    height: calc(100vh - 130px);
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+}
+
+@media (max-width: 700px) {
+    .kagera-page-section {
+        min-height: calc(100vh - 110px);
+    }
+
+    .kagera-auction-frame {
+        min-height: calc(100vh - 110px);
+        height: calc(100vh - 110px);
+    }
+}
+
+/* =========================================================
    RESPONSIVE
 ========================================================= */
 
@@ -1142,7 +1175,7 @@ submenu names.
                 </li>
 
                 <li>
-                    <a onclick="showSection('kagera-auction', this)">
+                    <a onclick="openKageraAuction(this)">
                         Kagera Auction
                     </a>
                 </li>
@@ -1158,7 +1191,7 @@ submenu names.
                     Clean Auction
                 </a>
 
-                <a onclick="showSection('kagera-auction', this)">
+                <a onclick="openKageraAuction(this)">
                     Kagera Auction
                 </a>
 
@@ -1511,20 +1544,14 @@ submenu names.
 
         <section
             id="kagera-auction"
-            class="section">
+            class="section kagera-page-section">
 
-            <div class="section-box">
-
-                <h2>
-                    Kagera Auction
-                </h2>
-
-                <p>
-                    Kagera Auction sales data and analysis
-                    will appear here.
-                </p>
-
-            </div>
+            <iframe
+                id="kageraAuctionFrame"
+                src="about:blank"
+                title="Kagera Auction"
+                class="kagera-auction-frame">
+            </iframe>
 
         </section>
 
@@ -1770,6 +1797,67 @@ function toggleSubmenu(element) {
 
 }
 
+
+/* =========================================================
+   KAGERA AUCTION NAVIGATION
+========================================================= */
+
+function openKageraAuction(clickedElement) {
+
+    const welcome = document.getElementById("welcome");
+
+    if (welcome) {
+        welcome.style.display = "none";
+    }
+
+    document.querySelectorAll(".section").forEach(function(section) {
+        section.classList.remove("active");
+    });
+
+    const kageraSection = document.getElementById("kagera-auction");
+
+    if (kageraSection) {
+        kageraSection.classList.add("active");
+    }
+
+    const frame = document.getElementById("kageraAuctionFrame");
+
+    if (frame) {
+        /* The Kagera page normally has its own sidebar offset.
+           Inside index.php it must start at the main-content edge. */
+        frame.onload = function () {
+            try {
+                const kageraDocument = frame.contentDocument || frame.contentWindow.document;
+                const kageraMain = kageraDocument.querySelector(".kagera-main");
+
+                if (kageraMain) {
+                    kageraMain.style.marginLeft = "0";
+                    kageraMain.style.minHeight = "100%";
+                }
+            } catch (error) {
+                console.warn("Unable to adjust Kagera page layout.", error);
+            }
+        };
+
+        if (frame.getAttribute("src") === "about:blank") {
+            frame.src = "kagera_auction.php";
+        }
+    }
+
+    document.querySelectorAll(".menu-link, .submenu a").forEach(function(link) {
+        link.classList.remove("active");
+    });
+
+    if (clickedElement) {
+        clickedElement.classList.add("active");
+    }
+
+    const topbarTitle = document.getElementById("topbarTitle");
+
+    if (topbarTitle) {
+        topbarTitle.textContent = "Kagera Auction";
+    }
+}
 
 /* =========================================================
    SHOW SECTION
