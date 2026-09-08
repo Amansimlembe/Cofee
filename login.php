@@ -1,22 +1,42 @@
 <?php
+
 session_start();
 
 $login_error = "";
 
-$db_host = getenv("DB_HOST");
-$db_port = getenv("DB_PORT") ?: "5432";
-$db_name = getenv("DB_NAME");
-$db_user = getenv("DB_USER");
-$db_password = getenv("DB_PASSWORD");
+/*
+|--------------------------------------------------------------------------
+| RENDER POSTGRESQL DATABASE
+|--------------------------------------------------------------------------
+| Render provides DATABASE_URL through Environment Variables.
+|--------------------------------------------------------------------------
+*/
 
-if (!$db_host || !$db_name || !$db_user || !$db_password) {
-    die("Database connection is not configured.");
+$database_url = getenv("DATABASE_URL");
+
+if (!$database_url) {
+    die("DATABASE_URL is not configured in Render.");
 }
 
 try {
 
+    $db = parse_url($database_url);
+
+    if (!$db || !isset($db["host"])) {
+        die("Invalid DATABASE_URL.");
+    }
+
+    $db_host = $db["host"];
+    $db_port = $db["port"] ?? 5432;
+    $db_name = isset($db["path"])
+        ? ltrim($db["path"], "/")
+        : "";
+
+    $db_user = $db["user"] ?? "";
+    $db_password = $db["pass"] ?? "";
+
     $pdo = new PDO(
-        "pgsql:host=$db_host;port=$db_port;dbname=$db_name",
+        "pgsql:host={$db_host};port={$db_port};dbname={$db_name}",
         $db_user,
         $db_password,
         [
@@ -25,7 +45,12 @@ try {
         ]
     );
 
-    // Automatically create users table
+    /*
+    |--------------------------------------------------------------------------
+    | AUTOMATICALLY CREATE USERS TABLE
+    |--------------------------------------------------------------------------
+    */
+
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS users (
             id BIGSERIAL PRIMARY KEY,
@@ -38,12 +63,52 @@ try {
 } catch (PDOException $e) {
 
     die("Unable to connect to database.");
+
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| LOGIN
+| CREATE DEFAULT ADMIN ACCOUNT
+|--------------------------------------------------------------------------
+*/
+
+$admin_username = "admin";
+$admin_password = "admin123";
+
+$check_admin = $pdo->prepare("
+    SELECT id
+    FROM users
+    WHERE username = :username
+    LIMIT 1
+");
+
+$check_admin->execute([
+    ":username" => $admin_username
+]);
+
+if (!$check_admin->fetch()) {
+
+    $hashed_password = password_hash(
+        $admin_password,
+        PASSWORD_DEFAULT
+    );
+
+    $create_admin = $pdo->prepare("
+        INSERT INTO users (username, password)
+        VALUES (:username, :password)
+    ");
+
+    $create_admin->execute([
+        ":username" => $admin_username,
+        ":password" => $hashed_password
+    ]);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| LOGIN PROCESS
 |--------------------------------------------------------------------------
 */
 
@@ -65,7 +130,10 @@ if (isset($_POST["login"])) {
 
     $user = $stmt->fetch();
 
-    if ($user && password_verify($password, $user["password"])) {
+    if (
+        $user &&
+        password_verify($password, $user["password"])
+    ) {
 
         $_SESSION["logged_in"] = true;
         $_SESSION["user_id"] = $user["id"];
@@ -96,6 +164,7 @@ if (isset($_GET["logout"])) {
     header("Location: login.php");
     exit;
 }
+
 ?>
 
 <!DOCTYPE html>
