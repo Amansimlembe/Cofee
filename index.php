@@ -1,6 +1,4 @@
-Here's the full modified `index.php`:
 
-```php
 <?php
 session_start();
 
@@ -1805,4 +1803,3 @@ function showSection(
 </script>
 </body>
 </html>
-```
