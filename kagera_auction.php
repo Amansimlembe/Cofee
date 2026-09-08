@@ -360,8 +360,8 @@ function kagera_find_col($headers, $names)
 |--------------------------------------------------------------------------
 */
 
-function kagera_parse_with_phpspreadsheet($file)
-{
+
+function kagera_parse_with_phpspreadsheet($file) {
     $autoloaders = [
         __DIR__ . '/vendor/autoload.php',
         dirname(__DIR__) . '/vendor/autoload.php'
@@ -370,17 +370,10 @@ function kagera_parse_with_phpspreadsheet($file)
     $loaded = false;
 
     foreach ($autoloaders as $autoload) {
-
         if (is_file($autoload)) {
-
             require_once $autoload;
 
-            if (
-                class_exists(
-                    'PhpOffice\PhpSpreadsheet\IOFactory'
-                )
-            ) {
-
+            if (class_exists('PhpOffice\\PhpSpreadsheet\\IOFactory')) {
                 $loaded = true;
                 break;
             }
@@ -392,37 +385,37 @@ function kagera_parse_with_phpspreadsheet($file)
     }
 
     try {
-
-        $reader =
-            \PhpOffice\PhpSpreadsheet\IOFactory
-            ::createReaderForFile($file);
-
+        $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($file);
         $reader->setReadDataOnly(true);
 
         $spreadsheet = $reader->load($file);
 
-        if ($spreadsheet->getSheetCount() < 1) {
+        $sheetCount = $spreadsheet->getSheetCount();
+
+        if ($sheetCount < 1) {
             return false;
         }
 
         $sheet = $spreadsheet->getSheet(0);
 
-        $highestRow =
-            $sheet->getHighestDataRow();
+        $highestRow = $sheet->getHighestDataRow();
+        $highestColumn = $sheet->getHighestDataColumn();
 
-        $highestColumn =
-            $sheet->getHighestDataColumn();
-
-        if (
-            $highestRow < 1 ||
-            $highestColumn === ''
-        ) {
+        if ($highestRow < 1 || $highestColumn === '') {
             return false;
         }
 
+        /*
+         * IMPORTANT:
+         * PhpSpreadsheet 2.x does not provide
+         * getCellByColumnAndRow().
+         *
+         * Use Coordinate::stringFromColumnIndex()
+         * together with Worksheet::getCell().
+         */
+
         $highestColumnIndex =
-            \PhpOffice\PhpSpreadsheet\Cell\Coordinate
-            ::columnIndexFromString(
+            \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString(
                 $highestColumn
             );
 
@@ -432,43 +425,64 @@ function kagera_parse_with_phpspreadsheet($file)
 
             $row = [];
 
-            for (
-                $c = 1;
-                $c <= $highestColumnIndex;
-                $c++
-            ) {
+            for ($c = 1; $c <= $highestColumnIndex; $c++) {
 
-                $cell =
-                    $sheet->getCellByColumnAndRow(
-                        $c,
-                        $r
-                    );
+                $columnLetter =
+                    \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
+
+                $cellReference = $columnLetter . $r;
+
+                $cell = $sheet->getCell($cellReference);
 
                 $value = $cell->getValue();
 
+                /*
+                 * Handle Excel date/time cells.
+                 */
                 if (
                     $value !== null &&
                     $value !== '' &&
-                    \PhpOffice\PhpSpreadsheet\Shared\Date
-                    ::isDateTime($cell)
+                    \PhpOffice\PhpSpreadsheet\Shared\Date::isDateTime($cell)
                 ) {
-
-                    $value =
-                        $cell->getFormattedValue();
-
-                } elseif (
-                    $value instanceof
-                    \PhpOffice\PhpSpreadsheet\RichText\RichText
-                ) {
-
-                    $value =
-                        $value->getPlainText();
+                    $value = $cell->getFormattedValue();
                 }
 
-                $row[] =
-                    kagera_clean_cell($value);
+                /*
+                 * Handle rich text cells.
+                 */
+                elseif (
+                    $value instanceof \PhpOffice\PhpSpreadsheet\RichText\RichText
+                ) {
+                    $value = $value->getPlainText();
+                }
+
+                /*
+                 * Formula cells:
+                 * If a formula is present, get the calculated value.
+                 */
+                elseif (
+                    is_string($value) &&
+                    strlen($value) > 0 &&
+                    $value[0] === '='
+                ) {
+                    $calculated = $cell->getCalculatedValue();
+
+                    if (
+                        $calculated instanceof
+                        \PhpOffice\PhpSpreadsheet\RichText\RichText
+                    ) {
+                        $calculated = $calculated->getPlainText();
+                    }
+
+                    $value = $calculated;
+                }
+
+                $row[] = kagera_clean_cell($value);
             }
 
+            /*
+             * Ignore completely empty rows.
+             */
             if (
                 count(
                     array_filter(
@@ -477,18 +491,20 @@ function kagera_parse_with_phpspreadsheet($file)
                     )
                 ) > 0
             ) {
-
                 $rows[] = $row;
             }
         }
 
-        return $rows ?: false;
+        return !empty($rows) ? $rows : false;
 
     } catch (Throwable $e) {
 
+        /*
+         * Log the real PhpSpreadsheet error so Render
+         * logs remain useful for future troubleshooting.
+         */
         error_log(
-            "Kagera PhpSpreadsheet error: " .
-            $e->getMessage()
+            'Kagera PhpSpreadsheet error: ' . $e->getMessage()
         );
 
         return false;
