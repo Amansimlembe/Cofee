@@ -1,6 +1,5 @@
 FROM php:8.3-apache
 
-# Install system dependencies
 RUN apt-get update \
     && apt-get install -y \
         libpq-dev \
@@ -24,18 +23,12 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Enable Apache rewrite
-RUN a2enmod rewrite
-
-# Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Copy Composer files first
 COPY composer.json ./
 
-# Validate and install dependencies
 RUN composer validate --no-check-publish \
     && composer install \
         --no-dev \
@@ -43,12 +36,16 @@ RUN composer validate --no-check-publish \
         --no-interaction \
         --optimize-autoloader
 
-# Copy application
 COPY . /var/www/html/
 
-# Set Apache document permissions
-RUN chown -R www-data:www-data /var/www/html
+RUN a2enmod rewrite \
+    && chown -R www-data:www-data /var/www/html \
+    && echo "ServerName localhost" >> /etc/apache2/apache2.conf
 
-EXPOSE 80
+# Render provides PORT, normally 10000
+RUN sed -i 's/Listen 80/Listen 10000/' /etc/apache2/ports.conf \
+    && sed -i 's/:80>/:10000>/g' /etc/apache2/sites-available/000-default.conf
+
+EXPOSE 10000
 
 CMD ["apache2-foreground"]
