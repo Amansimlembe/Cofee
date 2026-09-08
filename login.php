@@ -1,84 +1,43 @@
 <?php
 session_start();
 
-/*
-|--------------------------------------------------------------------------
-| RENDER POSTGRESQL CONNECTION
-|--------------------------------------------------------------------------
-*/
+$login_error = "";
 
-$databaseUrl = getenv('DATABASE_URL');
+$db_host = getenv("DB_HOST");
+$db_port = getenv("DB_PORT") ?: "5432";
+$db_name = getenv("DB_NAME");
+$db_user = getenv("DB_USER");
+$db_password = getenv("DB_PASSWORD");
 
-if (!$databaseUrl) {
-    die('DATABASE_URL is missing. Please connect your Render PostgreSQL database to this Web Service.');
+if (!$db_host || !$db_name || !$db_user || !$db_password) {
+    die("Database connection is not configured.");
 }
 
 try {
 
-    $pdo = new PDO($databaseUrl);
-
-    $pdo->setAttribute(
-        PDO::ATTR_ERRMODE,
-        PDO::ERRMODE_EXCEPTION
+    $pdo = new PDO(
+        "pgsql:host=$db_host;port=$db_port;dbname=$db_name",
+        $db_user,
+        $db_password,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        ]
     );
 
-    $pdo->setAttribute(
-        PDO::ATTR_DEFAULT_FETCH_MODE,
-        PDO::FETCH_ASSOC
-    );
+    // Automatically create users table
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS users (
+            id BIGSERIAL PRIMARY KEY,
+            username VARCHAR(100) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+    ");
 
 } catch (PDOException $e) {
 
-    die('Unable to connect to Render PostgreSQL database.');
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| AUTOMATICALLY CREATE USERS TABLE
-|--------------------------------------------------------------------------
-*/
-
-$pdo->exec("
-    CREATE TABLE IF NOT EXISTS users (
-        id BIGSERIAL PRIMARY KEY,
-        username VARCHAR(100) NOT NULL UNIQUE,
-        password VARCHAR(255) NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-    )
-");
-
-
-/*
-|--------------------------------------------------------------------------
-| AUTOMATICALLY CREATE ADMIN ACCOUNT
-|--------------------------------------------------------------------------
-*/
-
-$stmt = $pdo->prepare(
-    "SELECT id FROM users WHERE username = :username LIMIT 1"
-);
-
-$stmt->execute([
-    ':username' => 'admin'
-]);
-
-if (!$stmt->fetch()) {
-
-    $hashedPassword = password_hash(
-        'admin123',
-        PASSWORD_DEFAULT
-    );
-
-    $stmt = $pdo->prepare("
-        INSERT INTO users (username, password)
-        VALUES (:username, :password)
-    ");
-
-    $stmt->execute([
-        ':username' => 'admin',
-        ':password' => $hashedPassword
-    ]);
+    die("Unable to connect to database.");
 }
 
 
@@ -88,50 +47,37 @@ if (!$stmt->fetch()) {
 |--------------------------------------------------------------------------
 */
 
-$login_error = "";
-
 if (isset($_POST["login"])) {
 
     $username = trim($_POST["username"] ?? "");
     $password = $_POST["password"] ?? "";
 
-    if ($username === "" || $password === "") {
+    $stmt = $pdo->prepare("
+        SELECT id, username, password
+        FROM users
+        WHERE username = :username
+        LIMIT 1
+    ");
 
-        $login_error = "Please enter username and password.";
+    $stmt->execute([
+        ":username" => $username
+    ]);
+
+    $user = $stmt->fetch();
+
+    if ($user && password_verify($password, $user["password"])) {
+
+        $_SESSION["logged_in"] = true;
+        $_SESSION["user_id"] = $user["id"];
+        $_SESSION["username"] = $user["username"];
+
+        header("Location: index.php");
+        exit;
 
     } else {
 
-        $stmt = $pdo->prepare("
-            SELECT id, username, password
-            FROM users
-            WHERE username = :username
-            LIMIT 1
-        ");
+        $login_error = "Invalid username or password.";
 
-        $stmt->execute([
-            ':username' => $username
-        ]);
-
-        $user = $stmt->fetch();
-
-        if (
-            $user &&
-            password_verify($password, $user["password"])
-        ) {
-
-            session_regenerate_id(true);
-
-            $_SESSION["logged_in"] = true;
-            $_SESSION["user_id"] = $user["id"];
-            $_SESSION["username"] = $user["username"];
-
-            header("Location: index.php");
-            exit;
-
-        } else {
-
-            $login_error = "Invalid username or password.";
-        }
     }
 }
 
