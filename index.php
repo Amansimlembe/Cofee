@@ -1,3 +1,6 @@
+Here's the full modified `index.php`:
+
+```php
 <?php
 session_start();
 
@@ -39,8 +42,6 @@ Coffee Sales Data Analysis System
 
     width: 270px;
 
-    --sidebar-width: 270px;
-
     height: 100vh;
 
     background: #3e2723;
@@ -54,9 +55,8 @@ Coffee Sales Data Analysis System
     box-shadow:
         3px 0 15px rgba(0,0,0,0.12);
 
-    overflow-x: hidden;
-
-    overflow-y: auto;
+    /* Allow toggle button to stick out; scroll only the menu area */
+    overflow: visible;
 }
 
 
@@ -65,8 +65,6 @@ Coffee Sales Data Analysis System
 .sidebar.collapsed {
 
     width: 78px;
-
-    --sidebar-width: 78px;
 
 }
 
@@ -151,22 +149,21 @@ Coffee Sales Data Analysis System
 
     list-style: none;
 
-    padding: 20px 10px;
+    padding: 18px 10px;
 
-    margin: 0;
+    /* Scrollable menu area so sidebar can stay overflow:visible for the toggle */
+    max-height: calc(100vh - 90px);
+
+    overflow-y: auto;
+
+    overflow-x: hidden;
 
 }
 
 
 .menu-item {
 
-    margin-bottom: 10px;
-
-}
-
-.menu-item:last-child {
-
-    margin-bottom: 0;
+    margin-bottom: 5px;
 
 }
 
@@ -450,17 +447,15 @@ submenu names.
 
 .sidebar-toggle {
 
-    position: fixed;
+    position: absolute;
 
-    top: 20px;
+    top: 28px;
 
-    left: calc(var(--sidebar-width) - 14px);
+    right: -14px;
 
     width: 30px;
 
     height: 30px;
-
-    padding: 0;
 
     border-radius: 50%;
 
@@ -473,7 +468,7 @@ submenu names.
 
     cursor: pointer;
 
-    z-index: 2000;
+    z-index: 1100;
 
     display: flex;
 
@@ -483,17 +478,13 @@ submenu names.
 
     font-size: 13px;
 
-    line-height: 1;
-
-    box-sizing: border-box;
-
     box-shadow:
-        0 2px 7px rgba(0,0,0,0.25);
+        0 2px 8px rgba(0,0,0,0.25);
 
-    transition:
-        left 0.3s ease,
-        background 0.2s ease,
-        transform 0.2s ease;
+    transition: 0.3s ease;
+
+    /* Ensure the button is never clipped */
+    overflow: visible;
 
 }
 
@@ -502,7 +493,7 @@ submenu names.
 
     background: #8d6e63;
 
-    transform: scale(1.05);
+    transform: scale(1.08);
 
 }
 
@@ -712,7 +703,7 @@ submenu names.
 
 .content {
 
-    padding: 30px;
+    padding: 30px 30px 50px;
 
 }
 
@@ -803,12 +794,16 @@ submenu names.
 
     display: none;
 
+    margin-bottom: 32px;
+
 }
 
 
 .section.active {
 
     display: block;
+
+    margin-bottom: 32px;
 
 }
 
@@ -819,7 +814,7 @@ submenu names.
 
 .page-header {
 
-    margin-bottom: 25px;
+    margin-bottom: 28px;
 
 }
 
@@ -855,7 +850,9 @@ submenu names.
     grid-template-columns:
         repeat(3, 1fr);
 
-    gap: 20px;
+    gap: 24px;
+
+    margin-bottom: 28px;
 
 }
 
@@ -909,12 +906,14 @@ submenu names.
 
     background: white;
 
-    padding: 30px;
+    padding: 32px;
 
     border-radius: 10px;
 
     box-shadow:
         0 2px 12px rgba(0,0,0,0.06);
+
+    margin-bottom: 24px;
 
 }
 
@@ -925,7 +924,7 @@ submenu names.
 
     font-size: 23px;
 
-    margin-bottom: 10px;
+    margin-bottom: 14px;
 
 }
 
@@ -935,6 +934,8 @@ submenu names.
     color: #777;
 
     font-size: 14px;
+
+    line-height: 1.6;
 
 }
 
@@ -959,8 +960,6 @@ submenu names.
     .sidebar {
 
         width: 78px;
-
-        --sidebar-width: 78px;
 
     }
 
@@ -1806,3 +1805,4 @@ function showSection(
 </script>
 </body>
 </html>
+```
