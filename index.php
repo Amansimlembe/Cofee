@@ -39,8 +39,6 @@ Coffee Sales Data Analysis System
 
     width: 270px;
 
-    --sidebar-width: 270px;
-
     height: 100vh;
 
     background: #3e2723;
@@ -54,7 +52,7 @@ Coffee Sales Data Analysis System
     box-shadow:
         3px 0 15px rgba(0,0,0,0.12);
 
-    overflow-x: visible;
+    overflow-x: hidden;
 
     overflow-y: auto;
 }
@@ -65,8 +63,6 @@ Coffee Sales Data Analysis System
 .sidebar.collapsed {
 
     width: 78px;
-
-    --sidebar-width: 78px;
 
 }
 
@@ -83,7 +79,7 @@ Coffee Sales Data Analysis System
 
     justify-content: center;
 
-    padding: 15px 52px 15px 20px;
+    padding: 15px;
 
     background: #2b1b18;
 
@@ -151,22 +147,14 @@ Coffee Sales Data Analysis System
 
     list-style: none;
 
-    padding: 20px 10px;
-
-    margin: 0;
+    padding: 18px 10px;
 
 }
 
 
 .menu-item {
 
-    margin-bottom: 10px;
-
-}
-
-.menu-item:last-child {
-
-    margin-bottom: 0;
+    margin-bottom: 5px;
 
 }
 
@@ -226,8 +214,6 @@ Coffee Sales Data Analysis System
 
     gap: 13px;
 
-    min-width: 0;
-
 }
 
 
@@ -253,19 +239,7 @@ Coffee Sales Data Analysis System
 
 .arrow {
 
-    flex: 0 0 auto;
-
-    margin-left: 4px;
-
-    margin-right: 14px;
-
-    width: 14px;
-
-    text-align: center;
-
     font-size: 10px;
-
-    line-height: 1;
 
     transition:
         transform 0.25s ease;
@@ -288,7 +262,7 @@ Coffee Sales Data Analysis System
 
     justify-content: center;
 
-    padding: 11px 8px;
+    padding: 11px 5px;
 
 }
 
@@ -319,7 +293,7 @@ Coffee Sales Data Analysis System
     display: none;
 
     margin:
-        4px 12px 9px 37px;
+        3px 0 7px 37px;
 
     border-left:
         1px solid rgba(255,255,255,0.15);
@@ -376,7 +350,9 @@ Coffee Sales Data Analysis System
 
 
 .sidebar.collapsed .submenu {
+
     display: none !important;
+
 }
 
 
@@ -399,29 +375,10 @@ submenu names.
 */
 
 .sidebar.collapsed
-.menu-item:hover  .collapsed-tooltip {
-    display: none;
-    position: fixed;
-    left: 78px;
-    top: auto;
-    background: #2b1b18;
-    color: white;
-    min-width: 210px;
-    padding: 8px;
-    border-radius: 0 8px 8px 0;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.25);
-    z-index: 3000;
-    box-sizing: border-box;
-}
+.menu-item:hover .collapsed-tooltip {
 
-/* Invisible hover bridge removes the gap between the icon and tooltip. */
-.collapsed-tooltip::before {
-    content: "";
-    position: absolute;
-    left: -12px;
-    top: 0;
-    width: 12px;
-    height: 100%;
+    display: block;
+
 }
 
 
@@ -479,51 +436,50 @@ submenu names.
    SIDEBAR TOGGLE
 ========================================================= */
 
- .sidebar-toggle {
+.sidebar-toggle {
+
     position: absolute;
-    top: 29px;
-    right: 12px;
-    left: auto;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    border: 1px solid rgba(255,255,255,0.8);
+
+    top: 20px;
+
+    right: -13px;
+
+    width: 28px;
+
+    height: 28px;
+
     border-radius: 50%;
-    background: #4e342e;
-    color: #ffffff;
-    cursor: pointer;
-    z-index: 2000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1;
-    box-sizing: border-box;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.28);
-    transition:
-        background 0.2s ease,
-        box-shadow 0.2s ease,
-        transform 0.2s ease;
-}
 
-.sidebar-toggle:hover {
+    border:
+        2px solid white;
+
     background: #6d4c41;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.34);
-    transform: scale(1.04);
-}
 
-.sidebar-toggle:focus-visible {
-    outline: 2px solid #d7ccc8;
-    outline-offset: 2px;
+    color: white;
+
+    cursor: pointer;
+
+    z-index: 1100;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 12px;
+
+    box-shadow:
+        0 2px 7px rgba(0,0,0,0.2);
+
+    transition: 0.3s ease;
+
 }
 
 
 .sidebar-toggle:hover {
 
     background: #8d6e63;
-
-    transform: scale(1.05);
 
 }
 
@@ -981,8 +937,6 @@ submenu names.
 
         width: 78px;
 
-        --sidebar-width: 78px;
-
     }
 
     .sidebar .logo-text,
@@ -1142,7 +1096,7 @@ submenu names.
                 </li>
 
                 <li>
-                    <a onclick="showSection('kagera-auction', this)">
+                    <a onclick="window.location.href='kagera_auction.php'">
                         Kagera Auction
                     </a>
                 </li>
@@ -1158,7 +1112,7 @@ submenu names.
                     Clean Auction
                 </a>
 
-                <a onclick="showSection('kagera-auction', this)">
+                <a onclick="window.location.href='kagera_auction.php'">
                     Kagera Auction
                 </a>
 
@@ -1661,9 +1615,6 @@ function toggleSidebar() {
 
     sidebar.classList.toggle("collapsed");
 
-    document.querySelectorAll(".collapsed-tooltip").forEach(function(tooltip) {
-        tooltip.style.display = "";
-    });
 
     if (
         sidebar.classList.contains("collapsed")
@@ -1683,67 +1634,6 @@ function toggleSidebar() {
 /* =========================================================
    SUBMENU
 ========================================================= */
-
-function positionCollapsedTooltip(menuItem) {
-    const tooltip = menuItem.querySelector(".collapsed-tooltip");
-
-    if (!tooltip) return;
-
-    const rect = menuItem.getBoundingClientRect();
-    const tooltipHeight = tooltip.offsetHeight;
-    const viewportPadding = 10;
-
-    let top = rect.top;
-
-    if (top + tooltipHeight > window.innerHeight - viewportPadding) {
-        top = window.innerHeight - tooltipHeight - viewportPadding;
-    }
-
-    if (top < viewportPadding) {
-        top = viewportPadding;
-    }
-
-    tooltip.style.top = top + "px";
-}
-
-document.querySelectorAll(".sidebar .menu-item").forEach(function(menuItem) {
-    const tooltip = menuItem.querySelector(".collapsed-tooltip");
-
-    if (!tooltip) return;
-
-    menuItem.addEventListener("mouseenter", function() {
-        if (document.getElementById("sidebar").classList.contains("collapsed")) {
-            tooltip.style.display = "block";
-            positionCollapsedTooltip(menuItem);
-        }
-    });
-
-    menuItem.addEventListener("mouseleave", function(event) {
-        if (!tooltip.contains(event.relatedTarget)) {
-            tooltip.style.display = "";
-        }
-    });
-
-    tooltip.addEventListener("mouseenter", function() {
-        if (document.getElementById("sidebar").classList.contains("collapsed")) {
-            tooltip.style.display = "block";
-            positionCollapsedTooltip(menuItem);
-        }
-    });
-
-    tooltip.addEventListener("mouseleave", function() {
-        tooltip.style.display = "";
-    });
-});
-
-window.addEventListener("resize", function() {
-    document.querySelectorAll(".sidebar.collapsed .menu-item").forEach(function(menuItem) {
-        const tooltip = menuItem.querySelector(".collapsed-tooltip");
-        if (tooltip && tooltip.style.display === "block") {
-            positionCollapsedTooltip(menuItem);
-        }
-    });
-});
 
 function toggleSubmenu(element) {
 
