@@ -1751,17 +1751,31 @@ function handle_kagera_report()
         $label = trim($label, '_');
 
         // Normalize the known coffee-type components.
-        $parts = array_filter(explode('_', $label), function($part) {
+        $parts = array_values(array_filter(explode('_', $label), function($part) {
             return trim($part) !== '';
-        });
+        }));
 
+        // Some legacy records may contain the split spelling "Robu_Ta".
+        // Treat it as the single canonical type "Robusta".
         $normalizedParts = [];
+        $collapsedParts = [];
+        for ($i = 0; $i < count($parts); $i++) {
+            $partLower = strtolower(trim($parts[$i]));
+            if ($partLower === 'robu' && isset($parts[$i + 1]) &&
+                strtolower(trim($parts[$i + 1])) === 'ta') {
+                $collapsedParts[] = 'Robusta';
+                $i++;
+            } else {
+                $collapsedParts[] = $parts[$i];
+            }
+        }
+        $parts = $collapsedParts;
         foreach ($parts as $part) {
             $p = strtolower(trim($part));
 
             if ($p === 'arabica') {
                 $normalizedParts[] = 'Arabica';
-            } elseif ($p === 'robusta') {
+            } elseif ($p === 'robusta' || $p === 'robu' || $p === 'robu-ta' || $p === 'robuta') {
                 $normalizedParts[] = 'Robusta';
             } elseif ($p === 'clean') {
                 $normalizedParts[] = 'Clean';
@@ -2772,13 +2786,15 @@ body.sidebar-collapsed .kagera-main {
 
 .kagera-report-table-wrap {
     width: 100%;
-    overflow: auto;
-    max-height: 430px;
+    overflow-x: hidden;
+    overflow-y: visible;
+    max-height: none;
 }
 
 .kagera-report-table {
     width: 100%;
-    min-width: 850px;
+    min-width: 0;
+    table-layout: fixed;
     border-collapse: separate;
     border-spacing: 0;
     font-size: 11px;
@@ -2802,7 +2818,8 @@ body.sidebar-collapsed .kagera-main {
     padding: 9px 10px;
     border-bottom: 1px solid #eee8e5;
     color: #4e342e;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     background: #fff;
 }
 
@@ -4248,10 +4265,21 @@ async function kageraShowReport()
                     .replace(/^_+|_+$/g, "")
                     .split("_")
                     .filter(Boolean)
+                    .reduce(function(parts, part, index, allParts) {
+                        const p = part.toLowerCase();
+                        if (p === "robu" && allParts[index + 1] &&
+                            allParts[index + 1].toLowerCase() === "ta") {
+                            parts.push("Robusta");
+                            allParts[index + 1] = "";
+                        } else if (p !== "") {
+                            parts.push(part);
+                        }
+                        return parts;
+                    }, [])
                     .map(function(part) {
                         const p = part.toLowerCase();
                         if (p === "arabica") return "Arabica";
-                        if (p === "robusta") return "Robusta";
+                        if (p === "robusta" || p === "robu" || p === "robusta") return "Robusta";
                         if (p === "clean") return "Clean";
                         if (p === "certified") return "Certified";
                         return p.charAt(0).toUpperCase() + p.slice(1);
