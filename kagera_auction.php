@@ -1,14 +1,4 @@
 <?php
-/*
- * Kagera Auction uses ONE PostgreSQL database with TWO separate tables:
- *   - kagera_auction_results: Auction Results
- *   - kagera_auction_catalogue: Auction Catalogue
- *
- * Both tables use the same PDO connection/database.
- */
-const kagera_auction_results = kagera_auction_results;
-const kagera_auction_catalogue = kagera_auction_catalogue;
-
 
 /* =========================================================
    KAGERA AUCTION - SELF CONTAINED
@@ -177,7 +167,7 @@ function ensure_kagera_table()
         SELECT data_type
         FROM information_schema.columns
         WHERE table_schema = 'public'
-          AND table_name = kagera_auction_results
+          AND table_name = 'kagera_auction_results'
           AND column_name = :column
     ");
 
@@ -201,7 +191,7 @@ function ensure_kagera_table()
         SELECT data_type
         FROM information_schema.columns
         WHERE table_schema = 'public'
-          AND table_name = kagera_auction_results
+          AND table_name = 'kagera_auction_results'
           AND column_name = 'date_sold'
     ");
 
