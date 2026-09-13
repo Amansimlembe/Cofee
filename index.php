@@ -30,32 +30,18 @@ Coffee Sales Data Analysis System
 ========================================================= */
 
 .sidebar {
-
     position: fixed;
-
     top: 0;
-
     left: 0;
-
     width: 270px;
-
     --sidebar-width: 270px;
-
     height: 100vh;
-
     background: #3e2723;
-
     color: white;
-
     z-index: 1000;
-
     transition: width 0.3s ease;
-
-    box-shadow:
-        3px 0 15px rgba(0,0,0,0.12);
-
+    box-shadow: 3px 0 15px rgba(0,0,0,0.12);
     overflow-x: visible;
-
     overflow-y: auto;
 }
 
@@ -74,24 +60,14 @@ Coffee Sales Data Analysis System
 /* SIDEBAR HEADER */
 
 .sidebar-header {
-
     height: 90px;
-
     display: flex;
-
     align-items: center;
-
     justify-content: center;
-
-    padding: 15px 52px 15px 20px;
-
+    padding: 15px 50px 15px 22px;
     background: #2b1b18;
-
-    border-bottom:
-        1px solid rgba(255,255,255,0.1);
-
+    border-bottom: 1px solid rgba(255,255,255,0.1);
     white-space: nowrap;
-
 }
 
 
@@ -142,26 +118,25 @@ Coffee Sales Data Analysis System
 
 }
 
+.sidebar.collapsed .sidebar-header {
+    padding: 15px 8px;
+}
+
+
 
 /* =========================================================
    MENU
 ========================================================= */
 
 .menu {
-
     list-style: none;
-
-    padding: 20px 10px;
-
+    padding: 18px 14px 24px;
     margin: 0;
-
 }
 
 
 .menu-item {
-
-    margin-bottom: 10px;
-
+    margin-bottom: 6px;
 }
 
 .menu-item:last-child {
@@ -172,35 +147,20 @@ Coffee Sales Data Analysis System
 
 
 .menu-link {
-
     width: 100%;
-
-    min-height: 48px;
-
+    min-height: 46px;
     display: flex;
-
     align-items: center;
-
     justify-content: space-between;
-
-    padding: 11px 13px;
-
+    padding: 10px 14px;
     border: none;
-
-    border-radius: 7px;
-
+    border-radius: 8px;
     background: transparent;
-
     color: white;
-
     cursor: pointer;
-
     font-size: 14px;
-
     transition: all 0.2s ease;
-
     white-space: nowrap;
-
 }
 
 
@@ -219,28 +179,22 @@ Coffee Sales Data Analysis System
 
 
 .menu-left {
-
     display: flex;
-
     align-items: center;
-
-    gap: 13px;
-
+    gap: 12px;
     min-width: 0;
-
 }
 
 
 .menu-icon {
-
-    width: 25px;
-
-    min-width: 25px;
-
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-
-    font-size: 19px;
-
+    font-size: 18px;
 }
 
 
@@ -252,24 +206,13 @@ Coffee Sales Data Analysis System
 
 
 .arrow {
-
-    flex: 0 0 auto;
-
-    margin-left: 14px;
-
-    margin-right: 4px;
-
+    flex: 0 0 14px;
+    margin-left: 10px;
     width: 14px;
-
     text-align: center;
-
     font-size: 10px;
-
     line-height: 1;
-
-    transition:
-        transform 0.25s ease;
-
+    transition: transform 0.25s ease;
 }
 
 
@@ -285,11 +228,8 @@ Coffee Sales Data Analysis System
 /* COLLAPSED MENU */
 
 .sidebar.collapsed .menu-link {
-
     justify-content: center;
-
-    padding: 11px 8px;
-
+    padding: 10px 8px;
 }
 
 
@@ -313,19 +253,11 @@ Coffee Sales Data Analysis System
 ========================================================= */
 
 .submenu {
-
     list-style: none;
-
     display: none;
-
-    margin:
-        4px 12px 9px 37px;
-
-    border-left:
-        1px solid rgba(255,255,255,0.15);
-
-    padding-left: 8px;
-
+    margin: 5px 10px 8px 36px;
+    border-left: 1px solid rgba(255,255,255,0.15);
+    padding: 3px 0 3px 9px;
 }
 
 
@@ -337,23 +269,15 @@ Coffee Sales Data Analysis System
 
 
 .submenu a {
-
     display: block;
-
-    padding: 10px 12px;
-
+    padding: 9px 11px;
     color: #d7ccc8;
-
     text-decoration: none;
-
     font-size: 13px;
-
-    border-radius: 5px;
-
+    line-height: 1.35;
+    border-radius: 6px;
     cursor: pointer;
-
     transition: all 0.2s ease;
-
 }
 
 
@@ -950,9 +874,8 @@ submenu names.
     }
 
     .sidebar .menu-link {
-
         justify-content: center;
-
+        padding: 10px 8px;
     }
 
     .sidebar .menu-left {
