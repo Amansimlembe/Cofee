@@ -233,6 +233,23 @@ function ensure_kagera_table()
 
     /*
     |--------------------------------------------------------------------------
+    | REMOVE INVALID KEY ROWS
+    |--------------------------------------------------------------------------
+    | Lot No + Auction No + Date Sold are mandatory.
+    | Any existing database row with one of these fields blank/null is deleted.
+    |--------------------------------------------------------------------------
+    */
+    $db->exec("
+        DELETE FROM public.kagera_auction_results
+        WHERE lot_no IS NULL
+           OR BTRIM(lot_no) = ''
+           OR auction_no IS NULL
+           OR BTRIM(auction_no) = ''
+           OR date_sold IS NULL
+    ");
+
+    /*
+    |--------------------------------------------------------------------------
     | AUTOMATIC DUPLICATE CLEANUP
     |--------------------------------------------------------------------------
     | The newest row (highest id) is retained.
@@ -248,6 +265,22 @@ function ensure_kagera_table()
           AND a.lot_no IS NOT NULL
           AND a.auction_no IS NOT NULL
           AND a.date_sold IS NOT NULL
+    ");
+
+    /*
+    |--------------------------------------------------------------------------
+    | FINAL KEY VALIDATION
+    |--------------------------------------------------------------------------
+    | Keep the database clean before creating/enforcing the unique index.
+    |--------------------------------------------------------------------------
+    */
+    $db->exec("
+        DELETE FROM public.kagera_auction_results
+        WHERE lot_no IS NULL
+           OR BTRIM(lot_no) = ''
+           OR auction_no IS NULL
+           OR BTRIM(auction_no) = ''
+           OR date_sold IS NULL
     ");
 
     /*
@@ -1015,11 +1048,30 @@ function handle_kagera_upload()
             continue;
         }
 
-        if ($lot === "" || $auction === "" || $date === null) {
+        $missingFields = [];
+
+        if ($lot === "") {
+            $missingFields[] = "Lot No";
+        }
+
+        if ($auction === "") {
+            $missingFields[] = "Auction No";
+        }
+
+        if ($date === null) {
+            $missingFields[] = "Date Sold / Auction Date";
+        }
+
+        if (!empty($missingFields)) {
             kagera_json(
                 false,
-                "Every auction row must contain Lot No, Auction No. and a valid Auction Date.",
-                ["excel_row" => $r + 1],
+                "The following required field(s) are blank or invalid: " .
+                implode(", ", $missingFields) .
+                ". Please correct the Excel file and upload it again.",
+                [
+                    "excel_row" => $r + 1,
+                    "missing_fields" => $missingFields
+                ],
                 400
             );
         }
@@ -1170,8 +1222,18 @@ function handle_kagera_upload()
         }
 
         /*
-        | Final safety cleanup. The unique index also prevents future duplicates.
+        | Final safety cleanup. Invalid key rows are never retained,
+        | and duplicate complete keys are reduced to one row.
         */
+        $db->exec("
+            DELETE FROM public.kagera_auction_results
+            WHERE lot_no IS NULL
+               OR BTRIM(lot_no) = ''
+               OR auction_no IS NULL
+               OR BTRIM(auction_no) = ''
+               OR date_sold IS NULL
+        ");
+
         $db->exec("
             DELETE FROM public.kagera_auction_results a
             USING public.kagera_auction_results b
@@ -1239,7 +1301,19 @@ function handle_kagera_fetch()
             price,
             buyer_name
         FROM public.kagera_auction_results
-        ORDER BY id DESC
+        ORDER BY
+                CASE
+                    WHEN auction_no ~ '^[0-9]+([.][0-9]+)?$'
+                    THEN auction_no::NUMERIC
+                    ELSE NULL
+                END DESC NULLS LAST,
+                CASE
+                    WHEN lot_no ~ '^[0-9]+([.][0-9]+)?$'
+                    THEN lot_no::NUMERIC
+                    ELSE NULL
+                END ASC NULLS LAST,
+                lot_no ASC,
+                id DESC
     ");
 
     $data = $stmt->fetchAll();
