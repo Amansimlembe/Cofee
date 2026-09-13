@@ -2567,6 +2567,12 @@ body.sidebar-collapsed .kagera-main {
     font-weight: 700;
 }
 
+@media (max-width: 1250px) {
+    .kagera-report-type {
+        order: 4;
+    }
+}
+
 </style>
 
 </head>
@@ -2599,7 +2605,7 @@ body.sidebar-collapsed .kagera-main {
             <option value="catalogue">Auction Catalogue</option>
                 <option value="high_low">High &amp; Low</option>
                 <option value="sales_summary">Sales Summary</option>
-</select>
+            </select>
     </div>
 
     <div class="kagera-results-actions">
@@ -2664,7 +2670,8 @@ body.sidebar-collapsed .kagera-main {
 
             <div id="kageraUploadStatus" class="kagera-upload-status"></div>
         </div>
-<button
+
+        <button
             type="button"
             class="kagera-refresh-btn"
             onclick="loadKageraResults()"
@@ -3479,7 +3486,7 @@ async function loadKageraData(type)
 |--------------------------------------------------------------------------
 */
 
-const kageraDisplayType =
+const kageraReportType =
     document.getElementById("kageraDisplayType");
 
 function kageraNumber(value)
@@ -3701,8 +3708,8 @@ async function kageraShowReport()
     const subtitle = document.getElementById("kageraReportSubtitle");
 
     const selectedReport =
-        kageraDisplayType
-            ? String(kageraDisplayType.value || "")
+        kageraReportType
+            ? String(kageraReportType.value || "")
             : "";
 
     if (!selectedReport) {
@@ -3816,8 +3823,8 @@ async function kageraShowReport()
         }
     }
 }
-if (kageraDisplayType) {
-    kageraDisplayType.addEventListener("change", function() {
+if (kageraReportType) {
+    kageraReportType.addEventListener("change", function() {
         void kageraShowReport();
     });
 }
@@ -4084,6 +4091,28 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 });
+
+// Route High & Low / Sales Summary through the existing Display dropdown.
+// Catalogue and Auction Results continue using their normal display logic.
+(function () {
+    if (window.kageraDisplayReportRoutingInstalled) return;
+    window.kageraDisplayReportRoutingInstalled = true;
+
+    const display = document.getElementById("kageraDisplayType");
+    if (!display) return;
+
+    display.addEventListener("change", function () {
+        const value = String(display.value || "");
+
+        if (value === "high_low" || value === "sales_summary") {
+            void kageraShowReport();
+        } else {
+            const panel = document.getElementById("kageraReportPanel");
+            if (panel) panel.style.display = "none";
+        }
+    });
+})();
+
 </script>
 
 </body>
