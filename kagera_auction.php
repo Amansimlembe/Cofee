@@ -2324,6 +2324,119 @@ body.sidebar-collapsed .kagera-main {
 #kageraCatalogueTable {
     display:none;
 }
+
+/* --------------------------------------------------------------------------
+   REPORT CONTROL
+   -------------------------------------------------------------------------- */
+.kagera-report-control {
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    min-width:125px;
+}
+
+.kagera-report-control label {
+    color:#6b625e;
+    font-size:10px;
+    font-weight:700;
+}
+
+.kagera-report-panel {
+    width:100%;
+    height:100%;
+    overflow:auto;
+    background:#fff;
+}
+
+.kagera-report-paper {
+    width:min(100%, 1100px);
+    margin:0 auto;
+    padding:24px 28px 30px;
+}
+
+.kagera-report-title {
+    text-align:center;
+    color:#3e2723;
+    margin-bottom:18px;
+}
+
+.kagera-report-kce {
+    font-size:18px;
+    font-weight:800;
+    letter-spacing:.6px;
+    margin-bottom:7px;
+}
+
+#kageraReportHeading {
+    font-size:14px;
+    font-weight:700;
+    text-transform:uppercase;
+    margin-bottom:6px;
+}
+
+#kageraReportHeldOn {
+    font-size:11px;
+    color:#746b67;
+}
+
+.kagera-report-table {
+    width:100%;
+    border-collapse:collapse;
+    font-size:12px;
+}
+
+.kagera-report-table th,
+.kagera-report-table td {
+    border:1px solid #d9d0cc;
+    padding:10px 9px;
+    text-align:right;
+}
+
+.kagera-report-table th:first-child,
+.kagera-report-table td:first-child {
+    text-align:left;
+}
+
+.kagera-report-table thead th {
+    background:#4e342e;
+    color:#fff;
+    font-size:10px;
+    font-weight:700;
+    white-space:nowrap;
+}
+
+.kagera-report-table tbody td {
+    background:#fff;
+    color:#3e2723;
+}
+
+.kagera-report-table tbody tr:hover td {
+    background:#faf7f5;
+}
+
+.kagera-report-table .report-section td {
+    background:#f1ece9;
+    color:#4e342e;
+    font-weight:700;
+}
+
+.kagera-report-table .report-total td {
+    background:#f7f3f1;
+    font-weight:700;
+}
+
+.kagera-report-empty {
+    text-align:center !important;
+    padding:22px !important;
+    color:#888 !important;
+}
+
+@media (max-width:1250px) {
+    .kagera-report-control {
+        min-width:125px;
+    }
+}
+
 </style>
 
 </head>
@@ -2378,10 +2491,11 @@ body.sidebar-collapsed .kagera-main {
         </div>
 
         <div class="kagera-upload-compact">
-            <input type="hidden" id="kageraUploadType" name="upload_type" value="auction_results">
-
-                <form
+            <form
                 id="kageraUploadForm"
+                <input type="hidden" id="kageraUploadType" name="upload_type" value="auction_results">
+
+                
                 action="kagera_auction.php"
                 method="POST"
                 enctype="multipart/form-data"
@@ -2420,7 +2534,17 @@ body.sidebar-collapsed .kagera-main {
             <div id="kageraUploadStatus" class="kagera-upload-status"></div>
         </div>
 
-        <button
+        
+
+        <div class="kagera-report-control">
+            <label for="kageraReportType">Report</label>
+            <select id="kageraReportType" class="kagera-filter-select">
+                <option value="">Select Report</option>
+                <option value="high_low">High &amp; Low</option>
+                <option value="sales_summary">Sales Summary</option>
+            </select>
+        </div>
+<button
             type="button"
             class="kagera-refresh-btn"
             onclick="loadKageraResults()"
@@ -2455,6 +2579,51 @@ body.sidebar-collapsed .kagera-main {
 <tr><td colspan="13" class="kagera-empty-state">No Kagera Catalogue loaded.</td></tr>
 </tbody>
 </table>
+
+<div id="kageraReportPanel" class="kagera-report-panel" style="display:none;">
+
+    <div class="kagera-report-paper">
+
+        <div class="kagera-report-title">
+            <div class="kagera-report-kce">KAGERA COFFEE EXCHANGE</div>
+            <div id="kageraReportHeading">SALES SUMMARY FOR THE SELECTED AUCTION</div>
+            <div id="kageraReportHeldOn">Held On —</div>
+        </div>
+
+        <div id="kageraHighLowReport" style="display:none;">
+            <table class="kagera-report-table">
+                <thead>
+                    <tr>
+                        <th>TYPE OF COFFEE</th>
+                        <th>KILOS OFFERED</th>
+                        <th>KILOS SOLD</th>
+                        <th>LOWEST PRICE PER KG</th>
+                        <th>AVERAGE PRICE PER KG</th>
+                        <th>HIGHEST PRICE PER KG</th>
+                    </tr>
+                </thead>
+                <tbody id="kageraHighLowBody"></tbody>
+            </table>
+        </div>
+
+        <div id="kageraSalesSummaryReport" style="display:none;">
+            <table class="kagera-report-table">
+                <thead>
+                    <tr>
+                        <th>TYPE OF COFFEE</th>
+                        <th>KILOS OFFERED</th>
+                        <th>KILOS SOLD</th>
+                        <th>TOTAL VALUE (TZS)</th>
+                        <th>PERCENTAGE SOLD</th>
+                    </tr>
+                </thead>
+                <tbody id="kageraSalesSummaryBody"></tbody>
+            </table>
+        </div>
+
+    </div>
+
+</div>
 
 </div>
 
@@ -3263,19 +3432,824 @@ if(kageraDisplayType){
 
 /*
 |--------------------------------------------------------------------------
-| UPLOAD TYPE
+| REPORT + DISPLAY + UPLOAD CONTROL
 |--------------------------------------------------------------------------
 */
-if(kageraUploadType){
-    kageraUploadType.addEventListener("change", function(){
-        const type=this.value;
-        if(kageraFileName){
-            kageraFileName.textContent =
-                type==="catalogue"
+
+const kageraReportType =
+    document.getElementById("kageraReportType");
+
+const kageraUploadType =
+    document.getElementById("kageraUploadType");
+
+const kageraReportPanel =
+    document.getElementById("kageraReportPanel");
+
+const kageraHighLowReport =
+    document.getElementById("kageraHighLowReport");
+
+const kageraSalesSummaryReport =
+    document.getElementById("kageraSalesSummaryReport");
+
+const kageraHighLowBody =
+    document.getElementById("kageraHighLowBody");
+
+const kageraSalesSummaryBody =
+    document.getElementById("kageraSalesSummaryBody");
+
+const kageraReportHeading =
+    document.getElementById("kageraReportHeading");
+
+const kageraReportHeldOn =
+    document.getElementById("kageraReportHeldOn");
+
+let kageraReportResults = [];
+let kageraReportCatalogue = [];
+
+/*
+|--------------------------------------------------------------------------
+| DISPLAY -> UPLOAD TYPE
+|--------------------------------------------------------------------------
+| The Display selection determines what the next uploaded Excel file is.
+|--------------------------------------------------------------------------
+*/
+function kageraSyncUploadType()
+{
+    if (!kageraDisplayType || !kageraUploadType) return;
+
+    const type =
+        String(kageraDisplayType.value || "").toLowerCase();
+
+    kageraUploadType.value =
+        type === "catalogue"
+            ? "catalogue"
+            : "auction_results";
+
+    if (kageraFileName) {
+        kageraFileName.textContent =
+            type === "catalogue"
                 ? "Select Catalogue Excel file"
                 : "Select Auction Results Excel file";
-        }
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| REPORT HELPERS
+|--------------------------------------------------------------------------
+*/
+function kageraReportNumber(value)
+{
+    if (value === null || value === undefined || value === "") {
+        return null;
+    }
+
+    const number =
+        Number(
+            String(value)
+                .replace(/,/g, "")
+                .replace(/\s/g, "")
+                .trim()
+        );
+
+    return Number.isFinite(number)
+        ? number
+        : null;
+}
+
+function kageraReportTypeName(row)
+{
+    const value =
+        String(
+            row.grade2 ??
+            row.Grade2 ??
+            row.grade ??
+            row.Grade ??
+            ""
+        )
+        .trim()
+        .toLowerCase();
+
+    if (value.includes("clean")) {
+        return "Clean Coffee";
+    }
+
+    if (value.includes("dry cherry")) {
+        return "Dry Cherry Coffee";
+    }
+
+    return null;
+}
+
+function kageraFormatReportNumber(value, decimals)
+{
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+        return "-";
+    }
+
+    return Number(value).toLocaleString("en-US", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
     });
+}
+
+function kageraFormatReportCurrency(value)
+{
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+        return "-";
+    }
+
+    return Number(value).toLocaleString("en-US", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    });
+}
+
+function kageraSelectedSeason()
+{
+    const select =
+        document.getElementById("kageraSeasonFilter");
+
+    return select ? String(select.value || "") : "";
+}
+
+function kageraSelectedAuction()
+{
+    const select =
+        document.getElementById("kageraAuctionFilter");
+
+    return select ? String(select.value || "") : "";
+}
+
+function kageraReportFilteredRows(rows)
+{
+    const season = kageraSelectedSeason();
+    const auction = kageraSelectedAuction();
+
+    return (rows || []).filter(function(row) {
+
+        const rowSeason =
+            kageraGetSeason(row.date_sold);
+
+        const rowAuction =
+            String(row.auction_no ?? "").trim();
+
+        return (
+            (!season || rowSeason === season) &&
+            (!auction || rowAuction === auction)
+        );
+    });
+}
+
+function kageraCalculateReport()
+{
+    const catalogueRows =
+        kageraReportFilteredRows(kageraReportCatalogue);
+
+    const resultRows =
+        kageraReportFilteredRows(kageraReportResults);
+
+    const types = [
+        "Dry Cherry Coffee",
+        "Clean Coffee"
+    ];
+
+    return types.map(function(type) {
+
+        const offered =
+            catalogueRows
+                .filter(function(row) {
+                    return kageraReportTypeName(row) === type;
+                })
+                .reduce(function(total, row) {
+                    const kg =
+                        kageraReportNumber(
+                            row.net_weight ??
+                            row.kgs ??
+                            row.Kgs
+                        );
+
+                    return total + (kg !== null ? kg : 0);
+                }, 0);
+
+        const sales =
+            resultRows
+                .filter(function(row) {
+                    return kageraReportTypeName(row) === type;
+                })
+                .map(function(row) {
+
+                    const kg =
+                        kageraReportNumber(
+                            row.net_weight ??
+                            row.kgs ??
+                            row.Kgs
+                        );
+
+                    const price =
+                        kageraReportNumber(
+                            row.price ??
+                            row.Price
+                        );
+
+                    return {
+                        kg: kg !== null ? kg : 0,
+                        price: price
+                    };
+                })
+                /*
+                | A positive price identifies an actual sold result.
+                | Rows without a price are not counted as kilos sold or
+                | as price observations.
+                */
+                .filter(function(item) {
+                    return item.kg > 0 &&
+                           item.price !== null &&
+                           item.price > 0;
+                });
+
+        const sold =
+            sales.reduce(function(total, item) {
+                return total + item.kg;
+            }, 0);
+
+        const totalValue =
+            sales.reduce(function(total, item) {
+                return total + (item.kg * item.price);
+            }, 0);
+
+        const prices =
+            sales
+                .map(function(item) {
+                    return item.price;
+                })
+                .filter(function(price) {
+                    return Number.isFinite(price);
+                });
+
+        const lowest =
+            prices.length
+                ? Math.min.apply(null, prices)
+                : null;
+
+        const highest =
+            prices.length
+                ? Math.max.apply(null, prices)
+                : null;
+
+        /*
+        | Weighted average = total sales value / kilos sold.
+        | This uses the Auction Results prices and sold kilograms.
+        */
+        const average =
+            sold > 0
+                ? totalValue / sold
+                : null;
+
+        return {
+            type: type,
+            offered: offered,
+            sold: sold,
+            totalValue: totalValue,
+            percentage: offered > 0
+                ? (sold / offered) * 100
+                : 0,
+            lowest: lowest,
+            average: average,
+            highest: highest
+        };
+    });
+}
+
+function kageraGetReportHeldOn()
+{
+    const rows =
+        kageraReportFilteredRows(kageraReportCatalogue);
+
+    if (!rows.length) {
+        return "";
+    }
+
+    const dates =
+        rows
+            .map(function(row) {
+                return row.date_sold;
+            })
+            .filter(Boolean)
+            .sort();
+
+    if (!dates.length) {
+        return "";
+    }
+
+    return formatKageraDate(dates[0]);
+}
+
+/*
+|--------------------------------------------------------------------------
+| HIGH & LOW REPORT
+|--------------------------------------------------------------------------
+*/
+function kageraRenderHighLowReport()
+{
+    const data =
+        kageraCalculateReport();
+
+    if (!kageraHighLowBody) return;
+
+    const auction =
+        kageraSelectedAuction();
+
+    const titleAuction =
+        auction
+            ? "AUCTION NO. " + auction
+            : "SELECTED AUCTION";
+
+    if (kageraReportHeading) {
+        kageraReportHeading.textContent =
+            "SALES SUMMARY FOR THE " + titleAuction;
+    }
+
+    const heldOn =
+        kageraGetReportHeldOn();
+
+    if (kageraReportHeldOn) {
+        kageraReportHeldOn.textContent =
+            heldOn
+                ? "Held On " + heldOn
+                : "Held On —";
+    }
+
+    kageraHighLowBody.innerHTML =
+        data.map(function(item) {
+
+            return (
+                "<tr>" +
+                    "<td>" + escapeKageraHtml(item.type) + "</td>" +
+                    "<td>" + kageraFormatReportNumber(item.offered, 0) + "</td>" +
+                    "<td>" + kageraFormatReportNumber(item.sold, 0) + "</td>" +
+                    "<td>" + kageraFormatReportNumber(item.lowest, 2) + "</td>" +
+                    "<td>" + kageraFormatReportNumber(item.average, 2) + "</td>" +
+                    "<td>" + kageraFormatReportNumber(item.highest, 2) + "</td>" +
+                "</tr>"
+            );
+        })
+        .join("");
+}
+
+/*
+|--------------------------------------------------------------------------
+| SALES SUMMARY REPORT
+|--------------------------------------------------------------------------
+*/
+function kageraRenderSalesSummaryReport()
+{
+    const data =
+        kageraCalculateReport();
+
+    if (!kageraSalesSummaryBody) return;
+
+    const auction =
+        kageraSelectedAuction();
+
+    const titleAuction =
+        auction
+            ? "AUCTION NO. " + auction
+            : "SELECTED AUCTION";
+
+    if (kageraReportHeading) {
+        kageraReportHeading.textContent =
+            "SALES SUMMARY FOR THE " + titleAuction;
+    }
+
+    const heldOn =
+        kageraGetReportHeldOn();
+
+    if (kageraReportHeldOn) {
+        kageraReportHeldOn.textContent =
+            heldOn
+                ? "Held On " + heldOn
+                : "Held On —";
+    }
+
+    kageraSalesSummaryBody.innerHTML =
+        data.map(function(item) {
+
+            return (
+                "<tr>" +
+                    "<td>" + escapeKageraHtml(item.type) + "</td>" +
+                    "<td>" + kageraFormatReportNumber(item.offered, 0) + "</td>" +
+                    "<td>" + kageraFormatReportNumber(item.sold, 0) + "</td>" +
+                    "<td>" + kageraFormatReportCurrency(item.totalValue) + "</td>" +
+                    "<td>" + item.percentage.toFixed(2) + "%</td>" +
+                "</tr>"
+            );
+        })
+        .join("");
+}
+
+async function kageraLoadReportData()
+{
+    try {
+
+        const requests = [
+            fetch(
+                "kagera_auction.php?action=fetch&kagera_type=results",
+                {
+                    cache: "no-store",
+                    credentials: "same-origin"
+                }
+            ),
+            fetch(
+                "kagera_auction.php?action=fetch&kagera_type=catalogue",
+                {
+                    cache: "no-store",
+                    credentials: "same-origin"
+                }
+            )
+        ];
+
+        const responses =
+            await Promise.all(requests);
+
+        const resultsJson =
+            await readKageraJson(responses[0]);
+
+        const catalogueJson =
+            await readKageraJson(responses[1]);
+
+        kageraReportResults =
+            Array.isArray(resultsJson.data)
+                ? resultsJson.data
+                : [];
+
+        kageraReportCatalogue =
+            Array.isArray(catalogueJson.data)
+                ? catalogueJson.data
+                : [];
+
+        return true;
+
+    } catch (error) {
+
+        if (kageraReportPanel) {
+            kageraReportPanel.innerHTML =
+                '<div class="kagera-empty-state" style="padding:30px;text-align:center;">' +
+                escapeKageraHtml(
+                    error.message ||
+                    "Unable to load report data."
+                ) +
+                "</div>";
+        }
+
+        return false;
+    }
+}
+
+async function kageraRenderSelectedReport()
+{
+    const report =
+        kageraReportType
+            ? String(kageraReportType.value || "")
+            : "";
+
+    const resultsTable =
+        document.getElementById("kageraResultsTable");
+
+    const catalogueTable =
+        document.getElementById("kageraCatalogueTable");
+
+    if (report) {
+
+        if (resultsTable) {
+            resultsTable.style.display = "none";
+        }
+
+        if (catalogueTable) {
+            catalogueTable.style.display = "none";
+        }
+
+        if (kageraReportPanel) {
+            kageraReportPanel.style.display = "block";
+        }
+
+        const loaded =
+            await kageraLoadReportData();
+
+        if (!loaded) return;
+
+        if (report === "high_low") {
+
+            if (kageraHighLowReport) {
+                kageraHighLowReport.style.display = "block";
+            }
+
+            if (kageraSalesSummaryReport) {
+                kageraSalesSummaryReport.style.display = "none";
+            }
+
+            kageraRenderHighLowReport();
+
+        } else if (report === "sales_summary") {
+
+            if (kageraHighLowReport) {
+                kageraHighLowReport.style.display = "none";
+            }
+
+            if (kageraSalesSummaryReport) {
+                kageraSalesSummaryReport.style.display = "block";
+            }
+
+            kageraRenderSalesSummaryReport();
+        }
+
+        return;
+    }
+
+    if (kageraReportPanel) {
+        kageraReportPanel.style.display = "none";
+    }
+
+    if (resultsTable) {
+        resultsTable.style.display =
+            kageraDisplayType &&
+            kageraDisplayType.value === "results"
+                ? "table"
+                : "none";
+    }
+
+    if (catalogueTable) {
+        catalogueTable.style.display =
+            kageraDisplayType &&
+            kageraDisplayType.value === "catalogue"
+                ? "table"
+                : "none";
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| DISPLAY TYPE
+|--------------------------------------------------------------------------
+*/
+if (kageraDisplayType) {
+
+    kageraDisplayType.addEventListener(
+        "change",
+        async function() {
+
+            kageraSyncUploadType();
+
+            if (kageraReportType) {
+                kageraReportType.value = "";
+            }
+
+            await loadKageraResults();
+        }
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| REPORT TYPE
+|--------------------------------------------------------------------------
+*/
+if (kageraReportType) {
+
+    kageraReportType.addEventListener(
+        "change",
+        function() {
+            kageraRenderSelectedReport();
+        }
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| SEASON FILTER
+|--------------------------------------------------------------------------
+*/
+if (kageraSeasonSelect) {
+
+    kageraSeasonSelect.addEventListener(
+        "change",
+        async function() {
+
+            const auctionSelect =
+                document.getElementById("kageraAuctionFilter");
+
+            if (auctionSelect) {
+                auctionSelect.value = "";
+            }
+
+            /*
+            | The currently displayed data determines the Auction list.
+            */
+            if (
+                kageraDisplayType &&
+                kageraDisplayType.value === "catalogue"
+            ) {
+
+                kageraPopulateAuctionFilterFromRows(
+                    kageraCatalogueData
+                );
+
+                kageraRenderCatalogue(
+                    kageraGetFilteredCatalogue()
+                );
+
+            } else {
+
+                kageraPopulateAuctionFilterFromRows(
+                    kageraAllResults
+                );
+
+                kageraRenderResults(
+                    kageraGetFilteredResults()
+                );
+            }
+
+            if (kageraReportType && kageraReportType.value) {
+                await kageraRenderSelectedReport();
+            }
+        }
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| AUCTION FILTER
+|--------------------------------------------------------------------------
+*/
+if (kageraAuctionSelect) {
+
+    kageraAuctionSelect.addEventListener(
+        "change",
+        async function() {
+
+            if (
+                kageraDisplayType &&
+                kageraDisplayType.value === "catalogue"
+            ) {
+
+                kageraRenderCatalogue(
+                    kageraGetFilteredCatalogue()
+                );
+
+            } else {
+
+                kageraRenderResults(
+                    kageraGetFilteredResults()
+                );
+            }
+
+            if (kageraReportType && kageraReportType.value) {
+                await kageraRenderSelectedReport();
+            }
+        }
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| UPLOAD
+|--------------------------------------------------------------------------
+*/
+if (kageraUploadForm) {
+
+    kageraUploadForm.addEventListener(
+        "submit",
+        async function(event) {
+
+            event.preventDefault();
+
+            kageraSyncUploadType();
+
+            const button =
+                document.getElementById("kageraUploadButton");
+
+            if (button) {
+                button.disabled = true;
+                button.innerHTML =
+                    "<span>⏳</span> Uploading...";
+            }
+
+            try {
+
+                const formData =
+                    new FormData(kageraUploadForm);
+
+                formData.set(
+                    "kagera_type",
+                    kageraUploadType
+                        ? kageraUploadType.value
+                        : "auction_results"
+                );
+
+                const response =
+                    await fetch(
+                        "kagera_auction.php",
+                        {
+                            method: "POST",
+                            body: formData,
+                            credentials: "same-origin"
+                        }
+                    );
+
+                const result =
+                    await readKageraJson(response);
+
+                if (
+                    result.requires_confirmation ||
+                    result.data?.requires_confirmation
+                ) {
+
+                    const confirmed =
+                        window.confirm(
+                            result.message +
+                            "\n\nDo you want to replace the matching existing records?"
+                        );
+
+                    if (confirmed) {
+
+                        formData.set(
+                            "confirm_replace",
+                            "1"
+                        );
+
+                        const secondResponse =
+                            await fetch(
+                                "kagera_auction.php",
+                                {
+                                    method: "POST",
+                                    body: formData,
+                                    credentials: "same-origin"
+                                }
+                            );
+
+                        const secondResult =
+                            await readKageraJson(
+                                secondResponse
+                            );
+
+                        showKageraStatus(
+                            secondResult.message ||
+                            "Upload completed.",
+                            secondResult.success
+                                ? "success"
+                                : "error"
+                        );
+
+                        if (secondResult.success) {
+                            await loadKageraResults();
+                        }
+
+                    } else {
+
+                        showKageraStatus(
+                            "Upload cancelled. Existing records were not replaced.",
+                            "error"
+                        );
+                    }
+
+                } else {
+
+                    showKageraStatus(
+                        result.message ||
+                        "Upload completed.",
+                        result.success
+                            ? "success"
+                            : "error"
+                    );
+
+                    if (result.success) {
+                        await loadKageraResults();
+                    }
+                }
+
+            } catch (error) {
+
+                console.error(
+                    "Kagera upload error:",
+                    error
+                );
+
+                showKageraStatus(
+                    error.message ||
+                    "Unable to upload the Excel file.",
+                    "error"
+                );
+
+            } finally {
+
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML =
+                        "<span>↑</span> Upload";
+                }
+            }
+        }
+    );
 }
 
 /*
@@ -3283,26 +4257,26 @@ if(kageraUploadType){
 | INITIAL LOAD
 |--------------------------------------------------------------------------
 */
+kageraSyncUploadType();
+
 loadKageraResults();
 
+</script>
 
-
+<script>
 /*
 |--------------------------------------------------------------------------
-| HTML ESCAPE
+| HTML ESCAPE / DATE FORMATTING
 |--------------------------------------------------------------------------
 */
-
 function formatKageraDate(value)
 {
-    if (!value) {
-        return "";
-    }
+    if (!value) return "";
 
     const text = String(value).trim();
 
-    // Stored database value is normally YYYY-MM-DD.
-    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const iso =
+        text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
     if (iso) {
         return iso[3] + "/" + iso[2] + "/" + iso[1];
@@ -3313,109 +4287,13 @@ function formatKageraDate(value)
 
 function escapeKageraHtml(value)
 {
-
     return String(value)
-
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-
-        .replace(
-            /</g,
-            "&lt;"
-        )
-
-        .replace(
-            />/g,
-            "&gt;"
-        )
-
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-
-        .replace(
-            /'/g,
-            "&#039;"
-        );
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| LOAD RESULTS
-|--------------------------------------------------------------------------
-*/
-
-document.addEventListener(
-    "DOMContentLoaded",
-    loadKageraResults
-);
-
-</script>
-
-
-<script>
-(function () {
-    const displaySelect = document.getElementById( + display_id + r);
-    const uploadType = document.getElementById('kageraUploadType');
-    const uploadForm = document.getElementById('kageraUploadForm');
-
-    function syncUploadTypeWithDisplay() {
-        if (!displaySelect || !uploadType) return;
-
-        const value = String(displaySelect.value || '').toLowerCase();
-        const text = String(
-            displaySelect.options[displaySelect.selectedIndex]?.text || ''
-        ).toLowerCase();
-
-        const isCatalogue =
-            value.includes('catalogue') ||
-            value.includes('catalog') ||
-            text.includes('catalogue') ||
-            text.includes('catalog');
-
-        uploadType.value = isCatalogue ? 'catalogue' : 'auction_results';
-
-        // Keep the backend informed without adding another user-facing dropdown.
-        if (uploadForm) {
-            uploadForm.dataset.uploadType = uploadType.value;
-        }
-    }
-
-    if (displaySelect) {
-        displaySelect.addEventListener('change', syncUploadTypeWithDisplay);
-        syncUploadTypeWithDisplay();
-    }
-})();
-</script>
-
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const form = document.getElementById('kageraUploadForm');
-    const displaySelect = document.getElementById( + display_id + r);
-    const uploadType = document.getElementById('kageraUploadType');
-
-    if (form && displaySelect && uploadType) {
-        form.addEventListener('submit', function () {
-            const selectedText = String(
-                displaySelect.options[displaySelect.selectedIndex]?.text || ''
-            ).toLowerCase();
-            const selectedValue = String(displaySelect.value || '').toLowerCase();
-
-            const catalogue =
-                selectedText.includes('catalogue') ||
-                selectedText.includes('catalog') ||
-                selectedValue.includes('catalogue') ||
-                selectedValue.includes('catalog');
-
-            uploadType.value = catalogue ? 'catalogue' : 'auction_results';
-        });
-    }
-});
 </script>
 
 </body>
