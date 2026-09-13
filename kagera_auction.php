@@ -4326,6 +4326,25 @@ function kageraSetupHighLowExport()
     });
 }
 
+
+function kageraSetHighLowExportVisible(visible)
+{
+    const wrap = document.getElementById("kageraHighLowExportWrap");
+    const button = document.getElementById("kageraHighLowExportBtn");
+    const menu = document.getElementById("kageraHighLowExportMenu");
+
+    if (!wrap) return;
+
+    if (visible) {
+        wrap.style.display = "inline-block";
+        if (button) button.style.display = "inline-flex";
+    } else {
+        wrap.style.display = "none";
+        if (button) button.style.display = "none";
+        if (menu) menu.style.display = "none";
+    }
+}
+
 async function kageraShowReport()
 {
     const panel = document.getElementById("kageraReportPanel");
@@ -4345,15 +4364,14 @@ async function kageraShowReport()
         selectedReport === "high_low" ||
         selectedReport === "sales_summary";
 
-    const exportWrap = document.getElementById("kageraHighLowExportWrap");
-    if (exportWrap) {
-        exportWrap.style.display = selectedReport === "high_low" ? "block" : "none";
-    }
+    kageraSetHighLowExportVisible(selectedReport === "high_low");
+
     if (selectedReport !== "high_low") {
         kageraCloseHighLowExportMenu();
     }
 
     if (!isReportView) {
+        kageraSetHighLowExportVisible(false);
         if (panel) panel.style.display = "none";
         if (highLow) highLow.style.display = "none";
         if (salesSummary) salesSummary.style.display = "none";
