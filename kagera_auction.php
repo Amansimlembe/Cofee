@@ -2306,12 +2306,6 @@ body.sidebar-collapsed .kagera-main {
 
 
 .kagera-display-type,
-.kagera-upload-type {
-    display:flex;
-    flex-direction:column;
-    gap:4px;
-    flex:0 0 auto;
-}
 .kagera-display-type label,
 .kagera-upload-type label {
     color:#6b625e;
@@ -2385,13 +2379,9 @@ body.sidebar-collapsed .kagera-main {
                 enctype="multipart/form-data"
                 class="kagera-header-upload-form"
             >
-                <div class="kagera-upload-type">
-                    <label for="kageraUploadType">Upload</label>
-                    <select id="kageraUploadType" name="kagera_type" class="kagera-filter-select">
-                        <option value="results">Auction Results</option>
-                        <option value="catalogue">Auction Catalogue</option>
-                    </select>
-                </div>
+<input type="hidden" name="upload_type" id="kageraUploadType" value="auction_results">
+
+                
 
                 <div class="kagera-file-area">
                     <input
@@ -2486,7 +2476,7 @@ const kageraDisplayType =
     document.getElementById("kageraDisplayType");
 
 const kageraUploadType =
-    document.getElementById("kageraUploadType");
+    document.getElementById('kageraDisplayType').value;
 
 let kageraCatalogueData = [];
 
@@ -3357,6 +3347,63 @@ document.addEventListener(
     "DOMContentLoaded",
     loadKageraResults
 );
+
+
+<script>
+/*
+ * The Display selector controls both:
+ *  1. Which table is visible.
+ *  2. Which type the next uploaded Excel file is saved as.
+ *
+ * No separate Upload Type dropdown is required.
+ */
+(function () {
+    window.syncKageraUploadType = function syncKageraUploadType() {
+        var display = document.getElementById('kageraDisplayType');
+        var uploadType = document.getElementById('kageraUploadType');
+
+        if (!display || !uploadType) return;
+
+        var selected = String(display.value || '').toLowerCase();
+
+        if (
+            selected === 'catalogue' ||
+            selected === 'auction_catalogue' ||
+            selected === 'catalog'
+        ) {
+            uploadType.value = 'catalogue';
+        } else {
+            uploadType.value = 'auction_results';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var display = document.getElementById('kageraDisplayType');
+
+        if (display) {
+            display.addEventListener('change', syncKageraUploadType);
+        }
+
+        syncKageraUploadType();
+    });
+})();
+
+<script>
+(function () {
+    document.addEventListener('DOMContentLoaded', function () {
+        var form = document.getElementById('kageraUploadForm');
+        if (form) {
+            form.addEventListener('submit', function () {
+                if (typeof window.syncKageraUploadType === 'function') {
+                    window.syncKageraUploadType();
+                }
+            });
+        }
+    });
+})();
+</script>
+
+</script>
 
 </script>
 
