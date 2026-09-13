@@ -1644,10 +1644,10 @@ function handle_kagera_report()
     }
 
     $catalogueSql = "
-        SELECT grade, COALESCE(SUM(net_weight),0) AS kilos_offered
+        SELECT grade2, COALESCE(SUM(net_weight),0) AS kilos_offered
         FROM public.kagera_auction_catalogue
         " . ($catalogueWhere ? 'WHERE ' . implode(' AND ', $catalogueWhere) : '') . "
-        GROUP BY grade
+        GROUP BY grade2
     ";
 
     $stmt = $db->prepare($catalogueSql);
@@ -1656,7 +1656,7 @@ function handle_kagera_report()
 
     $resultSql = "
         SELECT
-            grade,
+            grade2,
             COALESCE(SUM(net_weight),0) AS kilos_sold,
             COALESCE(SUM(net_weight * COALESCE(price,0)),0) AS total_value,
             MIN(CASE WHEN price > 0 AND net_weight > 0 THEN price END) AS lowest_price,
@@ -1683,12 +1683,96 @@ function handle_kagera_report()
             MAX(CASE WHEN price > 0 AND net_weight > 0 THEN price END) AS highest_price
         FROM public.kagera_auction_results
         " . ($resultWhere ? 'WHERE ' . implode(' AND ', $resultWhere) : '') . "
-        GROUP BY grade
+        GROUP BY grade2
     ";
 
     $stmt = $db->prepare($resultSql);
     $stmt->execute($resultParams);
     $resultRows = $stmt->fetchAll();
+
+    /*
+     * SALES SUMMARY:
+     * Group by the actual Grade column. Catalogue provides Kilos Offered;
+     * Auction Results provide Kilos Sold and Total Value.
+     */
+    $gradeCatalogueSql = "
+        SELECT
+            TRIM(CAST(grade AS TEXT)) AS grade,
+            COALESCE(SUM(net_weight), 0) AS kilos_offered
+        FROM public.kagera_auction_catalogue
+        " . ($catalogueWhere ? 'WHERE ' . implode(' AND ', $catalogueWhere) : '') . "
+        AND TRIM(CAST(grade AS TEXT)) <> ''
+        GROUP BY TRIM(CAST(grade AS TEXT))
+    ";
+
+    $stmt = $db->prepare($gradeCatalogueSql);
+    $stmt->execute($catalogueParams);
+    $gradeCatalogueRows = $stmt->fetchAll();
+
+    $gradeResultSql = "
+        SELECT
+            TRIM(CAST(grade AS TEXT)) AS grade,
+            COALESCE(SUM(net_weight), 0) AS kilos_sold,
+            COALESCE(SUM(net_weight * COALESCE(price, 0)), 0) AS total_value
+        FROM public.kagera_auction_results
+        " . ($resultWhere ? 'WHERE ' . implode(' AND ', $resultWhere) : '') . "
+        AND TRIM(CAST(grade AS TEXT)) <> ''
+        GROUP BY TRIM(CAST(grade AS TEXT))
+    ";
+
+    $stmt = $db->prepare($gradeResultSql);
+    $stmt->execute($resultParams);
+    $gradeResultRows = $stmt->fetchAll();
+
+    $gradeGroups = [];
+    $gradeKeys = [];
+
+    $ensureGrade = function($value) use (&$gradeGroups, &$gradeKeys) {
+        $label = trim((string)$value);
+        if ($label === '') {
+            return null;
+        }
+
+        $key = strtolower(preg_replace('/\\s+/', ' ', $label));
+
+        if (!isset($gradeKeys[$key])) {
+            $gradeKeys[$key] = $label;
+            $gradeGroups[$label] = [
+                'kilos_offered' => 0,
+                'kilos_sold' => 0,
+                'total_value' => 0,
+                'percentage_sold' => 0
+            ];
+        }
+
+        return $gradeKeys[$key];
+    };
+
+    foreach ($gradeCatalogueRows as $row) {
+        $gradeLabel = $ensureGrade($row['grade'] ?? '');
+        if ($gradeLabel !== null) {
+            $gradeGroups[$gradeLabel]['kilos_offered'] +=
+                (float)($row['kilos_offered'] ?? 0);
+        }
+    }
+
+    foreach ($gradeResultRows as $row) {
+        $gradeLabel = $ensureGrade($row['grade'] ?? '');
+        if ($gradeLabel !== null) {
+            $gradeGroups[$gradeLabel]['kilos_sold'] +=
+                (float)($row['kilos_sold'] ?? 0);
+            $gradeGroups[$gradeLabel]['total_value'] +=
+                (float)($row['total_value'] ?? 0);
+        }
+    }
+
+    foreach ($gradeGroups as &$gradeGroup) {
+        $gradeGroup['percentage_sold'] =
+            $gradeGroup['kilos_offered'] > 0
+                ? ($gradeGroup['kilos_sold'] / $gradeGroup['kilos_offered']) * 100
+                : 0;
+    }
+    unset($gradeGroup);
 
     /*
      * Auction date for Held On:
@@ -1716,11 +1800,6 @@ function handle_kagera_report()
         $heldOn = $heldStmt->fetchColumn() ?: null;
     }
 
-    /*
-     * High & Low keeps the existing Dry Cherry / Clean Coffee grouping.
-     * Sales Summary, however, must use the actual Grade column values from
-     * the uploaded data (for example Arabica, Robusta, Arabica Certified).
-     */
     $groups = [
         'Dry Cherry Coffee' => [
             'kilos_offered' => 0,
@@ -1755,14 +1834,14 @@ function handle_kagera_report()
     };
 
     foreach ($catalogueRows as $row) {
-        $type = $normaliseType($row['grade'] ?? '');
+        $type = $normaliseType($row['grade2'] ?? '');
         if ($type !== null) {
             $groups[$type]['kilos_offered'] += (float)($row['kilos_offered'] ?? 0);
         }
     }
 
     foreach ($resultRows as $row) {
-        $type = $normaliseType($row['grade'] ?? '');
+        $type = $normaliseType($row['grade2'] ?? '');
         if ($type !== null) {
             $groups[$type]['kilos_sold'] = (float)($row['kilos_sold'] ?? 0);
             $groups[$type]['total_value'] = (float)($row['total_value'] ?? 0);
@@ -1772,78 +1851,7 @@ function handle_kagera_report()
         }
     }
 
-    /*
-     * SALES SUMMARY GROUPS — strictly from the Grade column.
-     * Catalogue supplies kilos offered; Auction Results supply kilos sold
-     * and value. Grade2 is deliberately never read here.
-     */
-    $salesGroups = [];
-
-    $addSalesGrade = function($grade) use (&$salesGroups) {
-        $label = trim((string)$grade);
-        if ($label === '') {
-            return null;
-        }
-
-        $key = strtolower(preg_replace('/\s+/', ' ', $label));
-
-        if (!isset($salesGroups[$key])) {
-            $salesGroups[$key] = [
-                'type' => $label,
-                'kilos_offered' => 0,
-                'kilos_sold' => 0,
-                'total_value' => 0,
-                'lowest_price' => null,
-                'average_price' => null,
-                'highest_price' => null
-            ];
-        }
-
-        return $key;
-    };
-
-    foreach ($catalogueRows as $row) {
-        $key = $addSalesGrade($row['grade'] ?? '');
-        if ($key !== null) {
-            $salesGroups[$key]['kilos_offered'] += (float)($row['kilos_offered'] ?? 0);
-        }
-    }
-
-    foreach ($resultRows as $row) {
-        $key = $addSalesGrade($row['grade'] ?? '');
-        if ($key !== null) {
-            $salesGroups[$key]['kilos_sold'] += (float)($row['kilos_sold'] ?? 0);
-            $salesGroups[$key]['total_value'] += (float)($row['total_value'] ?? 0);
-
-            if ($row['lowest_price'] !== null) {
-                $price = (float)$row['lowest_price'];
-                if ($price > 0 && ($salesGroups[$key]['lowest_price'] === null || $price < $salesGroups[$key]['lowest_price'])) {
-                    $salesGroups[$key]['lowest_price'] = $price;
-                }
-            }
-
-            if ($row['average_price'] !== null) {
-                $salesGroups[$key]['average_price'] = (float)$row['average_price'];
-            }
-
-            if ($row['highest_price'] !== null) {
-                $price = (float)$row['highest_price'];
-                if ($price > 0 && ($salesGroups[$key]['highest_price'] === null || $price > $salesGroups[$key]['highest_price'])) {
-                    $salesGroups[$key]['highest_price'] = $price;
-                }
-            }
-        }
-    }
-
     foreach ($groups as $type => &$g) {
-        $g['percentage_sold'] =
-            $g['kilos_offered'] > 0
-                ? ($g['kilos_sold'] / $g['kilos_offered']) * 100
-                : 0;
-    }
-    unset($g);
-
-    foreach ($salesGroups as &$g) {
         $g['percentage_sold'] =
             $g['kilos_offered'] > 0
                 ? ($g['kilos_sold'] / $g['kilos_offered']) * 100
@@ -1856,7 +1864,7 @@ function handle_kagera_report()
         'auction_no' => $auction,
         'held_on' => $heldOn,
         'groups' => $groups,
-        'sales_groups' => array_values($salesGroups)
+        'grade_groups' => $gradeGroups
     ], 200);
 }
 
@@ -2912,7 +2920,7 @@ body.sidebar-collapsed .kagera-main {
     <table class="kagera-high-low-table kagera-summary-block">
         <thead>
             <tr>
-                <th>TYPE OF COFFEE</th>
+                <th>GRADE</th>
                 <th>KILOS OFFERED</th>
                 <th>KILOS SOLD</th>
                 <th>TOTAL VALUE (TZS)</th>
@@ -4170,55 +4178,59 @@ async function kageraShowReport()
                     "Kilos offered from Auction Catalogue; kilos sold and total value from Auction Results.";
             }
 
-            const body = document.getElementById("kageraSalesSummaryBody");
+            const body =
+                document.getElementById("kageraSalesSummaryBody");
+
+            // Use the actual Grade values: Arabica, Robusta, Arabica Certified,
+            // and any other Grade present in the selected auction.
+            const gradeGroups = result.data?.grade_groups || {};
+            const gradeRows = Object.keys(gradeGroups);
+
+            let totalOffered = 0;
+            let totalSold = 0;
+            let totalValue = 0;
+
+            gradeRows.forEach(function(grade) {
+                const g = gradeGroups[grade] || {};
+                totalOffered += kageraNumber(g.kilos_offered);
+                totalSold += kageraNumber(g.kilos_sold);
+                totalValue += kageraNumber(g.total_value);
+            });
 
             if (body) {
-                // Sales Summary uses the actual Grade values from the
-                // uploaded catalogue/results data — never Grade2.
-                const salesGroups = result.data?.sales_groups || [];
-                const types = salesGroups.map(function(item) {
-                    return item.type;
-                });
-                const salesByType = {};
-                salesGroups.forEach(function(item) {
-                    salesByType[item.type] = item;
-                });
+                if (!gradeRows.length) {
+                    body.innerHTML =
+                        '<tr><td colspan="5" class="kagera-empty-state">' +
+                        'No Sales Summary data available for the selected Auction.' +
+                        '</td></tr>';
+                } else {
+                    body.innerHTML = gradeRows.map(function(grade) {
+                        const g = gradeGroups[grade] || {};
 
-                const totalOffered = types.reduce(function(sum, type) {
-                    return sum + kageraNumber((salesByType[type] || {}).kilos_offered);
-                }, 0);
-
-                const totalSold = types.reduce(function(sum, type) {
-                    return sum + kageraNumber((salesByType[type] || {}).kilos_sold);
-                }, 0);
-
-                const totalValue = types.reduce(function(sum, type) {
-                    return sum + kageraNumber((salesByType[type] || {}).total_value);
-                }, 0);
-
-                const totalPercentage =
-                    totalOffered > 0
-                        ? (totalSold / totalOffered) * 100
-                        : 0;
-
-                body.innerHTML = types.map(function(type) {
-                    const g = salesByType[type] || {};
-
-                    return "<tr>" +
-                        "<td>" + escapeKageraHtml(type) + "</td>" +
-                        "<td>" + kageraReportKg(g.kilos_offered) + "</td>" +
-                        "<td>" + kageraReportKg(g.kilos_sold) + "</td>" +
-                        "<td>" + kageraReportMoney(g.total_value) + "</td>" +
-                        "<td>" + kageraNumber(g.percentage_sold).toFixed(2) + "%</td>" +
-                        "</tr>";
-                }).join("") +
-                "<tr class=\"kagera-high-low-total-row\">" +
-                    "<td>Total</td>" +
-                    "<td>" + kageraReportKg(totalOffered) + "</td>" +
-                    "<td>" + kageraReportKg(totalSold) + "</td>" +
-                    "<td>" + kageraReportMoney(totalValue) + "</td>" +
-                    "<td>" + totalPercentage.toFixed(2) + "%</td>" +
-                "</tr>";
+                        return "<tr>" +
+                            "<td>" + escapeKageraHtml(grade) + "</td>" +
+                            "<td>" + kageraReportKg(g.kilos_offered) + "</td>" +
+                            "<td>" + kageraReportKg(g.kilos_sold) + "</td>" +
+                            "<td>" + kageraReportMoney(g.total_value) + "</td>" +
+                            "<td>" +
+                                kageraNumber(g.percentage_sold).toFixed(2) +
+                                "%" +
+                            "</td>" +
+                            "</tr>";
+                    }).join("") +
+                    "<tr class=\"kagera-high-low-total-row\">" +
+                        "<td>Total</td>" +
+                        "<td>" + kageraReportKg(totalOffered) + "</td>" +
+                        "<td>" + kageraReportKg(totalSold) + "</td>" +
+                        "<td>" + kageraReportMoney(totalValue) + "</td>" +
+                        "<td>" +
+                            (totalOffered > 0
+                                ? ((totalSold / totalOffered) * 100).toFixed(2)
+                                : "0.00") +
+                            "%" +
+                        "</td>" +
+                    "</tr>";
+                }
             }
         }
 
