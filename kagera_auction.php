@@ -1,269 +1,14 @@
 <?php
 session_start();
 
-if (!isset($_SESSION["logged_in"]) || $_SESSION["logged_in"] !== true) {
-    if ($_SERVER["REQUEST_METHOD"] === "POST" || isset($_GET["action"])) {
-        header("Content-Type: application/json; charset=utf-8");
-        http_response_code(401);
-        echo json_encode(["success" => false, "message" => "Not authenticated."]);
-        exit;
-    }
+if (
+    !isset($_SESSION["logged_in"]) ||
+    $_SESSION["logged_in"] !== true
+) {
     header("Location: login.php");
     exit;
 }
-
-function kageraDatabase(): mysqli
-{
-    $url = getenv("DATABASE_URL");
-
-    if ($url) {
-        $parts = parse_url($url);
-        if (!$parts || empty($parts["host"])) {
-            throw new Exception("Invalid DATABASE_URL.");
-        }
-        $host = $parts["host"];
-        $port = $parts["port"] ?? 3306;
-        $dbname = ltrim($parts["path"] ?? "", "/");
-        $username = $parts["user"] ?? "";
-        $password = $parts["pass"] ?? "";
-    } else {
-        $host = getenv("DB_HOST") ?: "127.0.0.1";
-        $port = getenv("DB_PORT") ?: 3306;
-        $dbname = getenv("DB_NAME") ?: "coffee_sales";
-        $username = getenv("DB_USER") ?: "root";
-        $password = getenv("DB_PASSWORD") ?: "";
-    }
-
-    $db = new mysqli($host, $username, $password, $dbname, (int)$port);
-    if ($db->connect_errno) {
-        throw new Exception("Database connection failed: " . $db->connect_error);
-    }
-    $db->set_charset("utf8mb4");
-    return $db;
-}
-
-function kageraJson(array $data, int $status = 200): never
-{
-    http_response_code($status);
-    header("Content-Type: application/json; charset=utf-8");
-    echo json_encode($data);
-    exit;
-}
-
-if (isset($_GET["action"]) && $_GET["action"] === "fetch") {
-    try {
-        $db = kageraDatabase();
-        $result = $db->query("
-            SELECT lot_no, auction_no, auction_date, warehouse, location,
-                   kgs, grade, grade2, price, value, buyer
-            FROM kagera_auction_results
-            ORDER BY auction_date DESC, auction_no DESC, lot_no ASC
-        ");
-
-        if (!$result) {
-            throw new Exception("Unable to retrieve Kagera Auction results: " . $db->error);
-        }
-
-        $data = [];
-        while ($row = $result->fetch_assoc()) {
-            $data[] = $row;
-        }
-
-        $db->close();
-        kageraJson(["success" => true, "data" => $data]);
-    } catch (Throwable $e) {
-        kageraJson(["success" => false, "message" => $e->getMessage()], 500);
-    }
-}
-
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_FILES["kagera_excel"])) {
-    try {
-        $file = $_FILES["kagera_excel"];
-
-        if ($file["error"] !== UPLOAD_ERR_OK) {
-            throw new Exception("Please select a valid Excel file.");
-        }
-
-        $extension = strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
-        if (!in_array($extension, ["xlsx", "xls"], true)) {
-            throw new Exception("Only .xlsx and .xls files are allowed.");
-        }
-
-        $autoload = __DIR__ . "/vendor/autoload.php";
-        if (!file_exists($autoload)) {
-            throw new Exception(
-                "PhpSpreadsheet is not installed. Run: composer require phpoffice/phpspreadsheet"
-            );
-        }
-
-        require_once $autoload;
-
-        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file["tmp_name"]);
-        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, true);
-
-        if (count($rows) < 2) {
-            throw new Exception("The Excel file contains no auction result rows.");
-        }
-
-        $normalize = static function ($value): string {
-            return preg_replace('/\s+/', ' ', strtolower(trim((string)$value)));
-        };
-
-        $headers = [];
-        foreach ($rows[1] as $column => $header) {
-            $headers[$column] = $normalize($header);
-        }
-
-        $required = [
-            "lot_no"       => ["lot no", "lot no."],
-            "auction_no"   => ["auction no", "auction no."],
-            "auction_date" => ["auction date"],
-            "warehouse"    => ["warehouse name", "warehouse"],
-            "location"    => ["location"],
-            "kgs"         => ["kgs", "kg", "kilograms"],
-            "grade"       => ["grade"],
-            "grade2"      => ["grade2", "grade 2"],
-            "price"       => ["price"],
-            "value"       => ["value"],
-            "buyer"       => ["buyer"]
-        ];
-
-        $map = [];
-        foreach ($required as $field => $names) {
-            foreach ($headers as $column => $header) {
-                if (in_array($header, $names, true)) {
-                    $map[$field] = $column;
-                    break;
-                }
-            }
-        }
-
-        $missing = [];
-        foreach ($required as $field => $_) {
-            if (!isset($map[$field])) {
-                $missing[] = $field;
-            }
-        }
-        if ($missing) {
-            throw new Exception(
-                "The Excel file is missing required column(s): " . implode(", ", $missing)
-            );
-        }
-
-        $db = kageraDatabase();
-
-        $db->query("
-            CREATE TABLE IF NOT EXISTS kagera_auction_results (
-                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                lot_no VARCHAR(50) NULL,
-                auction_no VARCHAR(50) NULL,
-                auction_date DATE NULL,
-                warehouse VARCHAR(255) NULL,
-                location VARCHAR(255) NULL,
-                kgs DECIMAL(16,3) NULL,
-                grade VARCHAR(100) NULL,
-                grade2 VARCHAR(255) NULL,
-                price DECIMAL(16,3) NULL,
-                value DECIMAL(20,2) NULL,
-                buyer VARCHAR(255) NULL,
-                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uq_kagera_result
-                    (auction_no, lot_no, warehouse, grade, grade2, buyer)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        ");
-
-        if ($db->error) {
-            throw new Exception("Unable to create the Kagera Auction table: " . $db->error);
-        }
-
-        $stmt = $db->prepare("
-            INSERT INTO kagera_auction_results
-            (lot_no, auction_no, auction_date, warehouse, location,
-             kgs, grade, grade2, price, value, buyer)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                auction_date = VALUES(auction_date),
-                location = VALUES(location),
-                kgs = VALUES(kgs),
-                price = VALUES(price),
-                value = VALUES(value),
-                uploaded_at = CURRENT_TIMESTAMP
-        ");
-
-        if (!$stmt) {
-            throw new Exception("Unable to prepare database statement: " . $db->error);
-        }
-
-        $toDate = static function ($value) {
-            if ($value === null || trim((string)$value) === "") return null;
-            if (is_numeric($value)) {
-                return \PhpOffice\PhpSpreadsheet\Shared\Date
-                    ::excelToDateTimeObject((float)$value)->format("Y-m-d");
-            }
-            $ts = strtotime((string)$value);
-            return $ts ? date("Y-m-d", $ts) : null;
-        };
-
-        $toNumber = static function ($value) {
-            if ($value === null || trim((string)$value) === "") return null;
-            return (float)str_replace(",", "", trim((string)$value));
-        };
-
-        $get = static function ($row, $field) use ($map) {
-            return trim((string)($row[$map[$field]] ?? ""));
-        };
-
-        $newRows = $updatedRows = $skippedRows = 0;
-
-        foreach (array_slice($rows, 1) as $row) {
-            $lotNo = $get($row, "lot_no");
-            $auctionNo = $get($row, "auction_no");
-            $auctionDate = $toDate($get($row, "auction_date"));
-            $warehouse = $get($row, "warehouse");
-            $location = $get($row, "location");
-            $kgs = $toNumber($get($row, "kgs"));
-            $grade = $get($row, "grade");
-            $grade2 = $get($row, "grade2");
-            $price = $toNumber($get($row, "price"));
-            $value = $toNumber($get($row, "value"));
-            $buyer = $get($row, "buyer");
-
-            if ($lotNo === "" && $auctionNo === "" && $warehouse === "" &&
-                $location === "" && $kgs === null && $grade === "" &&
-                $grade2 === "" && $price === null && $value === null && $buyer === "") {
-                $skippedRows++;
-                continue;
-            }
-
-            $stmt->bind_param(
-                "sssssdssdds",
-                $lotNo, $auctionNo, $auctionDate, $warehouse, $location,
-                $kgs, $grade, $grade2, $price, $value, $buyer
-            );
-
-            if (!$stmt->execute()) {
-                throw new Exception("Unable to save Lot No. {$lotNo}: " . $stmt->error);
-            }
-
-            if ($stmt->affected_rows === 1) $newRows++;
-            elseif ($stmt->affected_rows === 2) $updatedRows++;
-        }
-
-        $stmt->close();
-        $db->close();
-
-        kageraJson([
-            "success" => true,
-            "message" =>
-                "Kagera Auction upload completed. New: {$newRows}; " .
-                "Updated: {$updatedRows}; Skipped: {$skippedRows}."
-        ]);
-    } catch (Throwable $e) {
-        kageraJson(["success" => false, "message" => $e->getMessage()], 500);
-    }
-}
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -603,11 +348,6 @@ body {
     white-space: nowrap;
 }
 
-.kagera-results-table .number-cell {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-}
-
 .kagera-results-table tbody tr:hover {
     background: #faf7f5;
 }
@@ -708,7 +448,7 @@ body.sidebar-collapsed .kagera-main {
 
             <form
                 id="kageraUploadForm"
-                action="kagera_auction.php"
+                action="kagera_upload.php"
                 method="POST"
                 enctype="multipart/form-data">
 
@@ -791,21 +531,22 @@ body.sidebar-collapsed .kagera-main {
                             <th>#</th>
                             <th>Auction No.</th>
                             <th>Date Sold</th>
-                            <th>Lot No.</th>
-                            <th>Warehouse</th>
-                            <th>Location</th>
-                            <th>Kgs</th>
+                            <th>Lot Number</th>
+                            <th>Invoice</th>
+                            <th>Packages</th>
+                            <th>Net Weight (Kg)</th>
                             <th>Grade</th>
                             <th>Grade2</th>
                             <th>Price</th>
-                            <th>Value</th>
-                            <th>Buyer</th>
+                            <th>Buyer Name</th>
+                            <th>Warehouse</th>
+                            <th>Status</th>
                         </tr>
                     </thead>
 
                     <tbody id="kageraResultsBody">
                         <tr>
-                            <td colspan="11" class="kagera-empty-state">
+                            <td colspan="13" class="kagera-empty-state">
                                 No Kagera Auction results loaded.
                             </td>
                         </tr>
@@ -861,7 +602,7 @@ if (kageraUploadForm) {
 
         try {
             const response = await fetch(
-                "the Kagera Auction upload handler in kagera_auction.php.",
+                "kagera_upload.php",
                 {
                     method: "POST",
                     body: formData
@@ -918,13 +659,13 @@ async function loadKageraResults() {
     if (!body) return;
 
     body.innerHTML =
-        '<tr><td colspan="11" class="kagera-empty-state">' +
+        '<tr><td colspan="13" class="kagera-empty-state">' +
         'Loading results...' +
         '</td></tr>';
 
     try {
         const response =
-            await fetch("kagera_auction.php?action=fetch");
+            await fetch("kagera_fetch.php");
 
         const result =
             await response.json();
@@ -938,7 +679,7 @@ async function loadKageraResults() {
 
         if (!result.data || !result.data.length) {
             body.innerHTML =
-                '<tr><td colspan="11" class="kagera-empty-state">' +
+                '<tr><td colspan="13" class="kagera-empty-state">' +
                 'No Kagera Auction results loaded.' +
                 '</td></tr>';
             return;
@@ -949,45 +690,29 @@ async function loadKageraResults() {
                 return "<tr>" +
                     "<td>" + escapeKageraHtml(index + 1) + "</td>" +
                     "<td>" + escapeKageraHtml(row.auction_no ?? "") + "</td>" +
-                    "<td>" + formatKageraDate(row.auction_date) + "</td>" +
-                    "<td>" + escapeKageraHtml(row.lot_no ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.warehouse ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.location ?? "") + "</td>" +
-                    "<td class='number-cell'>" + formatKageraNumber(row.kgs) + "</td>" +
+                    "<td>" + escapeKageraHtml(row.date_sold ?? "") + "</td>" +
+                    "<td>" + escapeKageraHtml(row.lot_number ?? "") + "</td>" +
+                    "<td>" + escapeKageraHtml(row.invoice ?? "") + "</td>" +
+                    "<td>" + escapeKageraHtml(row.packages ?? "") + "</td>" +
+                    "<td>" + escapeKageraHtml(row.net_weight ?? "") + "</td>" +
                     "<td>" + escapeKageraHtml(row.grade ?? "") + "</td>" +
                     "<td>" + escapeKageraHtml(row.grade2 ?? "") + "</td>" +
-                    "<td class='number-cell'>" + formatKageraNumber(row.price) + "</td>" +
-                    "<td class='number-cell'>" + formatKageraNumber(row.value) + "</td>" +
-                    "<td>" + escapeKageraHtml(row.buyer ?? "") + "</td>" +
+                    "<td>" + escapeKageraHtml(row.price ?? "") + "</td>" +
+                    "<td>" + escapeKageraHtml(row.buyer_name ?? "") + "</td>" +
+                    "<td>" + escapeKageraHtml(row.warehouse ?? "") + "</td>" +
+                    "<td>" + escapeKageraHtml(row.status ?? "") + "</td>" +
                     "</tr>";
             }).join("");
 
     } catch (error) {
         body.innerHTML =
-            '<tr><td colspan="11" class="kagera-empty-state">' +
+            '<tr><td colspan="13" class="kagera-empty-state">' +
             escapeKageraHtml(
                 error.message ||
                 "Unable to load results."
             ) +
             "</td></tr>";
     }
-}
-
-function formatKageraDate(value) {
-    if (!value) return "";
-    const parts = String(value).split("-");
-    if (parts.length === 3 && parts[0].length === 4) {
-        return parts[2].padStart(2, "0") + "/" + parts[1].padStart(2, "0") + "/" + parts[0];
-    }
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return escapeKageraHtml(value);
-    return String(date.getUTCDate()).padStart(2,"0") + "/" + String(date.getUTCMonth()+1).padStart(2,"0") + "/" + date.getUTCFullYear();
-}
-
-function formatKageraNumber(value) {
-    if (value === null || value === undefined || value === "") return "";
-    const number = Number(value);
-    return Number.isNaN(number) ? escapeKageraHtml(value) : new Intl.NumberFormat("en-US", {maximumFractionDigits: 3}).format(number);
 }
 
 function escapeKageraHtml(value) {
