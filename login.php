@@ -681,7 +681,7 @@ body {
                     name="login"
                     class="login-button">
 
-                    Login to System
+                    Login
 
                 </button>
 

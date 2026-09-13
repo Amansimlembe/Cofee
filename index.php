@@ -739,84 +739,6 @@ submenu names.
 
 
 /* =========================================================
-   WELCOME
-========================================================= */
-
-.welcome {
-
-    min-height:
-        calc(100vh - 130px);
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    text-align: center;
-
-}
-
-
-.welcome-box {
-
-    max-width: 650px;
-
-}
-
-
-.welcome-icon {
-
-    font-size: 65px;
-
-    margin-bottom: 20px;
-
-}
-
-
-.welcome-box h1 {
-
-    color: #3e2723;
-
-    font-size: 32px;
-
-    margin-bottom: 12px;
-
-}
-
-
-.welcome-box p {
-
-    color: #777;
-
-    font-size: 15px;
-
-    line-height: 1.7;
-
-}
-
-
-.welcome-hint {
-
-    margin-top: 25px;
-
-    padding: 13px 18px;
-
-    display: inline-block;
-
-    background: white;
-
-    border-radius: 7px;
-
-    color: #6d4c41;
-
-    box-shadow:
-        0 2px 10px rgba(0,0,0,0.06);
-
-}
-
-
-/* =========================================================
    SECTIONS
 ========================================================= */
 
@@ -1119,7 +1041,7 @@ submenu names.
         <li class="menu-item">
 
             <div
-                class="menu-link"
+                class="menu-link active"
                 onclick="showSection('dashboard', this)">
 
                 <div class="menu-left">
@@ -1414,49 +1336,11 @@ submenu names.
     <div class="content">
 
 
-        <!-- WELCOME -->
-
-        <section
-            id="welcome"
-            class="welcome">
-
-            <div class="welcome-box">
-
-                <div class="welcome-icon">
-                    ☕
-                </div>
-
-                <h1>
-                    Coffee Sales Data Analysis
-                </h1>
-
-                <p>
-                    Welcome to the Coffee Sales Data Analysis
-                    System. Use the navigation menu on the left
-                    to access sales, contracts, licensing and
-                    analytical reports.
-                </p>
-
-
-                <div class="welcome-hint">
-
-                    Select
-                    <strong>Dashboard</strong>
-                    from the sidebar to view the
-                    coffee sales overview.
-
-                </div>
-
-            </div>
-
-        </section>
-
-
         <!-- DASHBOARD -->
 
         <section
             id="dashboard"
-            class="section">
+            class="section active">
 
             <div class="page-header">
 
@@ -1805,12 +1689,6 @@ function toggleSubmenu(element) {
 
 function openKageraAuction(clickedElement) {
 
-    const welcome = document.getElementById("welcome");
-
-    if (welcome) {
-        welcome.style.display = "none";
-    }
-
     document.querySelectorAll(".section").forEach(function(section) {
         section.classList.remove("active");
     });
@@ -1868,20 +1746,6 @@ function showSection(
     sectionId,
     clickedElement
 ) {
-
-
-    /*
-    Hide welcome page
-    */
-
-    const welcome =
-        document.getElementById("welcome");
-
-    if (welcome) {
-
-        welcome.style.display = "none";
-
-    }
 
 
     /*

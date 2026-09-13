@@ -4544,7 +4544,36 @@ async function kageraExportHighLowPdf()
             {align:"center"}
         );
 
-        doc.autoTable({
+        
+    const coffeeTableStyle = {
+        theme: "grid",
+        styles: {
+            font: "helvetica",
+            fontSize: 8.5,
+            textColor: [62, 39, 35],
+            fillColor: [250, 247, 242],
+            lineColor: [177, 153, 137],
+            lineWidth: 0.25,
+            cellPadding: 3
+        },
+        headStyles: {
+            fillColor: [78, 52, 46],
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+            lineColor: [78, 52, 46],
+            lineWidth: 0.4
+        },
+        bodyStyles: {
+            fillColor: [255, 252, 248],
+            textColor: [62, 39, 35],
+            lineColor: [177, 153, 137]
+        },
+        alternateRowStyles: {
+            fillColor: [239, 230, 221]
+        }
+    };
+
+    doc.autoTable(Object.assign({}, coffeeTableStyle, {
             startY: 31,
             head: [[
                 "GRADE",
@@ -4565,9 +4594,9 @@ async function kageraExportHighLowPdf()
             columnStyles: {
                 0: {halign:"left"}
             }
-        });
+        }});
 
-        doc.autoTable({
+        doc.autoTable(Object.assign({}, coffeeTableStyle, {
             startY: doc.lastAutoTable.finalY + 7,
             head: [[
                 "PRICES",
@@ -4588,7 +4617,7 @@ async function kageraExportHighLowPdf()
             columnStyles: {
                 0: {halign:"left"}
             }
-        });
+        }});
 
         doc.setFontSize(8);
 
@@ -5405,285 +5434,6 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 
-
-
-
-/* -------------------------------------------------------------------------
-   KAGERA HIGH & LOW — STRUCTURE-PRESERVING EXPORT
-   Exports the currently populated High & Low DOM. No new report design,
-   colours, wording, row order, or calculations are introduced here.
-   ------------------------------------------------------------------------- */
-(function () {
-    function kageraGetVisibleHighLowElement() {
-        const candidates = [
-            "#kageraHighLowReport",
-            "#kageraHighLowContent",
-            ".kagera-high-low-report",
-            ".kagera-high-low-content"
-        ];
-
-        for (const selector of candidates) {
-            const el = document.querySelector(selector);
-            if (el && el.textContent.trim()) {
-                const style = window.getComputedStyle(el);
-                if (style.display !== "none" &&
-                    style.visibility !== "hidden") {
-                    return el;
-                }
-            }
-        }
-
-        // Fallback: locate the visible report containing the exact heading.
-        const all = document.querySelectorAll("section, div, table");
-        for (const el of all) {
-            const text = (el.textContent || "").trim();
-            if (text.includes("KAGERA COFFEE EXCHANGE") &&
-                text.includes("SALES SUMMARY FOR THE AUCTION NO.")) {
-                const style = window.getComputedStyle(el);
-                if (style.display !== "none" &&
-                    style.visibility !== "hidden") {
-                    return el;
-                }
-            }
-        }
-        return null;
-    }
-
-    function kageraCopyComputedStyles(source, target) {
-        const sourceEls = source.querySelectorAll("*");
-        const targetEls = target.querySelectorAll("*");
-
-        sourceEls.forEach(function (sourceEl, i) {
-            const targetEl = targetEls[i];
-            if (!targetEl) return;
-
-            const computed = window.getComputedStyle(sourceEl);
-
-            // Preserve the visual presentation of the existing report.
-            const properties = [
-                "display", "position", "box-sizing",
-                "width", "min-width", "max-width", "height",
-                "margin", "padding",
-                "border", "border-top", "border-right",
-                "border-bottom", "border-left", "border-collapse",
-                "background", "background-color",
-                "color", "font-family", "font-size",
-                "font-weight", "font-style", "line-height",
-                "text-align", "vertical-align",
-                "white-space", "letter-spacing",
-                "text-transform"
-            ];
-
-            properties.forEach(function (prop) {
-                targetEl.style.setProperty(
-                    prop,
-                    computed.getPropertyValue(prop),
-                    "important"
-                );
-            });
-        });
-
-        // Also preserve styles of the root report element.
-        const rootComputed = window.getComputedStyle(source);
-        [
-            "background", "background-color", "color",
-            "font-family", "font-size", "font-weight",
-            "line-height", "padding", "margin",
-            "border", "box-sizing", "width"
-        ].forEach(function (prop) {
-            target.style.setProperty(
-                prop,
-                rootComputed.getPropertyValue(prop),
-                "important"
-            );
-        });
-    }
-
-    function kageraBuildExportDocument() {
-        const source = kageraGetVisibleHighLowElement();
-
-        if (!source) {
-            throw new Error(
-                "The populated High & Low report could not be found. " +
-                "Select High & Low and wait for the report to populate."
-            );
-        }
-
-        const clone = source.cloneNode(true);
-
-        // Remove interactive controls from the cloned report only.
-        clone.querySelectorAll(
-            "button, input, select, textarea, .kagera-export-wrap"
-        ).forEach(function (el) {
-            el.remove();
-        });
-
-        kageraCopyComputedStyles(source, clone);
-
-        const wrapper = document.createElement("div");
-        wrapper.style.cssText =
-            "background:#fff;padding:0;margin:0;width:100%;";
-        wrapper.appendChild(clone);
-
-        return wrapper;
-    }
-
-    function kageraCurrentExportTitle() {
-        const season =
-            document.querySelector("#kageraSeasonFilter")?.value || "";
-        const auction =
-            document.querySelector("#kageraAuctionFilter")?.value || "";
-
-        return "Kagera_Auction_High_and_Low" +
-            (auction ? "_Auction_" + auction : "") +
-            (season ? "_" + season.replace(/[^\w.-]+/g, "_") : "");
-    }
-
-    window.kageraExportHighLowPreserveStructure = async function (format) {
-        try {
-            const report = kageraBuildExportDocument();
-            const title = kageraCurrentExportTitle();
-
-            if (format === "excel") {
-                if (typeof XLSX === "undefined") {
-                    throw new Error("Excel export library is not available.");
-                }
-
-                // For Excel, clone the actual populated table(s), preserving
-                // the current cells and structure rather than recalculating data.
-                const tables = report.querySelectorAll("table");
-                if (!tables.length) {
-                    throw new Error("No populated High & Low table was found.");
-                }
-
-                const wb = XLSX.utils.book_new();
-
-                tables.forEach(function (table, index) {
-                    const ws = XLSX.utils.table_to_sheet(table, {
-                        raw: false
-                    });
-                    XLSX.utils.book_append_sheet(
-                        wb,
-                        ws,
-                        index === 0 ? "High & Low" : "High & Low " + (index + 1)
-                    );
-                });
-
-                XLSX.writeFile(wb, title + ".xlsx");
-            }
-
-            else if (format === "word") {
-                // Preserve the actual DOM structure and styles in Word.
-                const html =
-                    '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-                    '<title>' + title + '</title>' +
-                    '<style>body{margin:0;padding:20px;background:#fff;}' +
-                    'table{border-collapse:collapse;} ' +
-                    'td,th{vertical-align:middle;}</style>' +
-                    '</head><body>' +
-                    report.innerHTML +
-                    '</body></html>';
-
-                const blob = new Blob(
-                    ["\ufeff", html],
-                    {type: "application/msword"}
-                );
-
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = title + ".doc";
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(url);
-            }
-
-            else if (format === "pdf") {
-                if (!window.jspdf || !window.jspdf.jsPDF) {
-                    throw new Error("PDF export library is not available.");
-                }
-
-                const JsPDF = window.jspdf.jsPDF;
-                const pdf = new JsPDF({
-                    orientation: "landscape",
-                    unit: "mm",
-                    format: "a4"
-                });
-
-                // Use the populated DOM itself as the PDF source. This keeps
-                // the existing report structure instead of generating a new
-                // High & Low layout.
-                await pdf.html(report, {
-                    x: 8,
-                    y: 8,
-                    width: 281,
-                    windowWidth: Math.max(
-                        source.scrollWidth || source.offsetWidth || 1000,
-                        1000
-                    ),
-                    autoPaging: "text",
-                    html2canvas: {
-                        scale: 2,
-                        backgroundColor: "#ffffff",
-                        useCORS: true
-                    }
-                });
-
-                pdf.save(title + ".pdf");
-            }
-
-            else {
-                throw new Error("Unsupported export format.");
-            }
-
-            const menu =
-                document.getElementById("kageraHighLowExportMenu");
-            if (menu) menu.style.display = "none";
-
-        } catch (error) {
-            console.error("Kagera High & Low export error:", error);
-            alert(
-                "The High & Low report could not be exported.\n\n" +
-                (error && error.message ? error.message : error)
-            );
-        }
-    };
-
-    // Replace existing menu handlers with the structure-preserving exporter.
-    function kageraBindPreservingExport() {
-        const menu = document.getElementById("kageraHighLowExportMenu");
-        if (!menu || menu.dataset.structureExportBound === "1") return;
-
-        menu.dataset.structureExportBound = "1";
-
-        menu.querySelectorAll("[data-kagera-export]").forEach(function (item) {
-            item.addEventListener("click", function (event) {
-                event.preventDefault();
-                event.stopPropagation();
-
-                window.kageraExportHighLowPreserveStructure(
-                    this.getAttribute("data-kagera-export")
-                );
-            });
-        });
-    }
-
-    if (document.readyState === "loading") {
-        document.addEventListener(
-            "DOMContentLoaded",
-            kageraBindPreservingExport
-        );
-    } else {
-        kageraBindPreservingExport();
-    }
-
-    // Expose a compatibility function so any existing Export button handler
-    // can call the new implementation without creating a second design.
-    window.kageraExportHighLow = function (format) {
-        return window.kageraExportHighLowPreserveStructure(format);
-    };
-})();
 
 </script>
 
