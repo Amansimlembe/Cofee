@@ -1745,7 +1745,8 @@ function handle_kagera_report()
             return '';
         }
 
-        // Convert any run of whitespace and underscores to one separator.
+        // Ignore underscores when identifying the coffee type:
+        // spaces and underscores are treated as the same separator.
         $label = preg_replace('/[\\s_]+/', '_', $label);
         $label = trim($label, '_');
 
@@ -1785,8 +1786,9 @@ function handle_kagera_report()
             return null;
         }
 
-        // Case-insensitive canonical key prevents duplicate rows.
-        $key = strtolower($label);
+        // Case-insensitive and underscore-insensitive key prevents
+        // duplicate rows such as Arabica Clean vs Arabica_Clean.
+        $key = strtolower(str_replace('_', '', $label));
 
         if (!isset($gradeKeys[$key])) {
             $gradeKeys[$key] = $label;
@@ -4241,6 +4243,7 @@ async function kageraShowReport()
             Object.keys(rawGradeGroups).forEach(function(rawGrade) {
                 const normalizedGrade = String(rawGrade || "")
                     .trim()
+                    // Ignore underscores: "_" and whitespace are equivalent.
                     .replace(/[\\s_]+/g, "_")
                     .replace(/^_+|_+$/g, "")
                     .split("_")
