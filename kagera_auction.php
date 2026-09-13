@@ -1593,6 +1593,169 @@ function handle_kagera_fetch()
     );
 }
 
+
+/*
+|--------------------------------------------------------------------------
+| HIGH & LOW / SALES SUMMARY REPORT
+|--------------------------------------------------------------------------
+| Catalogue supplies Kgs Offered.
+| Auction Results supplies Kgs Sold and Price.
+|--------------------------------------------------------------------------
+*/
+function handle_kagera_report()
+{
+    ensure_kagera_table();
+    ensure_kagera_catalogue_table();
+
+    $db = kagera_db();
+
+    $season = trim((string)($_GET['season'] ?? ''));
+    $auction = trim((string)($_GET['auction_no'] ?? ''));
+
+    $catalogueWhere = [];
+    $resultWhere = [];
+    $catalogueParams = [];
+    $resultParams = [];
+
+    if ($season !== '') {
+        /*
+         * Season rule: 01 June YYYY through 30 May YYYY+1.
+         */
+        if (preg_match('/^(\d{4})\/(\d{4})$/', $season, $m)) {
+            $start = $m[1] . '-06-01';
+            $end = $m[2] . '-05-30';
+
+            $catalogueWhere[] = 'date_sold BETWEEN :c_start AND :c_end';
+            $catalogueParams['c_start'] = $start;
+            $catalogueParams['c_end'] = $end;
+
+            $resultWhere[] = 'date_sold BETWEEN :r_start AND :r_end';
+            $resultParams['r_start'] = $start;
+            $resultParams['r_end'] = $end;
+        }
+    }
+
+    if ($auction !== '') {
+        $catalogueWhere[] = 'TRIM(auction_no) = :c_auction';
+        $catalogueParams['c_auction'] = $auction;
+
+        $resultWhere[] = 'TRIM(auction_no) = :r_auction';
+        $resultParams['r_auction'] = $auction;
+    }
+
+    $catalogueSql = "
+        SELECT grade2, COALESCE(SUM(net_weight),0) AS kilos_offered
+        FROM public.kagera_auction_catalogue
+        " . ($catalogueWhere ? 'WHERE ' . implode(' AND ', $catalogueWhere) : '') . "
+        GROUP BY grade2
+    ";
+
+    $stmt = $db->prepare($catalogueSql);
+    $stmt->execute($catalogueParams);
+    $catalogueRows = $stmt->fetchAll();
+
+    $resultSql = "
+        SELECT
+            grade2,
+            COALESCE(SUM(net_weight),0) AS kilos_sold,
+            COALESCE(SUM(net_weight * COALESCE(price,0)),0) AS total_value,
+            MIN(NULLIF(price,0)) AS lowest_price,
+            CASE
+                WHEN SUM(CASE WHEN price > 0 AND net_weight > 0 THEN net_weight ELSE 0 END) > 0
+                THEN
+                    SUM(
+                        CASE
+                            WHEN price > 0 AND net_weight > 0
+                            THEN net_weight * price
+                            ELSE 0
+                        END
+                    )
+                    /
+                    SUM(
+                        CASE
+                            WHEN price > 0 AND net_weight > 0
+                            THEN net_weight
+                            ELSE 0
+                        END
+                    )
+                ELSE NULL
+            END AS average_price,
+            MAX(NULLIF(price,0)) AS highest_price
+        FROM public.kagera_auction_results
+        " . ($resultWhere ? 'WHERE ' . implode(' AND ', $resultWhere) : '') . "
+        GROUP BY grade2
+    ";
+
+    $stmt = $db->prepare($resultSql);
+    $stmt->execute($resultParams);
+    $resultRows = $stmt->fetchAll();
+
+    $groups = [
+        'Dry Cherry Coffee' => [
+            'kilos_offered' => 0,
+            'kilos_sold' => 0,
+            'total_value' => 0,
+            'lowest_price' => null,
+            'average_price' => null,
+            'highest_price' => null
+        ],
+        'Clean Coffee' => [
+            'kilos_offered' => 0,
+            'kilos_sold' => 0,
+            'total_value' => 0,
+            'lowest_price' => null,
+            'average_price' => null,
+            'highest_price' => null
+        ]
+    ];
+
+    $normaliseType = function($value) {
+        $value = strtolower(trim((string)$value));
+
+        if (strpos($value, 'dry cherry') !== false) {
+            return 'Dry Cherry Coffee';
+        }
+
+        if (strpos($value, 'clean') !== false) {
+            return 'Clean Coffee';
+        }
+
+        return null;
+    };
+
+    foreach ($catalogueRows as $row) {
+        $type = $normaliseType($row['grade2'] ?? '');
+        if ($type !== null) {
+            $groups[$type]['kilos_offered'] += (float)($row['kilos_offered'] ?? 0);
+        }
+    }
+
+    foreach ($resultRows as $row) {
+        $type = $normaliseType($row['grade2'] ?? '');
+        if ($type !== null) {
+            $groups[$type]['kilos_sold'] = (float)($row['kilos_sold'] ?? 0);
+            $groups[$type]['total_value'] = (float)($row['total_value'] ?? 0);
+            $groups[$type]['lowest_price'] = $row['lowest_price'] !== null ? (float)$row['lowest_price'] : null;
+            $groups[$type]['average_price'] = $row['average_price'] !== null ? (float)$row['average_price'] : null;
+            $groups[$type]['highest_price'] = $row['highest_price'] !== null ? (float)$row['highest_price'] : null;
+        }
+    }
+
+    foreach ($groups as $type => &$g) {
+        $g['percentage_sold'] =
+            $g['kilos_offered'] > 0
+                ? ($g['kilos_sold'] / $g['kilos_offered']) * 100
+                : 0;
+    }
+    unset($g);
+
+    kagera_json(true, 'Kagera report generated.', [
+        'season' => $season,
+        'auction_no' => $auction,
+        'groups' => $groups
+    ], 200);
+}
+
 /*
 |--------------------------------------------------------------------------
 | REQUEST ROUTING
@@ -1602,6 +1765,12 @@ function handle_kagera_fetch()
 try {
 
     $kageraType = strtolower(trim((string)($_REQUEST['kagera_type'] ?? 'results')));
+
+    if (
+        ($_GET['action'] ?? '') === 'report'
+    ) {
+        handle_kagera_report();
+    }
 
     if (
         ($_GET['action'] ?? '') === 'fetch'
@@ -2324,6 +2493,103 @@ body.sidebar-collapsed .kagera-main {
 #kageraCatalogueTable {
     display:none;
 }
+
+/* Report selector and report tables */
+.kagera-report-type {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.kagera-report-type label {
+    color: #6b625e;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.kagera-report-type .kagera-filter-select {
+    width: 125px;
+}
+
+.kagera-report-panel {
+    margin-top: 10px;
+    border: 1px solid #e7e0dc;
+    border-radius: 10px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.kagera-report-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 14px;
+    border-bottom: 1px solid #eee8e5;
+}
+
+.kagera-report-header h3 {
+    margin: 0 0 3px;
+    color: #3e2723;
+    font-size: 15px;
+}
+
+.kagera-report-header p {
+    margin: 0;
+    color: #888;
+    font-size: 11px;
+}
+
+.kagera-report-table-wrap {
+    width: 100%;
+    overflow: auto;
+    max-height: 430px;
+}
+
+.kagera-report-table {
+    width: 100%;
+    min-width: 850px;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 11px;
+}
+
+.kagera-report-table th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 9px 10px;
+    background: #4e342e;
+    color: #fff;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 1px 0 rgba(0,0,0,.15);
+}
+
+.kagera-report-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #eee8e5;
+    color: #4e342e;
+    white-space: nowrap;
+    background: #fff;
+}
+
+.kagera-report-table tbody tr:hover td {
+    background: #faf7f5;
+}
+
+.kagera-report-table td:first-child {
+    font-weight: 700;
+}
+
+@media (max-width: 1250px) {
+    .kagera-report-type {
+        order: 4;
+    }
+}
+
 </style>
 
 </head>
@@ -2420,6 +2686,15 @@ body.sidebar-collapsed .kagera-main {
             <div id="kageraUploadStatus" class="kagera-upload-status"></div>
         </div>
 
+        <div class="kagera-report-type">
+            <label for="kageraReportType">Report</label>
+            <select id="kageraReportType" class="kagera-filter-select">
+                <option value="">Select Report</option>
+                <option value="high_low">High &amp; Low</option>
+                <option value="sales_summary">Sales Summary</option>
+            </select>
+        </div>
+
         <button
             type="button"
             class="kagera-refresh-btn"
@@ -2455,6 +2730,62 @@ body.sidebar-collapsed .kagera-main {
 <tr><td colspan="13" class="kagera-empty-state">No Kagera Catalogue loaded.</td></tr>
 </tbody>
 </table>
+
+<div id="kageraReportPanel" class="kagera-report-panel" style="display:none;">
+
+    <div class="kagera-report-header">
+        <div>
+            <h3 id="kageraReportTitle">High &amp; Low</h3>
+            <p id="kageraReportSubtitle">Kagera Coffee Exchange auction report.</p>
+        </div>
+    </div>
+
+    <div class="kagera-report-table-wrap">
+
+        <table id="kageraHighLowTable" class="kagera-report-table">
+            <thead>
+                <tr>
+                    <th>TYPE OF COFFEE</th>
+                    <th>KILOS OFFERED</th>
+                    <th>KILOS SOLD</th>
+                    <th>LOWEST PRICE PER KG</th>
+                    <th>AVERAGE PRICE PER KG</th>
+                    <th>HIGHEST PRICE PER KG</th>
+                    <th>TOTAL VALUE (TZS)</th>
+                    <th>PERCENTAGE SOLD</th>
+                </tr>
+            </thead>
+            <tbody id="kageraHighLowBody">
+                <tr>
+                    <td colspan="8" class="kagera-empty-state">
+                        Select an Auction and a Report.
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table id="kageraSalesSummaryTable" class="kagera-report-table" style="display:none;">
+            <thead>
+                <tr>
+                    <th>TYPE OF COFFEE</th>
+                    <th>KILOS OFFERED</th>
+                    <th>KILOS SOLD</th>
+                    <th>TOTAL VALUE (TZS)</th>
+                    <th>PERCENTAGE SOLD</th>
+                </tr>
+            </thead>
+            <tbody id="kageraSalesSummaryBody">
+                <tr>
+                    <td colspan="5" class="kagera-empty-state">
+                        Select an Auction and a Report.
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+    </div>
+</div>
+
 
 </div>
 
@@ -3143,6 +3474,8 @@ async function loadKageraData(type)
             if(auctionSelect) auctionSelect.value="";
             kageraPopulateAuctionFilterFromRows(kageraCatalogueData);
             kageraRenderCatalogue(kageraGetFilteredCatalogue());
+                       void kageraShowReport();
+ void kageraShowReport();
         }else{
             kageraAllResults=Array.isArray(result.data)?result.data:[];
             kageraResultsLoaded=true;
@@ -3151,11 +3484,373 @@ async function loadKageraData(type)
             if(auctionSelect) auctionSelect.value="";
             kageraPopulateAuctionFilterFromRows(kageraAllResults);
             kageraRenderResults(kageraGetFilteredResults());
+                       void kageraShowReport();
+ void kageraShowReport();
         }
     }catch(error){
         body.innerHTML='<tr><td colspan="'+(isCatalogue?13:10)+'" class="kagera-empty-state">'+
             escapeKageraHtml(error.message||"Unable to load records.")+"</td></tr>";
     }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| KAGERA REPORTS
+|--------------------------------------------------------------------------
+| High & Low:
+|   - Offered kilos come from Catalogue Kgs
+|   - Kilos Sold = Auction Results Net Weight (Kg)
+|   - Prices = Auction Results Price
+|   - Total Value = Kilos Sold x Price
+|   - Average Price = weighted average: SUM(Kg x Price) / SUM(Kg)
+|
+| The report always combines the selected Auction + Season from the
+| Catalogue and Auction Results tables. It does NOT use Catalogue prices.
+|--------------------------------------------------------------------------
+*/
+
+const kageraReportType =
+    document.getElementById("kageraReportType");
+
+function kageraNumber(value)
+{
+    const n = Number(String(value ?? "").replace(/,/g, "").trim());
+    return Number.isFinite(n) ? n : 0;
+}
+
+function kageraReportMoney(value)
+{
+    const n = kageraNumber(value);
+    return n.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+function kageraReportKg(value)
+{
+    const n = kageraNumber(value);
+    return n.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+function kageraCoffeeType(row)
+{
+    const value = String(row?.grade2 ?? "").trim().toLowerCase();
+
+    if (value.includes("dry cherry")) {
+        return "Dry Cherry Coffee";
+    }
+
+    if (value.includes("clean")) {
+        return "Clean Coffee";
+    }
+
+    return "";
+}
+
+function kageraGetSelectedReportRows()
+{
+    const seasonSelect = document.getElementById("kageraSeasonFilter");
+    const auctionSelect = document.getElementById("kageraAuctionFilter");
+
+    const season = seasonSelect ? String(seasonSelect.value || "").trim() : "";
+    const auction = auctionSelect ? String(auctionSelect.value || "").trim() : "";
+
+    const catalogue = kageraCatalogueData.filter(function(row) {
+        const rowAuction = String(row.auction_no ?? "").trim();
+        const rowSeason = kageraGetSeason(row.date_sold);
+
+        return (!season || rowSeason === season) &&
+               (!auction || rowAuction === auction);
+    });
+
+    const results = kageraAllResults.filter(function(row) {
+        const rowAuction = String(row.auction_no ?? "").trim();
+        const rowSeason = kageraGetSeason(row.date_sold);
+
+        return (!season || rowSeason === season) &&
+               (!auction || rowAuction === auction);
+    });
+
+    return { catalogue, results, season, auction };
+}
+
+function kageraBuildReport()
+{
+    const selected = kageraGetSelectedReportRows();
+
+    const groups = {
+        "Dry Cherry Coffee": {
+            offered: 0,
+            sold: 0,
+            value: 0,
+            prices: []
+        },
+        "Clean Coffee": {
+            offered: 0,
+            sold: 0,
+            value: 0,
+            prices: []
+        }
+    };
+
+    /*
+     * IMPORTANT:
+     * Offered Kgs come ONLY from the Catalogue.
+     */
+    selected.catalogue.forEach(function(row) {
+        const type = kageraCoffeeType(row);
+        if (!groups[type]) return;
+
+        groups[type].offered += kageraNumber(row.net_weight);
+    });
+
+    /*
+     * Sold Kgs and prices come ONLY from Auction Results.
+     * We calculate value as sold kg x price because the Kagera results
+     * table stores Net Weight and Price.
+     */
+    selected.results.forEach(function(row) {
+        const type = kageraCoffeeType(row);
+        if (!groups[type]) return;
+
+        const kg = kageraNumber(row.net_weight);
+        const price = kageraNumber(row.price);
+
+        if (kg > 0) {
+            groups[type].sold += kg;
+            groups[type].value += kg * price;
+
+            if (price > 0) {
+                groups[type].prices.push({
+                    kg: kg,
+                    price: price
+                });
+            }
+        }
+    });
+
+    Object.keys(groups).forEach(function(type) {
+        const g = groups[type];
+
+        if (g.prices.length) {
+            g.low = Math.min.apply(null, g.prices.map(x => x.price));
+            g.high = Math.max.apply(null, g.prices.map(x => x.price));
+
+            const totalKgForPrice =
+                g.prices.reduce((sum, x) => sum + x.kg, 0);
+
+            const weightedValue =
+                g.prices.reduce(
+                    (sum, x) => sum + (x.kg * x.price),
+                    0
+                );
+
+            g.average =
+                totalKgForPrice > 0
+                    ? weightedValue / totalKgForPrice
+                    : 0;
+        } else {
+            g.low = 0;
+            g.high = 0;
+            g.average = 0;
+        }
+
+        g.percentage =
+            g.offered > 0
+                ? (g.sold / g.offered) * 100
+                : 0;
+    });
+
+    return {
+        selected: selected,
+        groups: groups
+    };
+}
+
+function kageraRenderHighLowReport(report)
+{
+    const body = document.getElementById("kageraHighLowBody");
+    if (!body) return;
+
+    const rows = [
+        ["Dry Cherry Coffee", report.groups["Dry Cherry Coffee"]],
+        ["Clean Coffee", report.groups["Clean Coffee"]]
+    ];
+
+    body.innerHTML = rows.map(function(item) {
+        const type = item[0];
+        const g = item[1];
+
+        return "<tr>" +
+            "<td>" + escapeKageraHtml(type) + "</td>" +
+            "<td>" + kageraReportKg(g.offered) + "</td>" +
+            "<td>" + kageraReportKg(g.sold) + "</td>" +
+            "<td>" + (g.prices.length ? kageraReportMoney(g.low) : "-") + "</td>" +
+            "<td>" + (g.prices.length ? kageraReportMoney(g.average) : "-") + "</td>" +
+            "<td>" + (g.prices.length ? kageraReportMoney(g.high) : "-") + "</td>" +
+            "<td>" + kageraReportMoney(g.value) + "</td>" +
+            "<td>" + g.percentage.toFixed(2) + "%</td>" +
+            "</tr>";
+    }).join("");
+}
+
+function kageraRenderSalesSummaryReport(report)
+{
+    const body = document.getElementById("kageraSalesSummaryBody");
+    if (!body) return;
+
+    const rows = [
+        ["Dry Cherry Coffee", report.groups["Dry Cherry Coffee"]],
+        ["Clean Coffee", report.groups["Clean Coffee"]]
+    ];
+
+    body.innerHTML = rows.map(function(item) {
+        const type = item[0];
+        const g = item[1];
+
+        return "<tr>" +
+            "<td>" + escapeKageraHtml(type) + "</td>" +
+            "<td>" + kageraReportKg(g.offered) + "</td>" +
+            "<td>" + kageraReportKg(g.sold) + "</td>" +
+            "<td>" + kageraReportMoney(g.value) + "</td>" +
+            "<td>" + g.percentage.toFixed(2) + "%</td>" +
+            "</tr>";
+    }).join("");
+}
+
+async function kageraShowReport()
+{
+    const panel = document.getElementById("kageraReportPanel");
+    const highLow = document.getElementById("kageraHighLowTable");
+    const salesSummary = document.getElementById("kageraSalesSummaryTable");
+    const title = document.getElementById("kageraReportTitle");
+    const subtitle = document.getElementById("kageraReportSubtitle");
+
+    const selectedReport =
+        kageraReportType
+            ? String(kageraReportType.value || "")
+            : "";
+
+    if (!selectedReport) {
+        if (panel) panel.style.display = "none";
+        return;
+    }
+
+    if (panel) panel.style.display = "block";
+
+    const seasonSelect = document.getElementById("kageraSeasonFilter");
+    const auctionSelect = document.getElementById("kageraAuctionFilter");
+
+    const season = seasonSelect ? String(seasonSelect.value || "") : "";
+    const auction = auctionSelect ? String(auctionSelect.value || "") : "";
+
+    try {
+        const response = await fetch(
+            "kagera_auction.php?action=report" +
+            "&season=" + encodeURIComponent(season) +
+            "&auction_no=" + encodeURIComponent(auction),
+            {
+                cache: "no-store",
+                credentials: "same-origin"
+            }
+        );
+
+        const result = await readKageraJson(response);
+
+        if (!result.success) {
+            throw new Error(result.message || "Unable to generate report.");
+        }
+
+        const groups = result.data?.groups || {};
+
+        if (selectedReport === "high_low") {
+            if (highLow) highLow.style.display = "table";
+            if (salesSummary) salesSummary.style.display = "none";
+
+            if (title) title.textContent = "High & Low";
+            if (subtitle) {
+                subtitle.textContent =
+                    "Kilos offered from Auction Catalogue; kilos sold and prices from Auction Results.";
+            }
+
+            const body = document.getElementById("kageraHighLowBody");
+
+            if (body) {
+                const types = ["Dry Cherry Coffee", "Clean Coffee"];
+
+                body.innerHTML = types.map(function(type) {
+                    const g = groups[type] || {};
+                    const offered = kageraNumber(g.kilos_offered);
+                    const sold = kageraNumber(g.kilos_sold);
+                    const value = kageraNumber(g.total_value);
+
+                    return "<tr>" +
+                        "<td>" + escapeKageraHtml(type) + "</td>" +
+                        "<td>" + kageraReportKg(offered) + "</td>" +
+                        "<td>" + kageraReportKg(sold) + "</td>" +
+                        "<td>" + (g.lowest_price === null ? "-" : kageraReportMoney(g.lowest_price)) + "</td>" +
+                        "<td>" + (g.average_price === null ? "-" : kageraReportMoney(g.average_price)) + "</td>" +
+                        "<td>" + (g.highest_price === null ? "-" : kageraReportMoney(g.highest_price)) + "</td>" +
+                        "<td>" + kageraReportMoney(value) + "</td>" +
+                        "<td>" + kageraNumber(g.percentage_sold).toFixed(2) + "%</td>" +
+                        "</tr>";
+                }).join("");
+            }
+
+        } else if (selectedReport === "sales_summary") {
+            if (highLow) highLow.style.display = "none";
+            if (salesSummary) salesSummary.style.display = "table";
+
+            if (title) title.textContent = "Sales Summary";
+            if (subtitle) {
+                subtitle.textContent =
+                    "Kilos offered from Auction Catalogue; kilos sold and total value from Auction Results.";
+            }
+
+            const body = document.getElementById("kageraSalesSummaryBody");
+
+            if (body) {
+                const types = ["Dry Cherry Coffee", "Clean Coffee"];
+
+                body.innerHTML = types.map(function(type) {
+                    const g = groups[type] || {};
+
+                    return "<tr>" +
+                        "<td>" + escapeKageraHtml(type) + "</td>" +
+                        "<td>" + kageraReportKg(g.kilos_offered) + "</td>" +
+                        "<td>" + kageraReportKg(g.kilos_sold) + "</td>" +
+                        "<td>" + kageraReportMoney(g.total_value) + "</td>" +
+                        "<td>" + kageraNumber(g.percentage_sold).toFixed(2) + "%</td>" +
+                        "</tr>";
+                }).join("");
+            }
+        }
+
+    } catch (error) {
+        const body =
+            selectedReport === "high_low"
+                ? document.getElementById("kageraHighLowBody")
+                : document.getElementById("kageraSalesSummaryBody");
+
+        if (body) {
+            body.innerHTML =
+                '<tr><td colspan="' +
+                (selectedReport === "high_low" ? "8" : "5") +
+                '" class="kagera-empty-state">' +
+                escapeKageraHtml(error.message || "Unable to generate report.") +
+                "</td></tr>";
+        }
+    }
+}
+if (kageraReportType) {
+    kageraReportType.addEventListener("change", function() {
+        void kageraShowReport();
+    });
 }
 
 async function loadKageraResults()
@@ -3213,9 +3908,11 @@ if (kageraSeasonSelect) {
             if (kageraDisplayType && kageraDisplayType.value === "catalogue") {
                 kageraPopulateAuctionFilterFromRows(kageraCatalogueData);
                 kageraRenderCatalogue(kageraGetFilteredCatalogue());
-            } else {
+                        void kageraShowReport();
+} else {
                 kageraRenderResults(kageraGetFilteredResults());
-            }
+                        void kageraShowReport();
+}
         }
     );
 }
@@ -3242,9 +3939,11 @@ if (kageraAuctionSelect) {
             */
             if (kageraDisplayType && kageraDisplayType.value === "catalogue") {
                 kageraRenderCatalogue(kageraGetFilteredCatalogue());
-            } else {
+                        void kageraShowReport();
+} else {
                 kageraRenderResults(kageraGetFilteredResults());
-            }
+                        void kageraShowReport();
+}
         }
     );
 }
