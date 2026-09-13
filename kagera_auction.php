@@ -4544,36 +4544,7 @@ async function kageraExportHighLowPdf()
             {align:"center"}
         );
 
-        
-    const coffeeTableStyle = {
-        theme: "grid",
-        styles: {
-            font: "helvetica",
-            fontSize: 8.5,
-            textColor: [62, 39, 35],
-            fillColor: [250, 247, 242],
-            lineColor: [177, 153, 137],
-            lineWidth: 0.25,
-            cellPadding: 3
-        },
-        headStyles: {
-            fillColor: [78, 52, 46],
-            textColor: [255, 255, 255],
-            fontStyle: "bold",
-            lineColor: [78, 52, 46],
-            lineWidth: 0.4
-        },
-        bodyStyles: {
-            fillColor: [255, 252, 248],
-            textColor: [62, 39, 35],
-            lineColor: [177, 153, 137]
-        },
-        alternateRowStyles: {
-            fillColor: [239, 230, 221]
-        }
-    };
-
-    doc.autoTable(Object.assign({}, coffeeTableStyle, {
+        doc.autoTable({
             startY: 31,
             head: [[
                 "GRADE",
@@ -4594,9 +4565,9 @@ async function kageraExportHighLowPdf()
             columnStyles: {
                 0: {halign:"left"}
             }
-        }});
+        });
 
-        doc.autoTable(Object.assign({}, coffeeTableStyle, {
+        doc.autoTable({
             startY: doc.lastAutoTable.finalY + 7,
             head: [[
                 "PRICES",
@@ -4617,7 +4588,7 @@ async function kageraExportHighLowPdf()
             columnStyles: {
                 0: {halign:"left"}
             }
-        }});
+        });
 
         doc.setFontSize(8);
 
