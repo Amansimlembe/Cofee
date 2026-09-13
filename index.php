@@ -910,6 +910,294 @@ submenu names.
 
 }
 
+
+/* =========================================================
+   COMPLETE RESPONSIVE OVERRIDES
+   Keeps the sidebar, main content and data areas usable
+   across desktop, tablet and mobile screens.
+========================================================= */
+
+/* Large tablets / small laptops */
+@media (max-width: 1100px) {
+    .sidebar {
+        width: 240px;
+        --sidebar-width: 240px;
+    }
+
+    .main {
+        margin-left: 240px;
+    }
+
+    .sidebar-header {
+        padding-left: 18px;
+        padding-right: 46px;
+    }
+
+    .menu {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .menu-link {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .content {
+        padding: 24px;
+    }
+
+    .topbar {
+        padding-left: 24px;
+        padding-right: 24px;
+    }
+}
+
+/* Tablets */
+@media (max-width: 900px) {
+    .sidebar {
+        width: 78px;
+        --sidebar-width: 78px;
+    }
+
+    .sidebar .logo-text,
+    .sidebar .logo-subtitle,
+    .sidebar .menu-text,
+    .sidebar .arrow {
+        display: none;
+    }
+
+    .sidebar .sidebar-header {
+        padding: 15px 8px;
+    }
+
+    .sidebar .logo {
+        justify-content: center;
+    }
+
+    .sidebar .menu {
+        padding: 18px 10px 24px;
+    }
+
+    .sidebar .menu-link {
+        justify-content: center;
+        padding: 10px 8px;
+    }
+
+    .sidebar .menu-left {
+        justify-content: center;
+    }
+
+    .main,
+    .sidebar.collapsed ~ .main {
+        margin-left: 78px;
+    }
+
+    .topbar {
+        min-height: 68px;
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+
+    .topbar-title {
+        font-size: 17px;
+    }
+
+    .content {
+        padding: 22px;
+    }
+
+    .card-container {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .section-box {
+        max-width: 100%;
+    }
+}
+
+/* Mobile phones */
+@media (max-width: 600px) {
+    .sidebar,
+    .sidebar.collapsed {
+        width: 68px;
+        --sidebar-width: 68px;
+    }
+
+    .sidebar .menu {
+        padding: 14px 8px 20px;
+    }
+
+    .sidebar .menu-link {
+        min-height: 44px;
+        padding: 9px 6px;
+    }
+
+    .sidebar-toggle {
+        top: 28px;
+        right: 7px;
+        width: 28px;
+        height: 28px;
+        font-size: 11px;
+    }
+
+    .main,
+    .sidebar.collapsed ~ .main {
+        margin-left: 68px;
+    }
+
+    .topbar {
+        min-height: 64px;
+        height: auto;
+        padding: 10px 14px;
+    }
+
+    .topbar-left {
+        gap: 9px;
+        min-width: 0;
+    }
+
+    .topbar-icon {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        font-size: 18px;
+    }
+
+    .topbar-title {
+        font-size: 15px;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+    }
+
+    .topbar-subtitle {
+        font-size: 10px;
+    }
+
+    .content {
+        padding: 16px 12px;
+    }
+
+    .page-header {
+        margin-bottom: 18px;
+    }
+
+    .page-header h1 {
+        font-size: 22px;
+        line-height: 1.25;
+    }
+
+    .page-header p {
+        font-size: 13px;
+        line-height: 1.45;
+    }
+
+    .card-container {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .card {
+        padding: 18px;
+        min-width: 0;
+    }
+
+    .section-box {
+        padding: 18px;
+        border-radius: 8px;
+        overflow-x: auto;
+    }
+
+    .section-box h2 {
+        font-size: 20px;
+        line-height: 1.3;
+    }
+
+    .section-box p {
+        line-height: 1.5;
+    }
+
+    /* Prevent wide tables/data grids from breaking the page. */
+    table {
+        min-width: 620px;
+    }
+
+    .table-responsive,
+    .table-container,
+    .data-table-container,
+    .table-wrapper {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .kagera-page-section {
+        min-height: calc(100vh - 108px);
+    }
+
+    .kagera-auction-frame {
+        min-height: calc(100vh - 108px);
+        height: calc(100vh - 108px);
+    }
+}
+
+/* Very small phones */
+@media (max-width: 400px) {
+    .sidebar,
+    .sidebar.collapsed {
+        width: 60px;
+        --sidebar-width: 60px;
+    }
+
+    .main,
+    .sidebar.collapsed ~ .main {
+        margin-left: 60px;
+    }
+
+    .sidebar-toggle {
+        right: 5px;
+        width: 26px;
+        height: 26px;
+        font-size: 10px;
+    }
+
+    .sidebar .menu {
+        padding-left: 6px;
+        padding-right: 6px;
+    }
+
+    .sidebar .menu-link {
+        min-height: 42px;
+        padding-left: 5px;
+        padding-right: 5px;
+    }
+
+    .content {
+        padding: 12px 9px;
+    }
+
+    .topbar {
+        padding: 9px 10px;
+    }
+
+    .topbar-icon {
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        font-size: 16px;
+    }
+
+    .topbar-title {
+        font-size: 14px;
+    }
+
+    .page-header h1 {
+        font-size: 20px;
+    }
+}
+
 </style>
 
 </head>
