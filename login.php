@@ -528,6 +528,53 @@ body {
 
 /* LOGIN BUTTON */
 
+/* LOGIN BUTTON LOADING STATE */
+
+.login-button.loading {
+    position: relative;
+    cursor: wait;
+    pointer-events: none;
+    opacity: 0.95;
+}
+
+.login-button.loading .login-button-content {
+    visibility: hidden;
+}
+
+.login-button-loading {
+    display: none;
+    position: absolute;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.login-button.loading .login-button-loading {
+    display: flex;
+}
+
+.coffee-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(255,255,255,0.35);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: coffeeSpin 0.75s linear infinite;
+}
+
+.coffee-loading-text {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.1px;
+}
+
+@keyframes coffeeSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .login-button {
 
     width: 100%;
@@ -679,9 +726,17 @@ body {
                 <button
                     type="submit"
                     name="login"
-                    class="login-button">
+                    class="login-button"
+                    id="loginButton">
 
-                    Login
+                    <span class="login-button-content">
+                        Login
+                    </span>
+
+                    <span class="login-button-loading" aria-hidden="true">
+                        <span class="coffee-spinner"></span>
+                        <span class="coffee-loading-text">Signing in...</span>
+                    </span>
 
                 </button>
 
@@ -725,6 +780,32 @@ function togglePassword() {
     }
 
 }
+
+
+    /* =========================================================
+       LOGIN BUTTON LOADING
+    ========================================================= */
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const loginForm = document.querySelector('form[method="POST"]');
+        const loginButton = document.getElementById("loginButton");
+
+        if (!loginForm || !loginButton) return;
+
+        loginForm.addEventListener("submit", function () {
+            /*
+             * Do not show the loading state if browser validation fails.
+             * The PHP login process remains unchanged.
+             */
+            if (!loginForm.checkValidity()) {
+                return;
+            }
+
+            loginButton.classList.add("loading");
+            loginButton.setAttribute("aria-busy", "true");
+            loginButton.disabled = true;
+        });
+    });
 
 </script>
 </body>

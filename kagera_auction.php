@@ -4518,6 +4518,22 @@ async function kageraExportHighLowPdf()
             format: "a4"
         });
 
+        // Professional coffee-inspired palette: coffee brown, roasted brown,
+        // cream paper tones and a subtle coffee-gold accent.
+        const coffeeDark = [78, 52, 46];
+        const coffeeBrown = [109, 76, 65];
+        const coffeeMedium = [141, 110, 99];
+        const coffeeCream = [248, 244, 238];
+        const coffeeLight = [255, 251, 245];
+        const coffeeGold = [184, 134, 75];
+        const white = [255, 255, 255];
+
+        // Page background.
+        doc.setFillColor(...coffeeLight);
+        doc.rect(0, 0, 297, 210, "F");
+
+        // Report title.
+        doc.setTextColor(...coffeeDark);
         doc.setFontSize(15);
         doc.setFont(undefined, "bold");
         doc.text(
@@ -4528,6 +4544,7 @@ async function kageraExportHighLowPdf()
         );
 
         doc.setFontSize(11);
+        doc.setTextColor(...coffeeBrown);
         doc.text(
             data.subtitle,
             148.5,
@@ -4536,6 +4553,7 @@ async function kageraExportHighLowPdf()
         );
 
         doc.setFontSize(9);
+        doc.setTextColor(...coffeeMedium);
         doc.setFont(undefined, "normal");
         doc.text(
             data.heldOn,
@@ -4557,10 +4575,31 @@ async function kageraExportHighLowPdf()
             styles: {
                 fontSize: 8,
                 cellPadding: 2.2,
-                halign: "center"
+                halign: "center",
+                textColor: coffeeDark,
+                fillColor: coffeeLight,
+                lineColor: coffeeMedium,
+                lineWidth: 0.25
+            },
+            alternateRowStyles: {
+                fillColor: coffeeCream
             },
             headStyles: {
-                fontStyle: "bold"
+                fillColor: coffeeDark,
+                textColor: white,
+                fontStyle: "bold",
+                lineColor: coffeeDark,
+                lineWidth: 0.35
+            },
+            didParseCell: function(hook) {
+                // Highlight the Total row as the report total.
+                if (hook.section === "body" &&
+                    hook.row && hook.row.raw &&
+                    String(hook.row.raw[0] || "").trim().toLowerCase() === "total") {
+                    hook.cell.styles.fillColor = coffeeBrown;
+                    hook.cell.styles.textColor = white;
+                    hook.cell.styles.fontStyle = "bold";
+                }
             },
             columnStyles: {
                 0: {halign:"left"}
@@ -4580,17 +4619,41 @@ async function kageraExportHighLowPdf()
             styles: {
                 fontSize: 8,
                 cellPadding: 2.2,
-                halign: "center"
+                halign: "center",
+                textColor: coffeeDark,
+                fillColor: coffeeLight,
+                lineColor: coffeeMedium,
+                lineWidth: 0.25
+            },
+            alternateRowStyles: {
+                fillColor: coffeeCream
             },
             headStyles: {
-                fontStyle: "bold"
+                fillColor: coffeeDark,
+                textColor: white,
+                fontStyle: "bold",
+                lineColor: coffeeDark,
+                lineWidth: 0.35
+            },
+            didParseCell: function(hook) {
+                // Highlight the Total row as the report total.
+                if (hook.section === "body" &&
+                    hook.row && hook.row.raw &&
+                    String(hook.row.raw[0] || "").trim().toLowerCase() === "total") {
+                    hook.cell.styles.fillColor = coffeeBrown;
+                    hook.cell.styles.textColor = white;
+                    hook.cell.styles.fontStyle = "bold";
+                }
             },
             columnStyles: {
                 0: {halign:"left"}
             }
         });
 
+        // Percentage notes use the coffee-gold accent for visual hierarchy.
         doc.setFontSize(8);
+        doc.setFont(undefined, "bold");
+        doc.setTextColor(...coffeeBrown);
 
         doc.text(
             data.percentageDry,
@@ -4605,6 +4668,11 @@ async function kageraExportHighLowPdf()
             doc.lastAutoTable.finalY + 13,
             {align:"right"}
         );
+
+        // Subtle coffee-gold footer accent.
+        doc.setDrawColor(...coffeeGold);
+        doc.setLineWidth(0.6);
+        doc.line(15, 198, 282, 198);
 
         doc.save(
             kageraHighLowFileBase() + ".pdf"
