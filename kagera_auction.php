@@ -1,4 +1,14 @@
 <?php
+/*
+ * Kagera Auction uses ONE PostgreSQL database with TWO separate tables:
+ *   - kagera_auction_results: Auction Results
+ *   - kagera_auction_catalogue: Auction Catalogue
+ *
+ * Both tables use the same PDO connection/database.
+ */
+const kagera_auction_results = kagera_auction_results;
+const kagera_auction_catalogue = kagera_auction_catalogue;
+
 
 /* =========================================================
    KAGERA AUCTION - SELF CONTAINED
@@ -167,7 +177,7 @@ function ensure_kagera_table()
         SELECT data_type
         FROM information_schema.columns
         WHERE table_schema = 'public'
-          AND table_name = 'kagera_auction_results'
+          AND table_name = kagera_auction_results
           AND column_name = :column
     ");
 
@@ -191,7 +201,7 @@ function ensure_kagera_table()
         SELECT data_type
         FROM information_schema.columns
         WHERE table_schema = 'public'
-          AND table_name = 'kagera_auction_results'
+          AND table_name = kagera_auction_results
           AND column_name = 'date_sold'
     ");
 
@@ -2324,6 +2334,18 @@ body.sidebar-collapsed .kagera-main {
 #kageraCatalogueTable {
     display:none;
 }
+
+.kagera-upload-compact .kagera-upload-target {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-right: 4px;
+    color: #6b625e;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
 </style>
 
 </head>
@@ -2385,13 +2407,13 @@ body.sidebar-collapsed .kagera-main {
                 enctype="multipart/form-data"
                 class="kagera-header-upload-form"
             >
-                <div class="kagera-upload-type">
-                    <label for="kageraUploadType">Upload</label>
-                    <select id="kageraUploadType" name="kagera_type" class="kagera-filter-select">
-                        <option value="results">Auction Results</option>
-                        <option value="catalogue">Auction Catalogue</option>
-                    </select>
-                </div>
+                <input
+                    type="hidden"
+                    id="kageraUploadType"
+                    name="kagera_type"
+                    value="results"
+                >
+
 
                 <div class="kagera-file-area">
                     <input
@@ -2484,9 +2506,6 @@ const kageraUploadStatus =
     document.getElementById("kageraUploadStatus");
 const kageraDisplayType =
     document.getElementById("kageraDisplayType");
-
-const kageraUploadType =
-    document.getElementById("kageraUploadType");
 
 let kageraCatalogueData = [];
 
@@ -3261,23 +3280,40 @@ if (kageraAuctionSelect) {
 */
 if(kageraDisplayType){
     kageraDisplayType.addEventListener("change", function(){
+        const uploadType = document.getElementById("kageraUploadType");
+        const fileName = document.getElementById("kageraFileName");
+        const uploadButton = document.getElementById("kageraUploadButton");
+
+        if (uploadType) {
+            uploadType.value = this.value;
+        }
+
+        if (fileName) {
+            fileName.textContent =
+                this.value === "catalogue"
+                ? "Select Catalogue Excel file"
+                : "Select Auction Results Excel file";
+        }
+
+        if (uploadButton) {
+            uploadButton.title =
+                this.value === "catalogue"
+                ? "Upload Auction Catalogue"
+                : "Upload Auction Results";
+        }
+
         loadKageraResults();
     });
 }
 
-/*
-|--------------------------------------------------------------------------
-| UPLOAD TYPE
-|--------------------------------------------------------------------------
-*/
-if(kageraUploadType){
-    kageraUploadType.addEventListener("change", function(){
-        const type=this.value;
-        if(kageraFileName){
-            kageraFileName.textContent =
-                type==="catalogue"
-                ? "Select Catalogue Excel file"
-                : "Select Auction Results Excel file";
+
+if(kageraUploadForm){
+    kageraUploadForm.addEventListener("submit", function(){
+        const display = document.getElementById("kageraDisplayType");
+        const uploadType = document.getElementById("kageraUploadType");
+
+        if(display && uploadType){
+            uploadType.value = display.value;
         }
     });
 }
