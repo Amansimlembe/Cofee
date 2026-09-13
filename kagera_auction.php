@@ -2324,6 +2324,128 @@ body.sidebar-collapsed .kagera-main {
 #kageraCatalogueTable {
     display:none;
 }
+
+/* Kagera Report selector */
+.kagera-report-type {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.kagera-report-type label {
+    color: #6b625e;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.kagera-report-type .kagera-filter-select {
+    width: 130px;
+}
+
+.kagera-report-panel {
+    width: 100%;
+    height: calc(100vh - 205px);
+    min-height: 360px;
+    max-height: calc(100vh - 205px);
+    overflow: auto;
+    position: relative;
+    background: #fff;
+}
+
+.kagera-report-card {
+    width: 100%;
+    padding: 18px 22px 24px;
+}
+
+.kagera-report-heading {
+    margin-bottom: 14px;
+}
+
+.kagera-report-heading h2 {
+    margin: 0 0 4px;
+    color: #3e2723;
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.kagera-report-heading p {
+    margin: 0;
+    color: #888;
+    font-size: 12px;
+}
+
+.kagera-report-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.kagera-report-table {
+    width: 100%;
+    min-width: 850px;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: #fff;
+    font-size: 12px;
+}
+
+.kagera-report-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 11px 12px;
+    background: #4e342e;
+    color: #fff;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.kagera-report-table tbody td {
+    padding: 11px 12px;
+    color: #4e342e;
+    border-bottom: 1px solid #eee8e5;
+    white-space: nowrap;
+    background: #fff;
+}
+
+.kagera-report-table tbody tr:hover td {
+    background: #faf7f5;
+}
+
+.kagera-report-table .number,
+.kagera-report-table .percentage {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.kagera-data-card.kagera-report-active .kagera-table-wrap {
+    display: none;
+}
+
+.kagera-data-card.kagera-report-active .kagera-report-panel {
+    display: block !important;
+}
+
+@media (max-width: 1250px) {
+    .kagera-report-type {
+        flex: 0 0 auto;
+    }
+}
+
+@media (max-width: 700px) {
+    .kagera-report-panel {
+        height: calc(100vh - 260px);
+        max-height: calc(100vh - 260px);
+        min-height: 300px;
+    }
+
+    .kagera-report-card {
+        padding: 14px;
+    }
+}
+
 </style>
 
 </head>
@@ -2420,6 +2542,15 @@ body.sidebar-collapsed .kagera-main {
             <div id="kageraUploadStatus" class="kagera-upload-status"></div>
         </div>
 
+        <div class="kagera-report-type">
+            <label for="kageraReportType">Report</label>
+            <select id="kageraReportType" class="kagera-filter-select">
+                <option value="">Select Report</option>
+                <option value="high_low">High &amp; Low</option>
+                <option value="sales_summary">Sales Summary</option>
+            </select>
+        </div>
+
         <button
             type="button"
             class="kagera-refresh-btn"
@@ -2455,6 +2586,68 @@ body.sidebar-collapsed .kagera-main {
 <tr><td colspan="13" class="kagera-empty-state">No Kagera Catalogue loaded.</td></tr>
 </tbody>
 </table>
+
+<div id="kageraReportPanel" class="kagera-report-panel" style="display:none;">
+
+    <div class="kagera-report-card">
+
+        <div class="kagera-report-heading">
+            <div>
+                <h2 id="kageraReportTitle">High &amp; Low</h2>
+                <p id="kageraReportSubtitle">Sales and price summary for the selected auction.</p>
+            </div>
+        </div>
+
+        <div class="kagera-report-table-wrap">
+
+            <table id="kageraHighLowTable" class="kagera-report-table">
+                <thead>
+                    <tr>
+                        <th>TYPE OF COFFEE</th>
+                        <th>KILOS OFFERED</th>
+                        <th>KILOS SOLD</th>
+                        <th>TOTAL VALUE (TZS)</th>
+                        <th>LOWEST PRICE PER KG</th>
+                        <th>AVERAGE PRICE PER KG</th>
+                        <th>HIGHEST PRICE PER KG</th>
+                        <th>PERCENTAGE SOLD</th>
+                    </tr>
+                </thead>
+                <tbody id="kageraHighLowBody">
+                    <tr>
+                        <td colspan="8" class="kagera-empty-state">
+                            Select an auction to generate the report.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <table id="kageraSalesSummaryTable" class="kagera-report-table" style="display:none;">
+                <thead>
+                    <tr>
+                        <th>TYPE OF COFFEE</th>
+                        <th>KILOS OFFERED</th>
+                        <th>KILOS SOLD</th>
+                        <th>KILOS NOT SOLD</th>
+                        <th>TOTAL VALUE (TZS)</th>
+                        <th>AVERAGE PRICE PER KG</th>
+                        <th>PERCENTAGE SOLD</th>
+                    </tr>
+                </thead>
+                <tbody id="kageraSalesSummaryBody">
+                    <tr>
+                        <td colspan="7" class="kagera-empty-state">
+                            Select an auction to generate the report.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+        </div>
+
+    </div>
+
+</div>
 
 </div>
 
@@ -3158,6 +3351,243 @@ async function loadKageraData(type)
     }
 }
 
+
+let kageraReportType = "";
+
+function kageraReportNumber(value)
+{
+    if (value === null || value === undefined || value === "") {
+        return null;
+    }
+
+    const n = Number(String(value).replace(/,/g, "").trim());
+    return Number.isFinite(n) ? n : null;
+}
+
+function kageraReportFormat(value, decimals)
+{
+    const n = kageraReportNumber(value);
+    if (n === null) return "-";
+
+    return n.toLocaleString("en-US", {
+        minimumFractionDigits: decimals || 0,
+        maximumFractionDigits: decimals || 0
+    });
+}
+
+function kageraReportPercent(value)
+{
+    const n = kageraReportNumber(value);
+    return n === null ? "-" : n.toFixed(2) + "%";
+}
+
+function kageraReportCoffeeType(row)
+{
+    const g2 = String(row.grade2 ?? "").trim().toLowerCase();
+    const g = String(row.grade ?? "").trim().toLowerCase();
+
+    if (g2.includes("dry cherry") || g.includes("dry cherry")) {
+        return "Dry Cherry Coffee";
+    }
+
+    return "Clean Coffee";
+}
+
+function kageraReportWeight(row)
+{
+    return kageraReportNumber(
+        row.net_weight ?? row.kgs ?? row.kilo ?? row.weight
+    ) || 0;
+}
+
+function kageraReportPrice(row)
+{
+    return kageraReportNumber(
+        row.price ?? row.price_per_kg ?? row.unit_price
+    );
+}
+
+function kageraReportValue(row)
+{
+    const direct = kageraReportNumber(
+        row.total_value ?? row.value ?? row.total_amount
+    );
+
+    if (direct !== null) return direct;
+
+    const price = kageraReportPrice(row);
+    return price === null ? 0 : kageraReportWeight(row) * price;
+}
+
+function kageraReportFiltered(rows)
+{
+    const season = document.getElementById("kageraSeasonFilter");
+    const auction = document.getElementById("kageraAuctionFilter");
+
+    const selectedSeason = season ? season.value : "";
+    const selectedAuction = auction ? auction.value : "";
+
+    return (rows || []).filter(function(row) {
+        const rowSeason = kageraGetSeason(row.date_sold);
+        const rowAuction = String(row.auction_no ?? "").trim();
+
+        return (!selectedSeason || rowSeason === selectedSeason) &&
+               (!selectedAuction || rowAuction === selectedAuction);
+    });
+}
+
+function kageraReportStats(typeName)
+{
+    const catalogue = kageraReportFiltered(kageraCatalogueData);
+    const results = kageraReportFiltered(kageraAllResults);
+
+    const offered = catalogue
+        .filter(r => kageraReportCoffeeType(r) === typeName)
+        .reduce((sum, r) => sum + kageraReportWeight(r), 0);
+
+    const soldRows = results
+        .filter(r => kageraReportCoffeeType(r) === typeName);
+
+    const sold = soldRows.reduce(
+        (sum, r) => sum + kageraReportWeight(r), 0
+    );
+
+    const totalValue = soldRows.reduce(
+        (sum, r) => sum + kageraReportValue(r), 0
+    );
+
+    const prices = soldRows
+        .map(kageraReportPrice)
+        .filter(p => p !== null);
+
+    const lowest = prices.length ? Math.min(...prices) : null;
+    const highest = prices.length ? Math.max(...prices) : null;
+
+    const weightedKg = soldRows.reduce(function(sum, r) {
+        return kageraReportPrice(r) === null
+            ? sum
+            : sum + kageraReportWeight(r);
+    }, 0);
+
+    const weightedPrice = soldRows.reduce(function(sum, r) {
+        const p = kageraReportPrice(r);
+        return p === null ? sum : sum + p * kageraReportWeight(r);
+    }, 0);
+
+    const average = weightedKg > 0
+        ? weightedPrice / weightedKg
+        : (prices.length
+            ? prices.reduce((a,b) => a + b, 0) / prices.length
+            : null);
+
+    const percentage = offered > 0 ? (sold / offered) * 100 : 0;
+
+    return {
+        type: typeName,
+        offered,
+        sold,
+        notSold: Math.max(offered - sold, 0),
+        totalValue,
+        lowest,
+        average,
+        highest,
+        percentage
+    };
+}
+
+function kageraRenderHighLowReport()
+{
+    const body = document.getElementById("kageraHighLowBody");
+    if (!body) return;
+
+    const dry = kageraReportStats("Dry Cherry Coffee");
+    const clean = kageraReportStats("Clean Coffee");
+
+    if (!dry.offered && !clean.offered && !dry.sold && !clean.sold) {
+        body.innerHTML =
+            '<tr><td colspan="8" class="kagera-empty-state">' +
+            'No auction data found for the selected Season and Auction No.' +
+            '</td></tr>';
+        return;
+    }
+
+    body.innerHTML = [dry, clean].map(function(s) {
+        return "<tr>" +
+            "<td><strong>" + escapeKageraHtml(s.type) + "</strong></td>" +
+            '<td class="number">' + kageraReportFormat(s.offered) + "</td>" +
+            '<td class="number">' + kageraReportFormat(s.sold) + "</td>" +
+            '<td class="number">' + kageraReportFormat(s.totalValue) + "</td>" +
+            '<td class="number">' + kageraReportFormat(s.lowest) + "</td>" +
+            '<td class="number">' + kageraReportFormat(s.average, 2) + "</td>" +
+            '<td class="number">' + kageraReportFormat(s.highest) + "</td>" +
+            '<td class="percentage">' + kageraReportPercent(s.percentage) + "</td>" +
+            "</tr>";
+    }).join("");
+}
+
+function kageraRenderSalesSummaryReport()
+{
+    const body = document.getElementById("kageraSalesSummaryBody");
+    if (!body) return;
+
+    const dry = kageraReportStats("Dry Cherry Coffee");
+    const clean = kageraReportStats("Clean Coffee");
+
+    body.innerHTML = [dry, clean].map(function(s) {
+        return "<tr>" +
+            "<td><strong>" + escapeKageraHtml(s.type) + "</strong></td>" +
+            '<td class="number">' + kageraReportFormat(s.offered) + "</td>" +
+            '<td class="number">' + kageraReportFormat(s.sold) + "</td>" +
+            '<td class="number">' + kageraReportFormat(s.notSold) + "</td>" +
+            '<td class="number">' + kageraReportFormat(s.totalValue) + "</td>" +
+            '<td class="number">' + kageraReportFormat(s.average, 2) + "</td>" +
+            '<td class="percentage">' + kageraReportPercent(s.percentage) + "</td>" +
+            "</tr>";
+    }).join("");
+}
+
+function kageraRenderSelectedReport()
+{
+    const panel = document.getElementById("kageraReportPanel");
+    const card = document.querySelector(".kagera-data-card");
+    const resultsTable = document.getElementById("kageraResultsTable");
+    const catalogueTable = document.getElementById("kageraCatalogueTable");
+    const highLow = document.getElementById("kageraHighLowTable");
+    const salesSummary = document.getElementById("kageraSalesSummaryTable");
+    const title = document.getElementById("kageraReportTitle");
+    const subtitle = document.getElementById("kageraReportSubtitle");
+
+    if (!panel || !card) return;
+
+    if (!kageraReportType) {
+        card.classList.remove("kagera-report-active");
+        panel.style.display = "none";
+        return;
+    }
+
+    card.classList.add("kagera-report-active");
+    panel.style.display = "block";
+
+    if (resultsTable) resultsTable.style.display = "none";
+    if (catalogueTable) catalogueTable.style.display = "none";
+
+    if (kageraReportType === "high_low") {
+        if (highLow) highLow.style.display = "table";
+        if (salesSummary) salesSummary.style.display = "none";
+        if (title) title.textContent = "High & Low";
+        if (subtitle) subtitle.textContent =
+            "Sales and price summary for the selected auction.";
+        kageraRenderHighLowReport();
+    } else {
+        if (highLow) highLow.style.display = "none";
+        if (salesSummary) salesSummary.style.display = "table";
+        if (title) title.textContent = "Sales Summary";
+        if (subtitle) subtitle.textContent =
+            "Sales quantity and value summary for the selected auction.";
+        kageraRenderSalesSummaryReport();
+    }
+}
+
 async function loadKageraResults()
 {
     const type=kageraDisplayType ? kageraDisplayType.value : "results";
@@ -3216,6 +3646,8 @@ if (kageraSeasonSelect) {
             } else {
                 kageraRenderResults(kageraGetFilteredResults());
             }
+            if (kageraReportType) kageraRenderSelectedReport();
+            }
         }
     );
 }
@@ -3260,6 +3692,22 @@ if(kageraDisplayType){
         loadKageraResults();
     });
 }
+
+/*
+|--------------------------------------------------------------------------
+| REPORT TYPE
+|--------------------------------------------------------------------------
+*/
+const kageraReportSelect =
+    document.getElementById("kageraReportType");
+
+if (kageraReportSelect) {
+    kageraReportSelect.addEventListener("change", function () {
+        kageraReportType = String(this.value || "");
+        kageraRenderSelectedReport();
+    });
+}
+
 
 /*
 |--------------------------------------------------------------------------
