@@ -2794,8 +2794,24 @@ body.sidebar-collapsed .kagera-main {
 
 .kagera-export-wrap {
     position: relative;
+    display: none;
+    flex: 0 0 auto;
+    margin-left: 8px;
+    z-index: 2000;
 }
 
+
+.kagera-export-wrap {
+    position: relative;
+    flex: 0 0 auto;
+    align-items: center;
+    visibility: visible;
+    opacity: 1;
+    z-index: 1100;
+}
+.kagera-export-wrap.kagera-export-hidden {
+    display: none !important;
+}
 .kagera-export-btn {
     display: inline-flex;
     align-items: center;
@@ -3026,6 +3042,24 @@ body.sidebar-collapsed .kagera-main {
             <span>↻</span> Refresh
         </button>
 
+        
+<div class="kagera-export-wrap" id="kageraHighLowExportWrap" style="display:none;">
+    <button type="button"
+            class="kagera-export-btn"
+            id="kageraHighLowExportBtn"
+            aria-label="Export High &amp; Low"
+            title="Export High &amp; Low">
+        <span class="kagera-export-icon" aria-hidden="true">⇩</span>
+        <span>Export</span>
+    </button>
+    <div class="kagera-export-menu" id="kageraHighLowExportMenu" style="display:none;">
+        <button type="button" data-kagera-export="pdf">Download PDF</button>
+        <button type="button" data-kagera-export="excel">Download Excel</button>
+        <button type="button" data-kagera-export="word">Download Word</button>
+    </div>
+</div>
+
+
     </div>
 
 </div>
@@ -3063,18 +3097,17 @@ body.sidebar-collapsed .kagera-main {
         </div>
 
         <div class="kagera-report-header-actions" id="kageraReportHeaderActions">
-            <div class="kagera-export-wrap" id="kageraHighLowExportWrap" style="display:none;">
-                <button type="button" class="kagera-export-btn" id="kageraHighLowExportBtn"
-                        aria-label="Export High &amp; Low report" title="Export High &amp; Low report">
-                    <span class="kagera-export-icon" aria-hidden="true">⇩</span>
-                    <span>Export</span>
-                </button>
-                <div class="kagera-export-menu" id="kageraHighLowExportMenu" style="display:none;">
-                    <button type="button" data-kagera-export="pdf">Download PDF</button>
-                    <button type="button" data-kagera-export="excel">Download Excel</button>
-                    <button type="button" data-kagera-export="word">Download Word</button>
-                </div>
-            </div>
+
+            <button
+            type="button"
+            class="kagera-refresh-btn"
+            onclick="loadKageraResults()"
+        >
+            <span>↻</span> Refresh
+        </button>
+
+            
+        </div>
         </div>
     </div>
 
@@ -4327,6 +4360,19 @@ function kageraSetupHighLowExport()
 }
 
 
+function kageraIsHighLowReport(value)
+{
+    const normalized = String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ");
+
+    return normalized === "high & low" ||
+           normalized === "high and low" ||
+           normalized === "high low";
+}
+
 function kageraSetHighLowExportVisible(visible)
 {
     const wrap = document.getElementById("kageraHighLowExportWrap");
@@ -4336,12 +4382,18 @@ function kageraSetHighLowExportVisible(visible)
     if (!wrap) return;
 
     if (visible) {
-        wrap.style.display = "inline-block";
-        if (button) button.style.display = "inline-flex";
+        wrap.style.setProperty("display", "inline-flex", "important");
+        wrap.style.setProperty("visibility", "visible", "important");
+        wrap.style.setProperty("opacity", "1", "important");
+
+        if (button) {
+            button.style.setProperty("display", "inline-flex", "important");
+            button.style.setProperty("visibility", "visible", "important");
+            button.style.setProperty("opacity", "1", "important");
+        }
     } else {
-        wrap.style.display = "none";
-        if (button) button.style.display = "none";
-        if (menu) menu.style.display = "none";
+        wrap.style.setProperty("display", "none", "important");
+        if (menu) menu.style.setProperty("display", "none", "important");
     }
 }
 
@@ -4364,7 +4416,7 @@ async function kageraShowReport()
         selectedReport === "high_low" ||
         selectedReport === "sales_summary";
 
-    kageraSetHighLowExportVisible(selectedReport === "high_low");
+    kageraSetHighLowExportVisible(kageraIsHighLowReport(selectedReport));
 
     if (selectedReport !== "high_low") {
         kageraCloseHighLowExportMenu();
@@ -5029,6 +5081,48 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
+
+
+(function() {
+    function bindKageraHighLowExport() {
+        const btn = document.getElementById("kageraHighLowExportBtn");
+        const menu = document.getElementById("kageraHighLowExportMenu");
+
+        if (!btn || !menu || btn.dataset.kageraHighLowExportBound === "1") return;
+
+        btn.dataset.kageraHighLowExportBound = "1";
+
+        btn.addEventListener("click", function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            menu.style.display =
+                menu.style.display === "block" ? "none" : "block";
+        });
+
+        menu.querySelectorAll("[data-kagera-export]").forEach(function(item) {
+            item.addEventListener("click", function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                const format = this.getAttribute("data-kagera-export");
+                if (typeof kageraExportHighLow === "function") {
+                    kageraExportHighLow(format);
+                }
+            });
+        });
+
+        document.addEventListener("click", function(event) {
+            if (!event.target.closest("#kageraHighLowExportWrap")) {
+                menu.style.display = "none";
+            }
+        });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bindKageraHighLowExport);
+    } else {
+        bindKageraHighLowExport();
+    }
+})();
 
 </script>
 
