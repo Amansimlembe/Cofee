@@ -1,19 +1,39 @@
 <?php
+
+/* =========================================================
+   KAGERA AUCTION - SELF CONTAINED
+   Database: Render PostgreSQL through DATABASE_URL
+   ========================================================= */
+
+ob_start();
+
 session_start();
 
-$isFetch = isset($_GET["action"]) && $_GET["action"] === "fetch";
+/*
+|--------------------------------------------------------------------------
+| AUTHENTICATION
+|--------------------------------------------------------------------------
+*/
+if (!isset($_SESSION["logged_in"]) || $_SESSION["logged_in"] !== true) {
 
-if (
-    !isset($_SESSION["logged_in"]) ||
-    $_SESSION["logged_in"] !== true
-) {
-    if ($isFetch) {
-        header("Content-Type: application/json; charset=utf-8");
+    $isApiRequest =
+        isset($_GET['action']) ||
+        ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST';
+
+    if ($isApiRequest) {
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: application/json; charset=utf-8');
         http_response_code(401);
+
         echo json_encode([
-            "success" => false,
-            "message" => "Not authenticated."
+            'success' => false,
+            'message' => 'Your session has expired. Please log in again.',
+            'data' => []
         ]);
+
         exit;
     }
 
@@ -21,93 +41,1222 @@ if (
     exit;
 }
 
-if ($isFetch) {
-    header("Content-Type: application/json; charset=utf-8");
+/*
+|--------------------------------------------------------------------------
+| DATABASE
+|--------------------------------------------------------------------------
+*/
+
+function kagera_db()
+{
+    static $db = null;
+
+    if ($db instanceof PDO) {
+        return $db;
+    }
+
+    $database_url = getenv("DATABASE_URL");
+
+    if (!$database_url) {
+        throw new Exception(
+            "DATABASE_URL is not configured in Render."
+        );
+    }
+
+    if (!in_array("pgsql", PDO::getAvailableDrivers(), true)) {
+        throw new Exception(
+            "PHP PDO PostgreSQL driver (pdo_pgsql) is not enabled on Render."
+        );
+    }
+
+    $parts = parse_url($database_url);
+
+    if (
+        !$parts ||
+        empty($parts["host"]) ||
+        empty($parts["user"]) ||
+        empty($parts["path"])
+    ) {
+        throw new Exception(
+            "The Render DATABASE_URL is invalid."
+        );
+    }
+
+    $host = $parts["host"];
+    $port = (int)($parts["port"] ?? 5432);
+    $dbname = ltrim($parts["path"], "/");
+    $user = urldecode($parts["user"]);
+    $password = urldecode($parts["pass"] ?? "");
+
+    $dsn = "pgsql:host={$host};port={$port};dbname={$dbname}";
 
     try {
-        $databaseUrl = getenv("DATABASE_URL");
 
-        if ($databaseUrl) {
-            $parts = parse_url($databaseUrl);
-            if (!$parts || empty($parts["host"])) {
-                throw new Exception("Invalid DATABASE_URL.");
-            }
+        $db = new PDO(
+            $dsn,
+            $user,
+            $password,
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false
+            ]
+        );
 
-            $host = $parts["host"];
-            $port = $parts["port"] ?? 3306;
-            $dbname = ltrim($parts["path"] ?? "", "/");
-            $username = $parts["user"] ?? "";
-            $password = $parts["pass"] ?? "";
-        } else {
-            $host = getenv("DB_HOST") ?: "127.0.0.1";
-            $port = getenv("DB_PORT") ?: 3306;
-            $dbname = getenv("DB_NAME") ?: "coffee_sales";
-            $username = getenv("DB_USER") ?: "root";
-            $password = getenv("DB_PASSWORD") ?: "";
+    } catch (PDOException $e) {
+
+        error_log(
+            "Kagera PostgreSQL connection error: " .
+            $e->getMessage()
+        );
+
+        throw new Exception(
+            "PostgreSQL database connection failed."
+        );
+    }
+
+    return $db;
+}
+
+/*
+|--------------------------------------------------------------------------
+| DATABASE TABLE
+|--------------------------------------------------------------------------
+*/
+
+function kagera_table()
+{
+    return 'public.kagera_auction_results';
+}
+
+function ensure_kagera_table()
+{
+    $db = kagera_db();
+
+    $db->exec("
+        CREATE TABLE IF NOT EXISTS public.kagera_auction_results (
+
+            id BIGSERIAL PRIMARY KEY,
+
+            lot_no VARCHAR(100),
+            auction_no VARCHAR(50),
+            date_sold VARCHAR(50),
+            warehouse VARCHAR(255),
+            warehouse_location VARCHAR(255),
+
+            net_weight NUMERIC(15,2),
+
+            grade VARCHAR(100),
+            grade2 VARCHAR(100),
+
+            price NUMERIC(15,4),
+
+            buyer_name VARCHAR(255),
+
+            created_at TIMESTAMP WITHOUT TIME ZONE
+                DEFAULT CURRENT_TIMESTAMP
+        )
+    ");
+
+    $columns = [
+        "lot_no" => "VARCHAR(100)",
+        "auction_no" => "VARCHAR(50)",
+        "date_sold" => "VARCHAR(50)",
+        "warehouse" => "VARCHAR(255)",
+        "warehouse_location" => "VARCHAR(255)",
+        "net_weight" => "NUMERIC(15,2)",
+        "grade" => "VARCHAR(100)",
+        "grade2" => "VARCHAR(100)",
+        "price" => "NUMERIC(15,4)",
+        "buyer_name" => "VARCHAR(255)"
+    ];
+
+    $check = $db->prepare("
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'kagera_auction_results'
+          AND column_name = :column
+    ");
+
+    foreach ($columns as $column => $definition) {
+
+        $check->execute([
+            "column" => $column
+        ]);
+
+        if (!$check->fetchColumn()) {
+
+            $db->exec(
+                'ALTER TABLE public.kagera_auction_results
+                 ADD COLUMN "' .
+                $column .
+                '" ' .
+                $definition
+            );
         }
+    }
 
-        $mysqli = new mysqli($host, $username, $password, $dbname, (int)$port);
+    $db->exec("
+        CREATE INDEX IF NOT EXISTS idx_kagera_auction_no
+        ON public.kagera_auction_results (auction_no)
+    ");
 
-        if ($mysqli->connect_errno) {
-            throw new Exception("Database connection failed.");
-        }
+    $db->exec("
+        CREATE INDEX IF NOT EXISTS idx_kagera_lot_no
+        ON public.kagera_auction_results (lot_no)
+    ");
+}
 
-        $mysqli->set_charset("utf8mb4");
+/*
+|--------------------------------------------------------------------------
+| JSON RESPONSE
+|--------------------------------------------------------------------------
+*/
 
-        $result = $mysqli->query("
-            SELECT
-                auction_no,
-                date_sold,
-                lot_number,
-                invoice,
-                packages,
-                net_weight,
-                grade,
-                grade2,
-                price,
-                buyer_name,
-                warehouse,
-                status
-            FROM kagera_auction_results
-            ORDER BY date_sold DESC, id DESC
-        ");
+function kagera_json(
+    $success,
+    $message = '',
+    $data = [],
+    $statusCode = 200
+) {
 
-        if (!$result) {
-            throw new Exception("Unable to retrieve Kagera Auction results.");
-        }
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
 
-        $data = [];
+    http_response_code($statusCode);
 
-        while ($row = $result->fetch_assoc()) {
-            $data[] = $row;
-        }
+    header(
+        'Content-Type: application/json; charset=utf-8'
+    );
 
-        $mysqli->close();
+    header(
+        'Cache-Control: no-store, no-cache, must-revalidate, max-age=0'
+    );
 
-        echo json_encode([
-            "success" => true,
-            "data" => $data
-        ], JSON_UNESCAPED_UNICODE);
+    $response = [
+        'success' => (bool)$success,
+        'message' => (string)$message,
+        'data' => $data
+    ];
 
-    } catch (Throwable $e) {
-        http_response_code(500);
-        echo json_encode([
-            "success" => false,
-            "message" => $e->getMessage()
+    $json = json_encode(
+        $response,
+        JSON_UNESCAPED_UNICODE |
+        JSON_INVALID_UTF8_SUBSTITUTE
+    );
+
+    if ($json === false) {
+
+        $json = json_encode([
+            'success' => false,
+            'message' => 'Unable to create server response.',
+            'data' => []
         ]);
     }
 
+    echo $json;
+
     exit;
 }
+
+/*
+|--------------------------------------------------------------------------
+| CLEAN CELL
+|--------------------------------------------------------------------------
+*/
+
+function kagera_clean_cell($value)
+{
+    if ($value === null) {
+        return '';
+    }
+
+    $value = (string)$value;
+
+    $value = preg_replace(
+        '/[\x00-\x08\x0B\x0C\x0E-\x1F]/',
+        '',
+        $value
+    );
+
+    return trim($value);
+}
+
+/*
+|--------------------------------------------------------------------------
+| NUMBER
+|--------------------------------------------------------------------------
+*/
+
+function kagera_number($value)
+{
+    $value = trim((string)$value);
+
+    if ($value === '') {
+        return null;
+    }
+
+    $value = str_replace(
+        [',', ' '],
+        '',
+        $value
+    );
+
+    return is_numeric($value)
+        ? (float)$value
+        : null;
+}
+
+/*
+|--------------------------------------------------------------------------
+| HEADER NORMALIZATION
+|--------------------------------------------------------------------------
+*/
+
+function kagera_norm($value)
+{
+    $value = strtolower(trim((string)$value));
+
+    $value = preg_replace(
+        '/[\r\n\t]+/',
+        ' ',
+        $value
+    );
+
+    $value = preg_replace(
+        '/[^a-z0-9]+/',
+        '_',
+        $value
+    );
+
+    return trim($value, '_');
+}
+
+function kagera_find_col($headers, $names)
+{
+    foreach ($names as $name) {
+
+        $wanted = kagera_norm($name);
+
+        foreach ($headers as $i => $header) {
+
+            if ($header === $wanted) {
+                return $i;
+            }
+        }
+    }
+
+    return null;
+}
+
+/*
+|--------------------------------------------------------------------------
+| PHPSPREADSHEET XLSX READER
+|--------------------------------------------------------------------------
+*/
+
+
+function kagera_parse_with_phpspreadsheet($file) {
+    $autoloaders = [
+        __DIR__ . '/vendor/autoload.php',
+        dirname(__DIR__) . '/vendor/autoload.php'
+    ];
+
+    $loaded = false;
+
+    foreach ($autoloaders as $autoload) {
+        if (is_file($autoload)) {
+            require_once $autoload;
+
+            if (class_exists('PhpOffice\\PhpSpreadsheet\\IOFactory')) {
+                $loaded = true;
+                break;
+            }
+        }
+    }
+
+    if (!$loaded) {
+        return false;
+    }
+
+    try {
+        $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($file);
+        $reader->setReadDataOnly(true);
+
+        $spreadsheet = $reader->load($file);
+
+        $sheetCount = $spreadsheet->getSheetCount();
+
+        if ($sheetCount < 1) {
+            return false;
+        }
+
+        $sheet = $spreadsheet->getSheet(0);
+
+        $highestRow = $sheet->getHighestDataRow();
+        $highestColumn = $sheet->getHighestDataColumn();
+
+        if ($highestRow < 1 || $highestColumn === '') {
+            return false;
+        }
+
+        /*
+         * IMPORTANT:
+         * PhpSpreadsheet 2.x does not provide
+         * getCellByColumnAndRow().
+         *
+         * Use Coordinate::stringFromColumnIndex()
+         * together with Worksheet::getCell().
+         */
+
+        $highestColumnIndex =
+            \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString(
+                $highestColumn
+            );
+
+        $rows = [];
+
+        for ($r = 1; $r <= $highestRow; $r++) {
+
+            $row = [];
+
+            for ($c = 1; $c <= $highestColumnIndex; $c++) {
+
+                $columnLetter =
+                    \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
+
+                $cellReference = $columnLetter . $r;
+
+                $cell = $sheet->getCell($cellReference);
+
+                $value = $cell->getValue();
+
+                /*
+                 * Handle Excel date/time cells.
+                 */
+                if (
+                    $value !== null &&
+                    $value !== '' &&
+                    \PhpOffice\PhpSpreadsheet\Shared\Date::isDateTime($cell)
+                ) {
+                    $value = $cell->getFormattedValue();
+                }
+
+                /*
+                 * Handle rich text cells.
+                 */
+                elseif (
+                    $value instanceof \PhpOffice\PhpSpreadsheet\RichText\RichText
+                ) {
+                    $value = $value->getPlainText();
+                }
+
+                /*
+                 * Formula cells:
+                 * If a formula is present, get the calculated value.
+                 */
+                elseif (
+                    is_string($value) &&
+                    strlen($value) > 0 &&
+                    $value[0] === '='
+                ) {
+                    $calculated = $cell->getCalculatedValue();
+
+                    if (
+                        $calculated instanceof
+                        \PhpOffice\PhpSpreadsheet\RichText\RichText
+                    ) {
+                        $calculated = $calculated->getPlainText();
+                    }
+
+                    $value = $calculated;
+                }
+
+                $row[] = kagera_clean_cell($value);
+            }
+
+            /*
+             * Ignore completely empty rows.
+             */
+            if (
+                count(
+                    array_filter(
+                        $row,
+                        fn($v) => $v !== ''
+                    )
+                ) > 0
+            ) {
+                $rows[] = $row;
+            }
+        }
+
+        return !empty($rows) ? $rows : false;
+
+    } catch (Throwable $e) {
+
+        /*
+         * Log the real PhpSpreadsheet error so Render
+         * logs remain useful for future troubleshooting.
+         */
+        error_log(
+            'Kagera PhpSpreadsheet error: ' . $e->getMessage()
+        );
+
+        return false;
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| CSV / TSV / TXT
+|--------------------------------------------------------------------------
+*/
+
+function kagera_parse_csv($file)
+{
+    $handle = fopen($file, 'rb');
+
+    if (!$handle) {
+        throw new Exception(
+            'Unable to open the CSV/text file.'
+        );
+    }
+
+    $first = fgets($handle);
+
+    if ($first === false) {
+
+        fclose($handle);
+
+        throw new Exception(
+            'The spreadsheet file is empty.'
+        );
+    }
+
+    $first =
+        preg_replace(
+            '/^\xEF\xBB\xBF/',
+            '',
+            $first
+        );
+
+    $delimiters = [
+        ',',
+        ';',
+        "\t",
+        '|'
+    ];
+
+    $bestDelimiter = ',';
+    $bestCount = -1;
+
+    foreach ($delimiters as $delimiter) {
+
+        $count =
+            substr_count(
+                $first,
+                $delimiter
+            );
+
+        if ($count > $bestCount) {
+
+            $bestCount = $count;
+            $bestDelimiter = $delimiter;
+        }
+    }
+
+    rewind($handle);
+
+    $rows = [];
+
+    while (
+        ($row = fgetcsv(
+            $handle,
+            0,
+            $bestDelimiter
+        )) !== false
+    ) {
+
+        $row =
+            array_map(
+                'kagera_clean_cell',
+                $row
+            );
+
+        if (
+            count(
+                array_filter(
+                    $row,
+                    fn($v) => $v !== ''
+                )
+            ) > 0
+        ) {
+
+            $rows[] = $row;
+        }
+    }
+
+    fclose($handle);
+
+    return $rows;
+}
+
+/*
+|--------------------------------------------------------------------------
+| EXCEL PARSER
+|--------------------------------------------------------------------------
+*/
+
+function kagera_parse_excel(
+    $file,
+    $extension
+) {
+
+    $extension =
+        strtolower(
+            ltrim(
+                $extension,
+                '.'
+            )
+        );
+
+    if (
+        in_array(
+            $extension,
+            [
+                'csv',
+                'tsv',
+                'txt'
+            ],
+            true
+        )
+    ) {
+
+        return kagera_parse_csv($file);
+    }
+
+    $rows =
+        kagera_parse_with_phpspreadsheet(
+            $file
+        );
+
+    if (
+        $rows !== false &&
+        !empty($rows)
+    ) {
+
+        return $rows;
+    }
+
+    throw new Exception(
+        'The uploaded Excel file could not be read. ' .
+        'Please save the file as .xlsx and upload it again.'
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| UPLOAD HANDLER
+|--------------------------------------------------------------------------
+*/
+
+function handle_kagera_upload()
+{
+    if (
+        !isset($_FILES["kagera_excel"]) ||
+        !is_array($_FILES["kagera_excel"])
+    ) {
+
+        kagera_json(
+            false,
+            "Please select an Excel file.",
+            [],
+            400
+        );
+    }
+
+    $file = $_FILES["kagera_excel"];
+
+    if (
+        ($file["error"] ?? UPLOAD_ERR_NO_FILE)
+        !== UPLOAD_ERR_OK
+    ) {
+
+        $errorCode =
+            (int)($file["error"] ?? 0);
+
+        $message =
+            match ($errorCode) {
+
+                UPLOAD_ERR_INI_SIZE,
+                UPLOAD_ERR_FORM_SIZE =>
+                    "The uploaded file is too large.",
+
+                UPLOAD_ERR_PARTIAL =>
+                    "The file upload was incomplete.",
+
+                UPLOAD_ERR_NO_FILE =>
+                    "Please select an Excel file.",
+
+                default =>
+                    "File upload failed. Please try again."
+            };
+
+        kagera_json(
+            false,
+            $message,
+            [],
+            400
+        );
+    }
+
+    $ext =
+        strtolower(
+            pathinfo(
+                $file["name"],
+                PATHINFO_EXTENSION
+            )
+        );
+
+    $allowed = [
+        "xlsx",
+        "xls",
+        "xlsm",
+        "xltx",
+        "xltm",
+        "xlsb",
+        "ods",
+        "csv",
+        "tsv",
+        "txt",
+        "xml",
+        "html",
+        "htm"
+    ];
+
+    if (
+        !in_array(
+            $ext,
+            $allowed,
+            true
+        )
+    ) {
+
+        kagera_json(
+            false,
+            "Unsupported file format.",
+            [],
+            400
+        );
+    }
+
+    if (
+        !isset($file["tmp_name"]) ||
+        !is_uploaded_file($file["tmp_name"])
+    ) {
+
+        kagera_json(
+            false,
+            "The uploaded file could not be accessed.",
+            [],
+            400
+        );
+    }
+
+    $rows =
+        kagera_parse_excel(
+            $file["tmp_name"],
+            $ext
+        );
+
+    if (
+        !is_array($rows) ||
+        count($rows) < 2
+    ) {
+
+        kagera_json(
+            false,
+            "The Excel file does not contain enough data.",
+            [],
+            400
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | FIND HEADER ROW
+    |--------------------------------------------------------------------------
+    */
+
+    $headerIndex = null;
+
+    for (
+        $r = 0;
+        $r < min(count($rows), 15);
+        $r++
+    ) {
+
+        $headers =
+            array_map(
+                "kagera_norm",
+                $rows[$r]
+            );
+
+        $signals = [
+            "lot_no",
+            "lot_number",
+            "lot",
+            "auction_no",
+            "auction_number",
+            "date_sold",
+            "warehouse",
+            "warehouse_location",
+            "net_weight",
+            "net_weight_kg",
+            "grade",
+            "grade2",
+            "price",
+            "buyer_name",
+            "buyer"
+        ];
+
+        $matches =
+            count(
+                array_intersect(
+                    $signals,
+                    $headers
+                )
+            );
+
+        if ($matches >= 2) {
+
+            $headerIndex = $r;
+            break;
+        }
+    }
+
+    if ($headerIndex === null) {
+
+        kagera_json(
+            false,
+            "The Excel file header row could not be identified.",
+            [],
+            400
+        );
+    }
+
+    $headers =
+        array_map(
+            "kagera_norm",
+            $rows[$headerIndex]
+        );
+
+    /*
+    |--------------------------------------------------------------------------
+    | COLUMN MAPPING
+    |--------------------------------------------------------------------------
+    */
+
+    $col = [
+
+        "lot_no" =>
+            kagera_find_col(
+                $headers,
+                [
+                    "lot_no",
+                    "lot_number",
+                    "lot"
+                ]
+            ),
+
+        "auction_no" =>
+            kagera_find_col(
+                $headers,
+                [
+                    "auction_no",
+                    "auction_number",
+                    "auction"
+                ]
+            ),
+
+        "date_sold" =>
+            kagera_find_col(
+                $headers,
+                [
+                    "date_sold",
+                    "auction_date",
+                    "date"
+                ]
+            ),
+
+        
+        "warehouse" =>
+            kagera_find_col(
+                $headers,
+                [
+                    "warehouse",
+                    "warehouse_name"
+                ]
+            ),
+
+        "warehouse_location" =>
+            kagera_find_col(
+                $headers,
+                [
+                    "warehouse_location",
+                    "location",
+                    "warehouse_loc"
+                ]
+            ),
+
+        "net_weight" =>
+            kagera_find_col(
+                $headers,
+                [
+                    "net_weight",
+                    "net_weight_kg",
+                    "net_kg",
+                    "kgs",
+                    "kg"
+                ]
+            ),
+
+        "grade" =>
+            kagera_find_col(
+                $headers,
+                [
+                    "grade"
+                ]
+            ),
+
+        "grade2" =>
+            kagera_find_col(
+                $headers,
+                [
+                    "grade2",
+                    "grade_2",
+                    "grade_ii"
+                ]
+            ),
+
+        "price" =>
+            kagera_find_col(
+                $headers,
+                [
+                    "price",
+                    "price_usd",
+                    "price_tzs",
+                    "unit_price"
+                ]
+            ),
+
+        "buyer_name" =>
+            kagera_find_col(
+                $headers,
+                [
+                    "buyer_name",
+                    "buyer"
+                ]
+            )
+    ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | DATABASE
+    |--------------------------------------------------------------------------
+    */
+
+    ensure_kagera_table();
+
+    $db = kagera_db();
+
+    /*
+    |--------------------------------------------------------------------------
+    | PREPARED INSERT
+    |--------------------------------------------------------------------------
+    */
+
+    $stmt = $db->prepare("
+        INSERT INTO public.kagera_auction_results
+        (
+            lot_no,
+            auction_no,
+            date_sold,
+            warehouse,
+            warehouse_location,
+            net_weight,
+            grade,
+            grade2,
+            price,
+            buyer_name
+        )
+        VALUES
+        (
+            :lot_no,
+            :auction_no,
+            :date_sold,
+            :warehouse,
+            :warehouse_location,
+            :net_weight,
+            :grade,
+            :grade2,
+            :price,
+            :buyer_name
+        )
+    ");
+
+    $processed = 0;
+
+    /*
+    |--------------------------------------------------------------------------
+    | TRANSACTION
+    |--------------------------------------------------------------------------
+    */
+
+    $db->beginTransaction();
+
+    try {
+
+        foreach ($rows as $r => $row) {
+
+            if ($r <= $headerIndex) {
+                continue;
+            }
+
+            $get = function ($key) use (
+                $row,
+                $col
+            ) {
+
+                $i = $col[$key];
+
+                if ($i === null) {
+                    return "";
+                }
+
+                return trim(
+                    (string)(
+                        $row[$i] ?? ""
+                    )
+                );
+            };
+
+            $lot =
+                $get("lot_no");
+
+            $auction =
+                $get("auction_no");
+
+            $date =
+                $get("date_sold");
+
+            $warehouse =
+                $get("warehouse");
+
+            $location =
+                $get("warehouse_location");
+
+            $weight =
+                kagera_number(
+                    $get("net_weight")
+                );
+
+            $grade =
+                $get("grade");
+
+            $grade2 =
+                $get("grade2");
+
+            $price =
+                kagera_number(
+                    $get("price")
+                );
+
+            $buyer =
+                $get("buyer_name");
+
+            /*
+            | Skip completely empty rows
+            */
+            if (
+                $lot === "" &&
+                $auction === "" &&
+                $date === "" &&
+                $warehouse === "" &&
+                $location === "" &&
+                $grade === "" &&
+                $grade2 === "" &&
+                $buyer === ""
+            ) {
+
+                continue;
+            }
+
+            $stmt->execute([
+                "lot_no" =>
+                    $lot,
+
+                "auction_no" =>
+                    $auction,
+
+                "date_sold" =>
+                    $date,
+
+
+                "warehouse" =>
+                    $warehouse,
+
+                "warehouse_location" =>
+                    $location,
+
+                "net_weight" =>
+                    $weight,
+
+                "grade" =>
+                    $grade,
+
+                "grade2" =>
+                    $grade2,
+
+                "price" =>
+                    $price,
+
+                "buyer_name" =>
+                    $buyer
+            ]);
+
+            $processed++;
+        }
+
+        $db->commit();
+
+    } catch (Throwable $e) {
+
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+
+        error_log(
+            "Kagera upload database error: " .
+            $e->getMessage()
+        );
+
+        throw new Exception(
+            "The auction records could not be saved to the database."
+        );
+    }
+
+    kagera_json(
+        true,
+        "Kagera Auction results uploaded successfully. {$processed} record(s) processed.",
+        [],
+        200
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| FETCH HANDLER
+|--------------------------------------------------------------------------
+*/
+
+function handle_kagera_fetch()
+{
+    ensure_kagera_table();
+
+    $db = kagera_db();
+
+    $stmt = $db->query("
+        SELECT
+            lot_no,
+            auction_no,
+            date_sold,
+            warehouse,
+            warehouse_location,
+            net_weight,
+            grade,
+            grade2,
+            price,
+            buyer_name
+        FROM public.kagera_auction_results
+        ORDER BY id DESC
+    ");
+
+    $data = $stmt->fetchAll();
+
+    kagera_json(
+        true,
+        "Kagera Auction results loaded.",
+        $data,
+        200
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| REQUEST ROUTING
+|--------------------------------------------------------------------------
+*/
+
+try {
+
+    if (
+        ($_GET['action'] ?? '') === 'fetch'
+    ) {
+
+        handle_kagera_fetch();
+    }
+
+    if (
+        ($_SERVER['REQUEST_METHOD'] ?? 'GET')
+        === 'POST' &&
+        isset($_FILES['kagera_excel'])
+    ) {
+
+        handle_kagera_upload();
+    }
+
+} catch (Throwable $e) {
+
+    error_log(
+        "Kagera Auction error: " .
+        $e->getMessage()
+    );
+
+    kagera_json(
+        false,
+        $e->getMessage(),
+        [],
+        500
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| HTML PAGE
+|--------------------------------------------------------------------------
+*/
+
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
 <title>Kagera Auction</title>
 
 <style>
+
 * {
     box-sizing: border-box;
 }
@@ -122,19 +1271,11 @@ body {
     color: #3e2723;
 }
 
-/*
-|--------------------------------------------------------------------------
-| KAGERA PAGE
-|--------------------------------------------------------------------------
-| index.php owns the sidebar. This page contains Kagera information only.
-| The left margin keeps the page content correctly positioned beside it.
-|--------------------------------------------------------------------------
-*/
 .kagera-main {
     min-height: 100vh;
     margin-left: 270px;
     padding: 32px;
-    transition: margin-left 0.3s ease;
+    transition: margin-left .3s ease;
 }
 
 .kagera-container {
@@ -143,7 +1284,6 @@ body {
     margin: 0 auto;
 }
 
-/* Header */
 .kagera-page-header {
     display: flex;
     align-items: center;
@@ -200,12 +1340,11 @@ body {
     background: #6d8b6d;
 }
 
-/* Cards */
 .kagera-card {
     background: #fff;
     border: 1px solid #e7e0dc;
     border-radius: 12px;
-    box-shadow: 0 3px 14px rgba(62,39,35,0.055);
+    box-shadow: 0 3px 14px rgba(62,39,35,.055);
 }
 
 .kagera-upload-card {
@@ -246,7 +1385,6 @@ body {
     font-size: 12px;
 }
 
-/* Upload */
 .kagera-upload-row {
     display: flex;
     align-items: stretch;
@@ -385,7 +1523,6 @@ body {
     color: #8a3f3f;
 }
 
-/* Results */
 .kagera-data-card {
     overflow: hidden;
 }
@@ -449,14 +1586,12 @@ body {
     color: #91857f !important;
 }
 
-/* If index.php collapses its sidebar, this page can be given
-   class="sidebar-collapsed" by the parent/linking logic. */
 body.sidebar-collapsed .kagera-main {
     margin-left: 78px;
 }
 
-/* Mobile */
 @media (max-width: 900px) {
+
     .kagera-main {
         padding: 24px;
     }
@@ -476,6 +1611,7 @@ body.sidebar-collapsed .kagera-main {
 }
 
 @media (max-width: 700px) {
+
     .kagera-main,
     body.sidebar-collapsed .kagera-main {
         margin-left: 78px;
@@ -499,159 +1635,234 @@ body.sidebar-collapsed .kagera-main {
         align-self: flex-start;
     }
 }
+
 </style>
+
 </head>
 
 <body>
 
 <main class="kagera-main">
-    <div class="kagera-container">
 
-        <!-- KAGERA AUCTION ONLY -->
-        <header class="kagera-page-header">
-            <div class="kagera-title-group">
-                <div class="kagera-eyebrow">Auction Sales</div>
-                <h1>Kagera Auction</h1>
-                <p>
-                    Upload Kagera Auction Excel results and manage
-                    the records stored in the database.
-                </p>
-            </div>
+<div class="kagera-container">
 
-            <div class="kagera-status">
-                <span class="kagera-status-dot"></span>
-                Database Ready
-            </div>
-        </header>
+<header class="kagera-page-header">
 
-        <section class="kagera-card kagera-upload-card">
+<div class="kagera-title-group">
 
-            <div class="kagera-card-heading">
-                <div class="kagera-card-icon">📊</div>
-                <div>
-                    <h2>Upload Auction Results</h2>
-                    <p>
-                        Choose an Excel results file and upload it securely
-                        into the Kagera Auction database.
-                    </p>
-                </div>
-            </div>
+<div class="kagera-eyebrow">
+Auction Sales
+</div>
 
-            <form
-                id="kageraUploadForm"
-                action="kagera_upload.php"
-                method="POST"
-                enctype="multipart/form-data">
+<h1>
+Kagera Auction
+</h1>
 
-                <div class="kagera-upload-row">
+<p>
+Upload Kagera Auction Excel results and manage
+the records stored in the database.
+</p>
 
-                    <div class="kagera-file-area">
-                        <input
-                            type="file"
-                            id="kageraExcelFile"
-                            name="kagera_excel"
-                            accept=".xlsx,.xls"
-                            required>
+</div>
 
-                        <label
-                            for="kageraExcelFile"
-                            class="kagera-file-label">
+<div class="kagera-status">
 
-                            <span class="kagera-file-icon">📁</span>
+<span class="kagera-status-dot"></span>
 
-                            <span class="kagera-file-text">
-                                <strong>Select Excel File</strong>
-                                <small id="kageraFileName">
-                                    Supported formats: .xlsx, .xls
-                                </small>
-                            </span>
+Database Ready
 
-                            <span class="kagera-browse">
-                                Browse
-                            </span>
-                        </label>
-                    </div>
+</div>
 
-                    <button
-                        type="submit"
-                        class="kagera-upload-btn"
-                        id="kageraUploadButton">
+</header>
 
-                        <span>↑</span>
-                        Upload Results
-                    </button>
 
-                </div>
-            </form>
+<section class="kagera-card kagera-upload-card">
 
-            <div
-                id="kageraUploadStatus"
-                class="kagera-upload-status">
-            </div>
+<div class="kagera-card-heading">
 
-        </section>
+<div class="kagera-card-icon">
+📊
+</div>
 
-        <section class="kagera-card kagera-data-card">
+<div>
 
-            <div class="kagera-data-header">
-                <div>
-                    <h2>Kagera Auction Results</h2>
-                    <p>
-                        Results currently stored in the database.
-                    </p>
-                </div>
+<h2>
+Upload Auction Results
+</h2>
 
-                <button
-                    type="button"
-                    class="kagera-refresh-btn"
-                    onclick="loadKageraResults()">
+<p>
+Choose an Excel results file and upload it securely
+into the Kagera Auction database.
+</p>
 
-                    <span>↻</span>
-                    Refresh
-                </button>
-            </div>
+</div>
 
-            <div class="kagera-table-wrap">
+</div>
 
-                <table
-                    id="kageraResultsTable"
-                    class="kagera-results-table">
 
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Auction No.</th>
-                            <th>Date Sold</th>
-                            <th>Lot Number</th>
-                            <th>Invoice</th>
-                            <th>Packages</th>
-                            <th>Net Weight (Kg)</th>
-                            <th>Grade</th>
-                            <th>Grade2</th>
-                            <th>Price</th>
-                            <th>Buyer Name</th>
-                            <th>Warehouse</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
+<form
+    id="kageraUploadForm"
+    action="kagera_auction.php"
+    method="POST"
+    enctype="multipart/form-data"
+>
 
-                    <tbody id="kageraResultsBody">
-                        <tr>
-                            <td colspan="13" class="kagera-empty-state">
-                                No Kagera Auction results loaded.
-                            </td>
-                        </tr>
-                    </tbody>
+<div class="kagera-upload-row">
 
-                </table>
+<div class="kagera-file-area">
 
-            </div>
-        </section>
+<input
+    type="file"
+    id="kageraExcelFile"
+    name="kagera_excel"
+    accept=".xlsx,.xls,.xlsm,.xltx,.xltm,.xlsb,.ods,.csv,.tsv,.txt,.xml,.html,.htm"
+    required
+>
 
-    </div>
+<label
+    for="kageraExcelFile"
+    class="kagera-file-label"
+>
+
+<span class="kagera-file-icon">
+📁
+</span>
+
+<span class="kagera-file-text">
+
+<strong>
+Select Excel File
+</strong>
+
+<small id="kageraFileName">
+Supported formats: .xlsx, .xls, .xlsm, .xltx, .xltm, .xlsb, .ods, .csv, .tsv, .txt, .xml, .html
+</small>
+
+</span>
+
+<span class="kagera-browse">
+Browse
+</span>
+
+</label>
+
+</div>
+
+
+<button
+    type="submit"
+    class="kagera-upload-btn"
+    id="kageraUploadButton"
+>
+
+<span>↑</span>
+
+Upload Results
+
+</button>
+
+</div>
+
+</form>
+
+
+<div
+    id="kageraUploadStatus"
+    class="kagera-upload-status"
+></div>
+
+</section>
+
+
+<section class="kagera-card kagera-data-card">
+
+<div class="kagera-data-header">
+
+<div>
+
+<h2>
+Kagera Auction Results
+</h2>
+
+<p>
+Results currently stored in the database.
+</p>
+
+</div>
+
+
+<button
+    type="button"
+    class="kagera-refresh-btn"
+    onclick="loadKageraResults()"
+>
+
+<span>↻</span>
+
+Refresh
+
+</button>
+
+</div>
+
+
+<div class="kagera-table-wrap">
+
+<table
+    id="kageraResultsTable"
+    class="kagera-results-table"
+>
+
+<thead>
+
+<tr>
+
+<th>Lot No</th>
+<th>Auction No.</th>
+<th>Date Sold</th>
+<th>Warehouse</th>
+<th>Warehouse Location</th>
+<th>Net Weight (Kg)</th>
+<th>Grade</th>
+<th>Grade2</th>
+<th>Price</th>
+<th>Buyer Name</th>
+
+</tr>
+
+</thead>
+
+
+<tbody id="kageraResultsBody">
+
+<tr>
+
+<td
+    colspan="11"
+    class="kagera-empty-state"
+>
+
+No Kagera Auction results loaded.
+
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+</div>
+
+</section>
+
+</div>
+
 </main>
 
+
 <script>
+
 const kageraExcelFile =
     document.getElementById("kageraExcelFile");
 
@@ -664,172 +1875,400 @@ const kageraUploadForm =
 const kageraUploadStatus =
     document.getElementById("kageraUploadStatus");
 
+
+/*
+|--------------------------------------------------------------------------
+| FILE NAME
+|--------------------------------------------------------------------------
+*/
+
 if (kageraExcelFile) {
-    kageraExcelFile.addEventListener("change", function () {
-        kageraFileName.textContent = this.files.length
-            ? this.files[0].name
-            : "Supported formats: .xlsx, .xls";
-    });
-}
 
-if (kageraUploadForm) {
-    kageraUploadForm.addEventListener("submit", async function (event) {
-        event.preventDefault();
+    kageraExcelFile.addEventListener(
+        "change",
+        function () {
 
-        if (!kageraExcelFile.files.length) {
-            showKageraStatus(
-                "Please select an Excel file first.",
-                "error"
-            );
-            return;
-        }
-
-        const formData = new FormData(kageraUploadForm);
-        const button =
-            document.getElementById("kageraUploadButton");
-
-        button.disabled = true;
-        button.innerHTML = "<span>⏳</span> Uploading...";
-
-        try {
-            const response = await fetch(
-                "kagera_upload.php",
-                {
-                    method: "POST",
-                    body: formData
-                }
-            );
-
-            const result = await response.json();
-
-            if (!response.ok || !result.success) {
-                throw new Error(
-                    result.message || "Upload failed."
-                );
-            }
-
-            showKageraStatus(
-                result.message ||
-                "Results uploaded successfully.",
-                "success"
-            );
-
-            kageraUploadForm.reset();
             kageraFileName.textContent =
-                "Supported formats: .xlsx, .xls";
+                this.files.length
+                    ? this.files[0].name
+                    : "Supported formats: .xlsx, .xls, .xlsm, .xltx, .xltm, .xlsb, .ods, .csv, .tsv, .txt, .xml, .html";
 
-            loadKageraResults();
-
-        } catch (error) {
-            showKageraStatus(
-                error.message ||
-                "Unable to upload the Excel file.",
-                "error"
-            );
-
-        } finally {
-            button.disabled = false;
-            button.innerHTML =
-                "<span>↑</span> Upload Results";
         }
-    });
+    );
 }
 
-function showKageraStatus(message, type) {
-    if (!kageraUploadStatus) return;
 
-    kageraUploadStatus.textContent = message;
+/*
+|--------------------------------------------------------------------------
+| STATUS
+|--------------------------------------------------------------------------
+*/
+
+function showKageraStatus(
+    message,
+    type
+) {
+
+    if (!kageraUploadStatus) {
+        return;
+    }
+
+    kageraUploadStatus.textContent =
+        message;
+
     kageraUploadStatus.className =
         "kagera-upload-status " + type;
 }
 
-async function loadKageraResults() {
-    const body =
-        document.getElementById("kageraResultsBody");
 
-    if (!body) return;
+/*
+|--------------------------------------------------------------------------
+| JSON RESPONSE READER
+|--------------------------------------------------------------------------
+*/
 
-    body.innerHTML =
-        '<tr><td colspan="13" class="kagera-empty-state">' +
-        'Loading results...' +
-        '</td></tr>';
+async function readKageraJson(response)
+{
+    const text =
+        await response.text();
+
+    let result;
 
     try {
+
+        result =
+            JSON.parse(text);
+
+    } catch (e) {
+
+        console.error(
+            "Kagera server response:",
+            text
+        );
+
+        throw new Error(
+            "The server did not return a valid JSON response. Check the Render logs for the exact PHP error."
+        );
+    }
+
+    if (
+        !response.ok ||
+        !result.success
+    ) {
+
+        throw new Error(
+            result.message ||
+            "Request failed."
+        );
+    }
+
+    return result;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| UPLOAD
+|--------------------------------------------------------------------------
+*/
+
+if (kageraUploadForm) {
+
+    kageraUploadForm.addEventListener(
+        "submit",
+        async function (event) {
+
+            event.preventDefault();
+
+            if (
+                !kageraExcelFile.files.length
+            ) {
+
+                showKageraStatus(
+                    "Please select an Excel file first.",
+                    "error"
+                );
+
+                return;
+            }
+
+            const button =
+                document.getElementById(
+                    "kageraUploadButton"
+                );
+
+            const formData =
+                new FormData(
+                    kageraUploadForm
+                );
+
+            button.disabled = true;
+
+            button.innerHTML =
+                "<span>⏳</span> Uploading...";
+
+            showKageraStatus(
+                "Uploading auction results...",
+                "success"
+            );
+
+            try {
+
+                const response =
+                    await fetch(
+                        "kagera_auction.php",
+                        {
+                            method: "POST",
+                            body: formData,
+                            cache: "no-store",
+                            credentials: "same-origin"
+                        }
+                    );
+
+                const result =
+                    await readKageraJson(
+                        response
+                    );
+
+                showKageraStatus(
+                    result.message ||
+                    "Results uploaded successfully.",
+                    "success"
+                );
+
+                kageraUploadForm.reset();
+
+                kageraFileName.textContent =
+                    "Supported formats: .xlsx, .xls, .xlsm, .xltx, .xltm, .xlsb, .ods, .csv, .tsv, .txt, .xml, .html";
+
+                await loadKageraResults();
+
+            } catch (error) {
+
+                console.error(
+                    "Kagera upload error:",
+                    error
+                );
+
+                showKageraStatus(
+                    error.message ||
+                    "Unable to upload the Excel file.",
+                    "error"
+                );
+
+            } finally {
+
+                button.disabled = false;
+
+                button.innerHTML =
+                    "<span>↑</span> Upload Results";
+            }
+        }
+    );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| FETCH RESULTS
+|--------------------------------------------------------------------------
+*/
+
+async function loadKageraResults()
+{
+
+    const body =
+        document.getElementById(
+            "kageraResultsBody"
+        );
+
+    if (!body) {
+        return;
+    }
+
+    body.innerHTML =
+        '<tr>' +
+        '<td colspan="11" class="kagera-empty-state">' +
+        'Loading results...' +
+        '</td>' +
+        '</tr>';
+
+    try {
+
         const response =
-            await fetch("kagera_auction.php?action=fetch", { cache: "no-store" });
-
-        const responseText = await response.text();
-        let result;
-
-        try {
-            result = JSON.parse(responseText);
-        } catch (parseError) {
-            throw new Error(
-                "The Kagera data endpoint returned HTML instead of JSON. " +
-                "Please ensure kagera_auction.php is deployed correctly."
+            await fetch(
+                "kagera_auction.php?action=fetch",
+                {
+                    cache: "no-store",
+                    credentials: "same-origin"
+                }
             );
-        }
 
-        if (!response.ok || !result.success) {
-            throw new Error(
-                result.message ||
-                "Unable to load results."
+        const result =
+            await readKageraJson(
+                response
             );
-        }
 
-        if (!result.data || !result.data.length) {
+        if (
+            !result.data ||
+            !result.data.length
+        ) {
+
             body.innerHTML =
-                '<tr><td colspan="13" class="kagera-empty-state">' +
+                '<tr>' +
+                '<td colspan="11" class="kagera-empty-state">' +
                 'No Kagera Auction results loaded.' +
-                '</td></tr>';
+                '</td>' +
+                '</tr>';
+
             return;
         }
 
+
         body.innerHTML =
-            result.data.map(function (row, index) {
-                return "<tr>" +
-                    "<td>" + escapeKageraHtml(index + 1) + "</td>" +
-                    "<td>" + escapeKageraHtml(row.auction_no ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.date_sold ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.lot_number ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.invoice ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.packages ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.net_weight ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.grade ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.grade2 ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.price ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.buyer_name ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.warehouse ?? "") + "</td>" +
-                    "<td>" + escapeKageraHtml(row.status ?? "") + "</td>" +
-                    "</tr>";
-            }).join("");
+            result.data
+                .map(function (row) {
+
+                    return (
+                        "<tr>" +
+
+                        "<td>" +
+                        escapeKageraHtml(
+                            row.lot_no ?? ""
+                        ) +
+                        "</td>" +
+
+                        "<td>" +
+                        escapeKageraHtml(
+                            row.auction_no ?? ""
+                        ) +
+                        "</td>" +
+
+                        "<td>" +
+                        escapeKageraHtml(
+                            row.date_sold ?? ""
+                        ) +
+                        "</td>" +
+
+                        "<td>" +
+
+                        "<td>" +
+                        escapeKageraHtml(
+                            row.warehouse ?? ""
+                        ) +
+                        "</td>" +
+
+                        "<td>" +
+                        escapeKageraHtml(
+                            row.warehouse_location ?? ""
+                        ) +
+                        "</td>" +
+
+                        "<td>" +
+                        escapeKageraHtml(
+                            row.net_weight ?? ""
+                        ) +
+                        "</td>" +
+
+                        "<td>" +
+                        escapeKageraHtml(
+                            row.grade ?? ""
+                        ) +
+                        "</td>" +
+
+                        "<td>" +
+                        escapeKageraHtml(
+                            row.grade2 ?? ""
+                        ) +
+                        "</td>" +
+
+                        "<td>" +
+                        escapeKageraHtml(
+                            row.price ?? ""
+                        ) +
+                        "</td>" +
+
+                        "<td>" +
+                        escapeKageraHtml(
+                            row.buyer_name ?? ""
+                        ) +
+                        "</td>" +
+
+                        "</tr>"
+                    );
+
+                })
+                .join("");
 
     } catch (error) {
+
+        console.error(
+            "Kagera fetch error:",
+            error
+        );
+
         body.innerHTML =
-            '<tr><td colspan="13" class="kagera-empty-state">' +
+            '<tr>' +
+            '<td colspan="11" class="kagera-empty-state">' +
             escapeKageraHtml(
                 error.message ||
                 "Unable to load results."
             ) +
-            "</td></tr>";
+            '</td>' +
+            '</tr>';
     }
 }
 
-function escapeKageraHtml(value) {
+
+/*
+|--------------------------------------------------------------------------
+| HTML ESCAPE
+|--------------------------------------------------------------------------
+*/
+
+function escapeKageraHtml(value)
+{
+
     return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+
+        .replace(
+            /</g,
+            "&lt;"
+        )
+
+        .replace(
+            />/g,
+            "&gt;"
+        )
+
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+
+        .replace(
+            /'/g,
+            "&#039;"
+        );
 }
+
+
+/*
+|--------------------------------------------------------------------------
+| LOAD RESULTS
+|--------------------------------------------------------------------------
+*/
 
 document.addEventListener(
     "DOMContentLoaded",
-    function () {
-        loadKageraResults();
-    }
+    loadKageraResults
 );
+
 </script>
 
 </body>
