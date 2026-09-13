@@ -3918,9 +3918,6 @@ async function kageraShowReport()
             const dateRow =
                 selectedResultsForReport.find(function(row) {
                     return String(row.auction_no ?? "").trim() === auction;
-                }) ||
-                selectedCatalogueForReport.find(function(row) {
-                    return String(row.auction_no ?? "").trim() === auction;
                 });
 
             if (dateRow) {
