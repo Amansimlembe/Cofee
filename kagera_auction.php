@@ -1451,26 +1451,102 @@ body {
     line-height: 1.5;
 }
 
-.kagera-status {
+.kagera-header-upload {
+    position: relative;
     flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 13px;
+    width: min(520px, 48%);
+    padding: 10px 12px;
     border: 1px solid #e1d9d5;
-    border-radius: 20px;
+    border-radius: 10px;
     background: #fff;
-    color: #5d4037;
-    font-size: 12px;
-    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(62,39,35,.045);
 }
 
-.kagera-status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #6d8b6d;
+.kagera-header-upload-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
 }
+
+.kagera-header-upload-icon {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: #f1ece9;
+    font-size: 14px;
+}
+
+.kagera-header-upload-title strong {
+    display: block;
+    color: #4e342e;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.kagera-header-upload-title small {
+    display: block;
+    margin-top: 2px;
+    color: #91857f;
+    font-size: 10px;
+}
+
+.kagera-header-upload-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kagera-header-upload-form .kagera-file-area {
+    flex: 1 1 auto;
+}
+
+.kagera-header-upload-form .kagera-file-label {
+    min-height: 38px;
+    padding: 5px 7px 5px 9px;
+    gap: 7px;
+    border-radius: 6px;
+}
+
+.kagera-header-upload-form .kagera-file-icon {
+    width: 25px;
+    height: 25px;
+    flex: 0 0 25px;
+    font-size: 13px;
+}
+
+.kagera-header-upload-form .kagera-file-text strong {
+    font-size: 11px;
+}
+
+.kagera-header-upload-form .kagera-file-text small {
+    margin-top: 1px;
+    font-size: 9px;
+}
+
+.kagera-header-upload-form .kagera-browse {
+    padding: 5px 8px;
+    font-size: 9px;
+}
+
+.kagera-header-upload-form .kagera-upload-btn {
+    min-width: 82px;
+    height: 38px;
+    padding: 0 11px;
+    border: 0;
+    border-radius: 6px;
+    font-size: 11px;
+}
+
+.kagera-header-upload .kagera-upload-status {
+    margin-top: 7px;
+    padding: 6px 8px;
+    font-size: 10px;
+}
+
 
 .kagera-card {
     background: #fff;
@@ -1480,8 +1556,8 @@ body {
 }
 
 .kagera-upload-card {
-    margin-bottom: 22px;
-    padding: 24px;
+    margin-bottom: 16px;
+    padding: 16px;
 }
 
 .kagera-card-heading {
@@ -1602,13 +1678,10 @@ body {
     font-weight: 600;
 }
 
-.kagera-upload-btn,
-.kagera-filters {
-    display: flex;
-    align-items: flex-end;
-    gap: 12px;
-    margin-left: auto;
-    margin-right: 10px;
+.kagera-upload-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .filter-group {
@@ -1788,8 +1861,12 @@ body.sidebar-collapsed .kagera-main {
     }
 
     .kagera-page-header {
-        align-items: flex-start;
+        align-items: stretch;
         flex-direction: column;
+    }
+
+    .kagera-header-upload {
+        width: 100%;
     }
 
     .kagera-upload-row {
@@ -1818,137 +1895,21 @@ body.sidebar-collapsed .kagera-main {
         flex-direction: column;
     }
 
+    .kagera-header-upload-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .kagera-header-upload-form .kagera-upload-btn {
+        width: 100%;
+    }
+
     .kagera-page-header h1 {
         font-size: 24px;
     }
 
     .kagera-status {
         align-self: flex-start;
-    }
-}
-
-
-/* ================================================================
-   KAGERA AUCTION - PROFESSIONAL COMPACT LAYOUT
-   ================================================================ */
-
-.kagera-header {
-    margin-bottom: 14px;
-}
-
-.kagera-header h2 {
-    margin-bottom: 4px;
-}
-
-.kagera-header p {
-    margin: 0;
-}
-
-/* Compact upload card */
-.upload-card {
-    padding: 16px 18px !important;
-    margin-bottom: 16px !important;
-}
-
-.upload-card-header {
-    margin-bottom: 10px !important;
-}
-
-.upload-card-header h3 {
-    margin-bottom: 3px !important;
-}
-
-.upload-card-header p {
-    margin: 0 !important;
-}
-
-.upload-row {
-    min-height: 54px !important;
-    gap: 12px !important;
-}
-
-.file-input-wrap {
-    min-height: 44px !important;
-}
-
-.file-label {
-    min-height: 44px !important;
-    padding: 8px 12px !important;
-}
-
-.kagera-upload-btn {
-    min-height: 44px !important;
-    padding: 8px 18px !important;
-}
-
-/* Keep Database Ready/status visible without consuming table space */
-.upload-status {
-    margin-top: 8px !important;
-    min-height: 0 !important;
-    padding: 7px 10px !important;
-    line-height: 1.35 !important;
-}
-
-/* Give the results card priority and enough room for the data table */
-.data-card {
-    margin-top: 0 !important;
-    padding: 0 !important;
-    overflow: hidden;
-}
-
-.data-card-header {
-    padding: 15px 18px !important;
-    margin: 0 !important;
-}
-
-.table-responsive {
-    width: 100%;
-    max-width: 100%;
-    overflow-x: auto;
-    overflow-y: auto;
-    max-height: calc(100vh - 330px);
-    min-height: 360px;
-    scrollbar-width: thin;
-}
-
-/* Ensure the table itself can use the available width */
-.kagera-results-table {
-    width: 100%;
-    min-width: 1100px;
-    border-collapse: collapse;
-}
-
-/* Sticky table heading while scrolling through many records */
-.kagera-results-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-}
-
-/* Keep rows compact so more database records are visible */
-.kagera-results-table th,
-.kagera-results-table td {
-    padding: 8px 10px !important;
-    white-space: nowrap;
-}
-
-/* On smaller screens, preserve a useful table viewing area */
-@media (max-width: 900px) {
-    .table-responsive {
-        min-height: 300px;
-        max-height: calc(100vh - 370px);
-    }
-
-    .upload-row {
-        flex-wrap: wrap;
-    }
-
-    .file-input-wrap {
-        flex: 1 1 100%;
-    }
-
-    .kagera-upload-btn {
-        width: auto;
     }
 }
 
@@ -1981,49 +1942,26 @@ the records stored in the database.
 
 </div>
 
-<div class="kagera-status">
+<div class="kagera-header-upload">
 
-<span class="kagera-status-dot"></span>
+<div class="kagera-header-upload-title">
 
-Database Ready
-
-</div>
-
-</header>
-
-
-<section class="kagera-card kagera-upload-card">
-
-<div class="kagera-card-heading">
-
-<div class="kagera-card-icon">
-📊
-</div>
+<span class="kagera-header-upload-icon">📊</span>
 
 <div>
-
-<h2>
-Upload Auction Results
-</h2>
-
-<p>
-Choose an Excel results file and upload it securely
-into the Kagera Auction database.
-</p>
-
+<strong>Upload Results</strong>
+<small>Excel file</small>
 </div>
 
 </div>
-
 
 <form
     id="kageraUploadForm"
     action="kagera_auction.php"
     method="POST"
     enctype="multipart/form-data"
+    class="kagera-header-upload-form"
 >
-
-<div class="kagera-upload-row">
 
 <div class="kagera-file-area">
 
@@ -2040,54 +1978,40 @@ into the Kagera Auction database.
     class="kagera-file-label"
 >
 
-<span class="kagera-file-icon">
-📁
-</span>
+<span class="kagera-file-icon">📁</span>
 
 <span class="kagera-file-text">
-
-<strong>
-Select Excel File
-</strong>
-
-<small id="kageraFileName">
-Supported formats: .xlsx, .xls, .xlsm, .xltx, .xltm, .xlsb, .ods, .csv, .tsv, .txt, .xml, .html
-</small>
-
+<strong>Select Excel File</strong>
+<small id="kageraFileName">Choose file</small>
 </span>
 
-<span class="kagera-browse">
-Browse
-</span>
+<span class="kagera-browse">Browse</span>
 
 </label>
 
 </div>
-
 
 <button
     type="submit"
     class="kagera-upload-btn"
     id="kageraUploadButton"
 >
-
-<span>↑</span>
-
-Upload Results
-
+<span>↑</span> Upload
 </button>
 
-</div>
-
 </form>
-
 
 <div
     id="kageraUploadStatus"
     class="kagera-upload-status"
 ></div>
 
-</section>
+</div>
+
+</header>
+
+
+
 
 
 <section class="kagera-card kagera-data-card">
