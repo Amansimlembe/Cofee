@@ -2784,6 +2784,89 @@ body.sidebar-collapsed .kagera-main {
     font-size: 11px;
 }
 
+.kagera-report-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.kagera-export-wrap {
+    position: relative;
+}
+
+.kagera-export-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-width: 38px;
+    height: 36px;
+    padding: 0 11px;
+    border: 1px solid #d8d0cc;
+    border-radius: 7px;
+    background: #fff;
+    color: #3e2723;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.kagera-export-btn:hover,
+.kagera-export-btn:focus-visible {
+    background: #f7f3f1;
+    border-color: #b9aaa3;
+    box-shadow: 0 2px 7px rgba(62,39,35,.10);
+    outline: none;
+}
+
+.kagera-export-icon {
+    font-size: 17px;
+    line-height: 1;
+}
+
+.kagera-export-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 1000;
+    min-width: 150px;
+    padding: 5px;
+    border: 1px solid #e1d9d5;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(62,39,35,.16);
+}
+
+.kagera-export-menu button {
+    display: block;
+    width: 100%;
+    padding: 9px 11px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: #3e2723;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.kagera-export-menu button:hover,
+.kagera-export-menu button:focus-visible {
+    background: #f5f1ef;
+    outline: none;
+}
+
+@media (max-width: 700px) {
+    .kagera-report-header {
+        align-items: flex-start;
+        gap: 10px;
+    }
+}
+
 .kagera-report-table-wrap {
     width: 100%;
     overflow-x: hidden;
@@ -2978,6 +3061,21 @@ body.sidebar-collapsed .kagera-main {
             <h3 id="kageraReportTitle">High &amp; Low</h3>
             <p id="kageraReportSubtitle">Kagera Coffee Exchange auction report.</p>
         </div>
+
+        <div class="kagera-report-header-actions" id="kageraReportHeaderActions">
+            <div class="kagera-export-wrap" id="kageraHighLowExportWrap" style="display:none;">
+                <button type="button" class="kagera-export-btn" id="kageraHighLowExportBtn"
+                        aria-label="Export High &amp; Low report" title="Export High &amp; Low report">
+                    <span class="kagera-export-icon" aria-hidden="true">⇩</span>
+                    <span>Export</span>
+                </button>
+                <div class="kagera-export-menu" id="kageraHighLowExportMenu" style="display:none;">
+                    <button type="button" data-kagera-export="pdf">Download PDF</button>
+                    <button type="button" data-kagera-export="excel">Download Excel</button>
+                    <button type="button" data-kagera-export="word">Download Word</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="kagera-report-table-wrap">
@@ -3084,6 +3182,10 @@ body.sidebar-collapsed .kagera-main {
 
 </main>
 
+<!-- Export libraries used only by the High & Low report. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <script>
 
@@ -4027,6 +4129,203 @@ function kageraRenderSalesSummaryReport(report)
     }).join("");
 }
 
+function kageraCloseHighLowExportMenu()
+{
+    const menu = document.getElementById("kageraHighLowExportMenu");
+    if (menu) menu.style.display = "none";
+}
+
+function kageraHighLowFileBase()
+{
+    const auction = String(
+        document.getElementById("kageraAuctionFilter")?.value || ""
+    ).trim() || "Selected_Auction";
+    const season = String(
+        document.getElementById("kageraSeasonFilter")?.value || ""
+    ).trim().replace(/[^A-Za-z0-9_-]+/g, "_") || "Season";
+    return "Kagera_High_and_Low_Auction_" + auction + "_" + season;
+}
+
+function kageraDownloadBlob(blob, filename)
+{
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
+
+function kageraExportHighLowExcel()
+{
+    if (!window.XLSX) {
+        alert("Excel export library could not be loaded. Please refresh the page and try again.");
+        return;
+    }
+
+    const report = document.getElementById("kageraHighLowReport");
+    if (!report) return;
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+        ["KAGERA COFFEE EXCHANGE"],
+        [document.getElementById("kageraHLSubtitle")?.textContent || ""],
+        [document.getElementById("kageraHLHeldOn")?.textContent || ""],
+        [],
+        ["GRADE", "KILOS OFFERED", "KILOS SOLD", "TOTAL VALUE (TZS)"],
+        ...Array.from(document.querySelectorAll("#kageraHighLowSalesBody tr")).map(function(tr){
+            return Array.from(tr.cells).map(function(td){ return td.textContent.trim(); });
+        }),
+        [],
+        ["PRICES", "LOWEST PRICE PER KG", "AVERAGE PRICE PER KG", "HIGHEST PRICE PER KG"],
+        ...Array.from(document.querySelectorAll("#kageraHighLowPricesBody tr")).map(function(tr){
+            return Array.from(tr.cells).map(function(td){ return td.textContent.trim(); });
+        }),
+        [],
+        [document.getElementById("kageraHLPercentageDry")?.textContent || ""],
+        [document.getElementById("kageraHLPercentageClean")?.textContent || ""]
+    ]);
+
+    ws["!cols"] = [
+        {wch: 30}, {wch: 20}, {wch: 20}, {wch: 24}
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, "High & Low");
+    XLSX.writeFile(wb, kageraHighLowFileBase() + ".xlsx");
+}
+
+function kageraExportHighLowWord()
+{
+    const report = document.getElementById("kageraHighLowReport");
+    if (!report) return;
+
+    const clone = report.cloneNode(true);
+    clone.querySelectorAll("[id]").forEach(function(el){ el.removeAttribute("id"); });
+
+    const html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
+        "<title>Kagera High &amp; Low Report</title>" +
+        "<style>" +
+        "body{font-family:Arial,sans-serif;font-size:10pt;color:#222}" +
+        "h1{text-align:center;font-size:16pt;margin:0 0 8px}" +
+        "h2{text-align:center;font-size:12pt;margin:0 0 5px}" +
+        "p{text-align:center;font-size:10pt;margin:0 0 10px}" +
+        "table{width:100%;border-collapse:collapse;margin-bottom:12px}" +
+        "th,td{border:1px solid #333;padding:6px;text-align:center}" +
+        "th{font-weight:bold;background:#eee}" +
+        "td:first-child,th:first-child{text-align:left}" +
+        "</style></head><body>" +
+        "<h1>KAGERA COFFEE EXCHANGE</h1>" +
+        "<h2>" + (document.getElementById("kageraHLSubtitle")?.textContent || "") + "</h2>" +
+        "<p>" + (document.getElementById("kageraHLHeldOn")?.textContent || "") + "</p>" +
+        clone.innerHTML +
+        "</body></html>";
+
+    kageraDownloadBlob(
+        new Blob([html], {type:"application/msword"}),
+        kageraHighLowFileBase() + ".doc"
+    );
+}
+
+function kageraExportHighLowPdf()
+{
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+        alert("PDF export library could not be loaded. Please refresh the page and try again.");
+        return;
+    }
+
+    const report = document.getElementById("kageraHighLowReport");
+    if (!report) return;
+
+    const doc = new window.jspdf.jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
+    const auctionTitle = document.getElementById("kageraHLSubtitle")?.textContent || "";
+    const heldOn = document.getElementById("kageraHLHeldOn")?.textContent || "";
+
+    doc.setFontSize(15);
+    doc.setFont(undefined, "bold");
+    doc.text("KAGERA COFFEE EXCHANGE", 148.5, 13, {align:"center"});
+    doc.setFontSize(11);
+    doc.text(auctionTitle, 148.5, 20, {align:"center"});
+    doc.setFontSize(9);
+    doc.setFont(undefined, "normal");
+    doc.text(heldOn, 148.5, 26, {align:"center"});
+
+    const salesHead = [["GRADE", "KILOS OFFERED", "KILOS SOLD", "TOTAL VALUE (TZS)"]];
+    const salesBody = Array.from(document.querySelectorAll("#kageraHighLowSalesBody tr")).map(function(tr){
+        return Array.from(tr.cells).map(function(td){ return td.textContent.trim(); });
+    });
+
+    doc.autoTable({
+        startY: 31,
+        head: salesHead,
+        body: salesBody,
+        theme: "grid",
+        styles: {fontSize: 8, cellPadding: 2.2, halign: "center"},
+        headStyles: {fontStyle: "bold"},
+        columnStyles: {0: {halign: "left"}}
+    });
+
+    const priceHead = [["PRICES", "LOWEST PRICE PER KG", "AVERAGE PRICE PER KG", "HIGHEST PRICE PER KG"]];
+    const priceBody = Array.from(document.querySelectorAll("#kageraHighLowPricesBody tr")).map(function(tr){
+        return Array.from(tr.cells).map(function(td){ return td.textContent.trim(); });
+    });
+
+    doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 7,
+        head: priceHead,
+        body: priceBody,
+        theme: "grid",
+        styles: {fontSize: 8, cellPadding: 2.2, halign: "center"},
+        headStyles: {fontStyle: "bold"},
+        columnStyles: {0: {halign: "left"}}
+    });
+
+    const dry = document.getElementById("kageraHLPercentageDry")?.textContent || "";
+    const clean = document.getElementById("kageraHLPercentageClean")?.textContent || "";
+    doc.setFontSize(8);
+    doc.text(dry, 282, doc.lastAutoTable.finalY + 8, {align:"right"});
+    doc.text(clean, 282, doc.lastAutoTable.finalY + 13, {align:"right"});
+
+    doc.save(kageraHighLowFileBase() + ".pdf");
+}
+
+function kageraExportHighLow(format)
+{
+    if (format === "pdf") {
+        kageraExportHighLowPdf();
+    } else if (format === "excel") {
+        kageraExportHighLowExcel();
+    } else if (format === "word") {
+        kageraExportHighLowWord();
+    }
+    kageraCloseHighLowExportMenu();
+}
+
+function kageraSetupHighLowExport()
+{
+    const btn = document.getElementById("kageraHighLowExportBtn");
+    const menu = document.getElementById("kageraHighLowExportMenu");
+    if (!btn || !menu || btn.dataset.bound === "1") return;
+
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", function(event){
+        event.stopPropagation();
+        menu.style.display = menu.style.display === "none" ? "block" : "none";
+    });
+
+    menu.querySelectorAll("button[data-kagera-export]").forEach(function(item){
+        item.addEventListener("click", function(){
+            kageraExportHighLow(this.dataset.kageraExport);
+        });
+    });
+
+    document.addEventListener("click", function(event){
+        if (!event.target.closest("#kageraHighLowExportWrap")) {
+            kageraCloseHighLowExportMenu();
+        }
+    });
+}
+
 async function kageraShowReport()
 {
     const panel = document.getElementById("kageraReportPanel");
@@ -4045,6 +4344,14 @@ async function kageraShowReport()
     const isReportView =
         selectedReport === "high_low" ||
         selectedReport === "sales_summary";
+
+    const exportWrap = document.getElementById("kageraHighLowExportWrap");
+    if (exportWrap) {
+        exportWrap.style.display = selectedReport === "high_low" ? "block" : "none";
+    }
+    if (selectedReport !== "high_low") {
+        kageraCloseHighLowExportMenu();
+    }
 
     if (!isReportView) {
         if (panel) panel.style.display = "none";
@@ -4536,6 +4843,13 @@ if(kageraUploadType){
         }
     });
 }
+
+/*
+|--------------------------------------------------------------------------
+| HIGH & LOW EXPORT
+|--------------------------------------------------------------------------
+*/
+kageraSetupHighLowExport();
 
 /*
 |--------------------------------------------------------------------------
