@@ -359,67 +359,58 @@ function kagera_find_col($headers, $names)
 | results. Convert all supported forms to a consistent YYYY-MM-DD value.
 |--------------------------------------------------------------------------
 */
+
+
+
+/*
+|--------------------------------------------------------------------------
+| DATE NORMALIZATION
+|--------------------------------------------------------------------------
+*/
 function kagera_normalize_date($value)
 {
-    if ($value === null) {
-        return "";
+    if ($value === null || trim((string)$value) === '') {
+        return null;
+    }
+
+    if ($value instanceof \DateTimeInterface) {
+        return $value->format('Y-m-d');
     }
 
     $value = trim((string)$value);
 
-    if ($value === "") {
-        return "";
-    }
-
-    // Excel serial date (1900 date system).
+    // Excel serial number.
     if (is_numeric($value)) {
         $serial = (float)$value;
-
         if ($serial >= 1 && $serial <= 100000) {
             try {
-                $date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($serial);
-                return $date->format("Y-m-d");
-            } catch (Throwable $e) {
-                // Fall through to normal string parsing.
+                return \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($serial)
+                    ->format('Y-m-d');
+            } catch (\Throwable $e) {
             }
         }
     }
 
-    // Remove time where a date-time string is supplied.
-    $datePart = preg_split('/\\s+/', $value)[0];
+    $datePart = preg_split('/\s+/', $value)[0];
 
-    $formats = [
-        "Y-m-d",
-        "d/m/Y",
-        "d-m-Y",
-        "d.m.Y",
-        "m/d/Y",
-        "m-d-Y",
-        "Y/m/d",
-        "Y.m.d"
-    ];
+    foreach ([
+        'Y-m-d', 'd/m/Y', 'm/d/Y', 'd-m-Y', 'm-d-Y',
+        'Y/m/d', 'd.m.Y', 'Y.m.d'
+    ] as $format) {
+        $date = \DateTime::createFromFormat('!' . $format, $datePart);
+        $errors = \DateTime::getLastErrors();
 
-    foreach ($formats as $format) {
-        $date = DateTime::createFromFormat("!" . $format, $datePart);
-        $errors = DateTime::getLastErrors();
-
-        if (
-            $date !== false &&
-            (
-                $errors === false ||
-                ($errors["warning_count"] === 0 && $errors["error_count"] === 0)
-            )
-        ) {
-            return $date->format("Y-m-d");
+        if ($date !== false &&
+            ($errors === false ||
+             ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
+            return $date->format('Y-m-d');
         }
     }
 
-    // Last fallback: let PHP parse recognizable date text.
     try {
-        $date = new DateTime($value);
-        return $date->format("Y-m-d");
-    } catch (Throwable $e) {
-        return $value;
+        return (new \DateTime($value))->format('Y-m-d');
+    } catch (\Throwable $e) {
+        return null;
     }
 }
 
@@ -1058,7 +1049,7 @@ function handle_kagera_upload()
         (
             lot_no,
             auction_no,
-            date_sold,
+            TO_CHAR(date_sold, 'YYYY-MM-DD') AS date_sold,
             warehouse,
             warehouse_location,
             net_weight,
@@ -1124,10 +1115,7 @@ function handle_kagera_upload()
             $auction =
                 $get("auction_no");
 
-            $date =
-                kagera_normalize_date(
-                    $get("date_sold")
-                );
+            $date = kagera_normalize_date($get("date_sold"));
 
             $warehouse =
                 $get("warehouse");
