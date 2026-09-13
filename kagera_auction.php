@@ -2361,7 +2361,7 @@ if (kageraUploadForm) {
 |--------------------------------------------------------------------------
 */
 
-async function kageraGetSeason(dateValue)
+function kageraGetSeason(dateValue)
 {
     if (!dateValue) {
         return null;
