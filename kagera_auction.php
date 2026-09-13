@@ -1827,6 +1827,131 @@ body.sidebar-collapsed .kagera-main {
     }
 }
 
+
+/* ================================================================
+   KAGERA AUCTION - PROFESSIONAL COMPACT LAYOUT
+   ================================================================ */
+
+.kagera-header {
+    margin-bottom: 14px;
+}
+
+.kagera-header h2 {
+    margin-bottom: 4px;
+}
+
+.kagera-header p {
+    margin: 0;
+}
+
+/* Compact upload card */
+.upload-card {
+    padding: 16px 18px !important;
+    margin-bottom: 16px !important;
+}
+
+.upload-card-header {
+    margin-bottom: 10px !important;
+}
+
+.upload-card-header h3 {
+    margin-bottom: 3px !important;
+}
+
+.upload-card-header p {
+    margin: 0 !important;
+}
+
+.upload-row {
+    min-height: 54px !important;
+    gap: 12px !important;
+}
+
+.file-input-wrap {
+    min-height: 44px !important;
+}
+
+.file-label {
+    min-height: 44px !important;
+    padding: 8px 12px !important;
+}
+
+.kagera-upload-btn {
+    min-height: 44px !important;
+    padding: 8px 18px !important;
+}
+
+/* Keep Database Ready/status visible without consuming table space */
+.upload-status {
+    margin-top: 8px !important;
+    min-height: 0 !important;
+    padding: 7px 10px !important;
+    line-height: 1.35 !important;
+}
+
+/* Give the results card priority and enough room for the data table */
+.data-card {
+    margin-top: 0 !important;
+    padding: 0 !important;
+    overflow: hidden;
+}
+
+.data-card-header {
+    padding: 15px 18px !important;
+    margin: 0 !important;
+}
+
+.table-responsive {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 330px);
+    min-height: 360px;
+    scrollbar-width: thin;
+}
+
+/* Ensure the table itself can use the available width */
+.kagera-results-table {
+    width: 100%;
+    min-width: 1100px;
+    border-collapse: collapse;
+}
+
+/* Sticky table heading while scrolling through many records */
+.kagera-results-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+/* Keep rows compact so more database records are visible */
+.kagera-results-table th,
+.kagera-results-table td {
+    padding: 8px 10px !important;
+    white-space: nowrap;
+}
+
+/* On smaller screens, preserve a useful table viewing area */
+@media (max-width: 900px) {
+    .table-responsive {
+        min-height: 300px;
+        max-height: calc(100vh - 370px);
+    }
+
+    .upload-row {
+        flex-wrap: wrap;
+    }
+
+    .file-input-wrap {
+        flex: 1 1 100%;
+    }
+
+    .kagera-upload-btn {
+        width: auto;
+    }
+}
+
 </style>
 
 </head>
