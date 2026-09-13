@@ -2495,6 +2495,82 @@ body.sidebar-collapsed .kagera-main {
 }
 
 /* Report tables */
+
+/* High & Low report — workbook-matching structure */
+.kagera-high-low-report {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 12px 14px 16px;
+    box-sizing: border-box;
+}
+
+.kagera-hl-title,
+.kagera-hl-subtitle,
+.kagera-hl-held {
+    text-align: center;
+    font-weight: 800;
+    letter-spacing: .3px;
+}
+
+.kagera-hl-title {
+    font-size: 17px;
+    margin-bottom: 5px;
+}
+
+.kagera-hl-subtitle {
+    font-size: 13px;
+    margin-bottom: 5px;
+}
+
+.kagera-hl-held {
+    font-size: 12px;
+    margin-bottom: 12px;
+}
+
+.kagera-high-low-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    margin: 0;
+}
+
+.kagera-high-low-table th,
+.kagera-high-low-table td {
+    border: 1px solid #333;
+    padding: 8px 10px;
+    font-size: 11px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.kagera-high-low-table th {
+    font-weight: 800;
+}
+
+.kagera-high-low-table td:first-child,
+.kagera-high-low-table th:first-child {
+    text-align: left;
+}
+
+.kagera-prices-block {
+    margin-top: 12px;
+}
+
+.kagera-hl-percentage {
+    text-align: right;
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 7px;
+}
+
+@media (max-width: 800px) {
+    .kagera-high-low-report {
+        min-width: 700px;
+    }
+}
+
 .kagera-report-panel {
     margin-top: 10px;
     border: 1px solid #e7e0dc;
@@ -2709,7 +2785,7 @@ body.sidebar-collapsed .kagera-main {
 
 <div id="kageraReportPanel" class="kagera-report-panel" style="display:none;">
 
-    <div class="kagera-report-header">
+    <div class="kagera-report-header" id="kageraGenericReportHeader">
         <div>
             <h3 id="kageraReportTitle">High &amp; Low</h3>
             <p id="kageraReportSubtitle">Kagera Coffee Exchange auction report.</p>
@@ -2718,27 +2794,70 @@ body.sidebar-collapsed .kagera-main {
 
     <div class="kagera-report-table-wrap">
 
-        <table id="kageraHighLowTable" class="kagera-report-table">
-            <thead>
-                <tr>
-                    <th>TYPE OF COFFEE</th>
-                    <th>KILOS OFFERED</th>
-                    <th>KILOS SOLD</th>
-                    <th>LOWEST PRICE PER KG</th>
-                    <th>AVERAGE PRICE PER KG</th>
-                    <th>HIGHEST PRICE PER KG</th>
-                    <th>TOTAL VALUE (TZS)</th>
-                    <th>PERCENTAGE SOLD</th>
-                </tr>
-            </thead>
-            <tbody id="kageraHighLowBody">
-                <tr>
-                    <td colspan="8" class="kagera-empty-state">
-                        Select an Auction and a Report.
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+        <div id="kageraHighLowReport" class="kagera-high-low-report">
+
+    <div class="kagera-hl-title">KAGERA COFFEE EXCHANGE</div>
+    <div class="kagera-hl-subtitle" id="kageraHLSubtitle">SALES SUMMARY FOR THE AUCTION NO. —</div>
+    <div class="kagera-hl-held" id="kageraHLHeldOn">Held On —</div>
+
+    <table class="kagera-high-low-table kagera-summary-block">
+        <thead>
+            <tr>
+                <th>TYPE OF COFFEE</th>
+                <th>KILOS OFFERED</th>
+                <th>KILOS SOLD</th>
+                <th>TOTAL VALUE (TZS)</th>
+            </tr>
+        </thead>
+        <tbody id="kageraHighLowSalesBody">
+            <tr>
+                <td>Dry Cherry Coffee</td>
+                <td>0</td>
+                <td>0</td>
+                <td>0</td>
+            </tr>
+            <tr>
+                <td>Clean Coffee</td>
+                <td>0</td>
+                <td>0</td>
+                <td>0</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <table class="kagera-high-low-table kagera-prices-block">
+        <thead>
+            <tr>
+                <th>PRICES</th>
+                <th>LOWEST PRICE PER KG</th>
+                <th>AVERAGE PRICE PER KG</th>
+                <th>HIGHEST PRICE PER KG</th>
+            </tr>
+        </thead>
+        <tbody id="kageraHighLowPricesBody">
+            <tr>
+                <td>Dry Cherry Coffee</td>
+                <td>0</td>
+                <td>-</td>
+                <td>0</td>
+            </tr>
+            <tr>
+                <td>Clean Coffee</td>
+                <td>0</td>
+                <td>-</td>
+                <td>0</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="kagera-hl-percentage" id="kageraHLPercentageDry">
+        PERCENTAGE SOLD (Dry)= 0.00%
+    </div>
+    <div class="kagera-hl-percentage" id="kageraHLPercentageClean">
+        PERCENTAGE SOLD (Clean)= 0.00%
+    </div>
+
+</div>
 
         <table id="kageraSalesSummaryTable" class="kagera-report-table" style="display:none;">
             <thead>
@@ -3719,11 +3838,28 @@ async function kageraShowReport()
 
     if (panel) panel.style.display = "block";
 
+    const genericHeader = document.getElementById("kageraGenericReportHeader");
+    if (genericHeader) genericHeader.style.display = selectedReport === "high_low" ? "none" : "flex";
+
     const seasonSelect = document.getElementById("kageraSeasonFilter");
     const auctionSelect = document.getElementById("kageraAuctionFilter");
 
     const season = seasonSelect ? String(seasonSelect.value || "") : "";
     const auction = auctionSelect ? String(auctionSelect.value || "") : "";
+
+    const selectedResultsForReport = kageraAllResults.filter(function(row) {
+        const rowAuction = String(row.auction_no ?? "").trim();
+        const rowSeason = kageraGetSeason(row.date_sold);
+        return (!season || rowSeason === season) &&
+               (!auction || rowAuction === auction);
+    });
+
+    const selectedCatalogueForReport = kageraCatalogueData.filter(function(row) {
+        const rowAuction = String(row.auction_no ?? "").trim();
+        const rowSeason = kageraGetSeason(row.date_sold);
+        return (!season || rowSeason === season) &&
+               (!auction || rowAuction === auction);
+    });
 
     try {
         const response = await fetch(
@@ -3745,37 +3881,100 @@ async function kageraShowReport()
         const groups = result.data?.groups || {};
 
         if (selectedReport === "high_low") {
-            if (highLow) highLow.style.display = "table";
+            if (highLow) highLow.style.display = "block";
             if (salesSummary) salesSummary.style.display = "none";
 
-            if (title) title.textContent = "High & Low";
-            if (subtitle) {
-                subtitle.textContent =
-                    "Kilos offered from Auction Catalogue; kilos sold and prices from Auction Results.";
+            if (title) title.textContent = "";
+            if (subtitle) subtitle.textContent = "";
+
+            const types = ["Dry Cherry Coffee", "Clean Coffee"];
+
+            const salesBody =
+                document.getElementById("kageraHighLowSalesBody");
+            const pricesBody =
+                document.getElementById("kageraHighLowPricesBody");
+
+            const auctionText =
+                auction
+                    ? "SALES SUMMARY FOR THE AUCTION NO. " + auction
+                    : "SALES SUMMARY FOR THE AUCTION NO. —";
+
+            const subtitleEl =
+                document.getElementById("kageraHLSubtitle");
+
+            const heldEl =
+                document.getElementById("kageraHLHeldOn");
+
+            if (subtitleEl) {
+                subtitleEl.textContent = auctionText;
             }
 
-            const body = document.getElementById("kageraHighLowBody");
+            /*
+             * Held On is taken from the selected auction result/catalogue
+             * date. Prefer the auction-results date, then catalogue date.
+             */
+            let heldOn = "";
 
-            if (body) {
-                const types = ["Dry Cherry Coffee", "Clean Coffee"];
+            const dateRow =
+                selectedResultsForReport.find(function(row) {
+                    return String(row.auction_no ?? "").trim() === auction;
+                }) ||
+                selectedCatalogueForReport.find(function(row) {
+                    return String(row.auction_no ?? "").trim() === auction;
+                });
 
-                body.innerHTML = types.map(function(type) {
+            if (dateRow) {
+                heldOn = kageraFormatDate(dateRow.date_sold);
+            }
+
+            if (heldEl) {
+                heldEl.textContent =
+                    heldOn ? "Held On  " + heldOn : "Held On  —";
+            }
+
+            if (salesBody) {
+                salesBody.innerHTML = types.map(function(type) {
                     const g = groups[type] || {};
-                    const offered = kageraNumber(g.kilos_offered);
-                    const sold = kageraNumber(g.kilos_sold);
-                    const value = kageraNumber(g.total_value);
 
                     return "<tr>" +
                         "<td>" + escapeKageraHtml(type) + "</td>" +
-                        "<td>" + kageraReportKg(offered) + "</td>" +
-                        "<td>" + kageraReportKg(sold) + "</td>" +
-                        "<td>" + (g.lowest_price === null ? "-" : kageraReportMoney(g.lowest_price)) + "</td>" +
-                        "<td>" + (g.average_price === null ? "-" : kageraReportMoney(g.average_price)) + "</td>" +
-                        "<td>" + (g.highest_price === null ? "-" : kageraReportMoney(g.highest_price)) + "</td>" +
-                        "<td>" + kageraReportMoney(value) + "</td>" +
-                        "<td>" + kageraNumber(g.percentage_sold).toFixed(2) + "%</td>" +
+                        "<td>" + kageraReportKg(g.kilos_offered) + "</td>" +
+                        "<td>" + kageraReportKg(g.kilos_sold) + "</td>" +
+                        "<td>" + kageraReportMoney(g.total_value) + "</td>" +
                         "</tr>";
                 }).join("");
+            }
+
+            if (pricesBody) {
+                pricesBody.innerHTML = types.map(function(type) {
+                    const g = groups[type] || {};
+
+                    return "<tr>" +
+                        "<td>" + escapeKageraHtml(type) + "</td>" +
+                        "<td>" + (g.lowest_price === null ? "0" : kageraReportMoney(g.lowest_price)) + "</td>" +
+                        "<td>" + (g.average_price === null ? "-" : kageraReportMoney(g.average_price)) + "</td>" +
+                        "<td>" + (g.highest_price === null ? "0" : kageraReportMoney(g.highest_price)) + "</td>" +
+                        "</tr>";
+                }).join("");
+            }
+
+            const dry =
+                document.getElementById("kageraHLPercentageDry");
+            const clean =
+                document.getElementById("kageraHLPercentageClean");
+
+            if (dry) {
+                dry.textContent =
+                    "PERCENTAGE SOLD (Dry)= " +
+                    kageraNumber(groups["Dry Cherry Coffee"]?.percentage_sold).toFixed(2) +
+                    "%";
+            }
+
+            if (clean) {
+                clean.textContent =
+                    "PERCENTAGE SOLD (Clean)= " +
+                    kageraNumber(groups["Clean Coffee"]?.percentage_sold).toFixed(2) +
+                    "%";
             }
 
         } else if (selectedReport === "sales_summary") {
