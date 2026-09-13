@@ -2494,24 +2494,7 @@ body.sidebar-collapsed .kagera-main {
     display:none;
 }
 
-/* Report selector and report tables */
-.kagera-report-type {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 0 0 auto;
-}
-
-.kagera-report-type label {
-    color: #6b625e;
-    font-size: 10px;
-    font-weight: 700;
-}
-
-.kagera-report-type .kagera-filter-select {
-    width: 125px;
-}
-
+/* Report tables */
 .kagera-report-panel {
     margin-top: 10px;
     border: 1px solid #e7e0dc;
@@ -2584,12 +2567,6 @@ body.sidebar-collapsed .kagera-main {
     font-weight: 700;
 }
 
-@media (max-width: 1250px) {
-    .kagera-report-type {
-        order: 4;
-    }
-}
-
 </style>
 
 </head>
@@ -2620,7 +2597,9 @@ body.sidebar-collapsed .kagera-main {
         <select id="kageraDisplayType" class="kagera-filter-select">
             <option value="results">Auction Results</option>
             <option value="catalogue">Auction Catalogue</option>
-        </select>
+                <option value="high_low">High &amp; Low</option>
+                <option value="sales_summary">Sales Summary</option>
+</select>
     </div>
 
     <div class="kagera-results-actions">
@@ -2685,17 +2664,7 @@ body.sidebar-collapsed .kagera-main {
 
             <div id="kageraUploadStatus" class="kagera-upload-status"></div>
         </div>
-
-        <div class="kagera-report-type">
-            <label for="kageraReportType">Report</label>
-            <select id="kageraReportType" class="kagera-filter-select">
-                <option value="">Select Report</option>
-                <option value="high_low">High &amp; Low</option>
-                <option value="sales_summary">Sales Summary</option>
-            </select>
-        </div>
-
-        <button
+<button
             type="button"
             class="kagera-refresh-btn"
             onclick="loadKageraResults()"
@@ -3510,8 +3479,8 @@ async function loadKageraData(type)
 |--------------------------------------------------------------------------
 */
 
-const kageraReportType =
-    document.getElementById("kageraReportType");
+const kageraDisplayType =
+    document.getElementById("kageraDisplayType");
 
 function kageraNumber(value)
 {
@@ -3732,8 +3701,8 @@ async function kageraShowReport()
     const subtitle = document.getElementById("kageraReportSubtitle");
 
     const selectedReport =
-        kageraReportType
-            ? String(kageraReportType.value || "")
+        kageraDisplayType
+            ? String(kageraDisplayType.value || "")
             : "";
 
     if (!selectedReport) {
@@ -3847,8 +3816,8 @@ async function kageraShowReport()
         }
     }
 }
-if (kageraReportType) {
-    kageraReportType.addEventListener("change", function() {
+if (kageraDisplayType) {
+    kageraDisplayType.addEventListener("change", function() {
         void kageraShowReport();
     });
 }
