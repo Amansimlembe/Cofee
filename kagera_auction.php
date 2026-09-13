@@ -1659,7 +1659,7 @@ function handle_kagera_report()
             grade2,
             COALESCE(SUM(net_weight),0) AS kilos_sold,
             COALESCE(SUM(net_weight * COALESCE(price,0)),0) AS total_value,
-            MIN(NULLIF(price,0)) AS lowest_price,
+            MIN(CASE WHEN price > 0 AND net_weight > 0 THEN price END) AS lowest_price,
             CASE
                 WHEN SUM(CASE WHEN price > 0 AND net_weight > 0 THEN net_weight ELSE 0 END) > 0
                 THEN
@@ -1680,7 +1680,7 @@ function handle_kagera_report()
                     )
                 ELSE NULL
             END AS average_price,
-            MAX(NULLIF(price,0)) AS highest_price
+            MAX(CASE WHEN price > 0 AND net_weight > 0 THEN price END) AS highest_price
         FROM public.kagera_auction_results
         " . ($resultWhere ? 'WHERE ' . implode(' AND ', $resultWhere) : '') . "
         GROUP BY grade2
@@ -2581,6 +2581,11 @@ body.sidebar-collapsed .kagera-main {
     text-align: left;
 }
 
+.kagera-high-low-total-row td {
+    font-weight: 800;
+    border-top: 2px solid #333;
+}
+
 .kagera-prices-block {
     margin-top: 12px;
 }
@@ -2848,6 +2853,12 @@ body.sidebar-collapsed .kagera-main {
                 <td>0</td>
                 <td>0</td>
                 <td>0</td>
+            </tr>
+            <tr class="kagera-high-low-total-row">
+                <td>Total</td>
+                <td id="kageraHLTotalOffered">0</td>
+                <td id="kageraHLTotalSold">0</td>
+                <td id="kageraHLTotalValue">0.00</td>
             </tr>
         </tbody>
     </table>
@@ -3633,7 +3644,26 @@ const kageraReportType =
 
 function kageraNumber(value)
 {
-    const n = Number(String(value ?? "").replace(/,/g, "").trim());
+    if (value === null || value === undefined || value === "") {
+        return 0;
+    }
+
+    let text = String(value).trim();
+
+    // Remove common currency text and thousands separators while preserving
+    // the decimal point and negative sign.
+    text = text
+        .replace(/TZS/gi, "")
+        .replace(/USD/gi, "")
+        .replace(/\s+/g, "")
+        .replace(/,/g, "");
+
+    const match = text.match(/-?\d+(?:\.\d+)?/);
+    if (!match) {
+        return 0;
+    }
+
+    const n = Number(match[0]);
     return Number.isFinite(n) ? n : 0;
 }
 
@@ -3911,6 +3941,18 @@ async function kageraShowReport()
 
             const types = ["Dry Cherry Coffee", "Clean Coffee"];
 
+            const totalOffered = types.reduce(function(sum, type) {
+                return sum + kageraNumber((groups[type] || {}).kilos_offered);
+            }, 0);
+
+            const totalSold = types.reduce(function(sum, type) {
+                return sum + kageraNumber((groups[type] || {}).kilos_sold);
+            }, 0);
+
+            const totalValue = types.reduce(function(sum, type) {
+                return sum + kageraNumber((groups[type] || {}).total_value);
+            }, 0);
+
             const salesBody =
                 document.getElementById("kageraHighLowSalesBody");
             const pricesBody =
@@ -3955,18 +3997,69 @@ async function kageraShowReport()
                         "<td>" + kageraReportKg(g.kilos_sold) + "</td>" +
                         "<td>" + kageraReportMoney(g.total_value) + "</td>" +
                         "</tr>";
-                }).join("");
+                }).join("") +
+                "<tr class=\"kagera-high-low-total-row\">" +
+                    "<td>Total</td>" +
+                    "<td>" + kageraReportKg(totalOffered) + "</td>" +
+                    "<td>" + kageraReportKg(totalSold) + "</td>" +
+                    "<td>" + kageraReportMoney(totalValue) + "</td>" +
+                "</tr>";
             }
 
+            const totalOfferedEl =
+                document.getElementById("kageraHLTotalOffered");
+            const totalSoldEl =
+                document.getElementById("kageraHLTotalSold");
+            const totalValueEl =
+                document.getElementById("kageraHLTotalValue");
+
+            if (totalOfferedEl) {
+                totalOfferedEl.textContent = kageraReportKg(totalOffered);
+            }
+            if (totalSoldEl) {
+                totalSoldEl.textContent = kageraReportKg(totalSold);
+            }
+            if (totalValueEl) {
+                totalValueEl.textContent = kageraReportMoney(totalValue);
+            }
+
+            /*
+             * PRICE TABLE
+             * Prices must come only from Auction Results:
+             *   Lowest  = minimum positive price
+             *   Average = weighted average price per Kg
+             *   Highest = maximum positive price
+             */
             if (pricesBody) {
                 pricesBody.innerHTML = types.map(function(type) {
                     const g = groups[type] || {};
 
+                    const lowest =
+                        g.lowest_price !== null &&
+                        g.lowest_price !== undefined &&
+                        kageraNumber(g.lowest_price) > 0
+                            ? kageraReportMoney(g.lowest_price)
+                            : "-";
+
+                    const average =
+                        g.average_price !== null &&
+                        g.average_price !== undefined &&
+                        kageraNumber(g.average_price) > 0
+                            ? kageraReportMoney(g.average_price)
+                            : "-";
+
+                    const highest =
+                        g.highest_price !== null &&
+                        g.highest_price !== undefined &&
+                        kageraNumber(g.highest_price) > 0
+                            ? kageraReportMoney(g.highest_price)
+                            : "-";
+
                     return "<tr>" +
                         "<td>" + escapeKageraHtml(type) + "</td>" +
-                        "<td>" + (g.lowest_price === null ? "0" : kageraReportMoney(g.lowest_price)) + "</td>" +
-                        "<td>" + (g.average_price === null ? "-" : kageraReportMoney(g.average_price)) + "</td>" +
-                        "<td>" + (g.highest_price === null ? "0" : kageraReportMoney(g.highest_price)) + "</td>" +
+                        "<td>" + lowest + "</td>" +
+                        "<td>" + average + "</td>" +
+                        "<td>" + highest + "</td>" +
                         "</tr>";
                 }).join("");
             }
