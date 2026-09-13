@@ -315,6 +315,273 @@ function ensure_kagera_table()
     ");
 }
 
+
+/*
+|--------------------------------------------------------------------------
+| KAGERA CATALOGUE TABLE
+|--------------------------------------------------------------------------
+| Catalogue upload uses the Auction Date from Excel as date_sold, while
+| retaining the complete catalogue fields.
+|--------------------------------------------------------------------------
+*/
+function ensure_kagera_catalogue_table()
+{
+    $db = kagera_db();
+
+    $db->exec("
+        CREATE TABLE IF NOT EXISTS public.kagera_auction_catalogue (
+            id BIGSERIAL PRIMARY KEY,
+            lot_no VARCHAR(100),
+            auction_no VARCHAR(50),
+            date_sold DATE,
+            union_name VARCHAR(255),
+            production_group VARCHAR(255),
+            amcos VARCHAR(255),
+            district VARCHAR(255),
+            warehouse VARCHAR(255),
+            bags NUMERIC(15,2),
+            net_weight NUMERIC(15,2),
+            grade VARCHAR(150),
+            grade2 VARCHAR(150),
+            certification VARCHAR(150),
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+    ");
+
+    $db->exec("
+        DELETE FROM public.kagera_auction_catalogue
+        WHERE lot_no IS NULL OR BTRIM(lot_no) = ''
+           OR auction_no IS NULL OR BTRIM(auction_no) = ''
+           OR date_sold IS NULL
+    ");
+
+    $db->exec("
+        DELETE FROM public.kagera_auction_catalogue a
+        USING public.kagera_auction_catalogue b
+        WHERE a.id < b.id
+          AND a.lot_no = b.lot_no
+          AND a.auction_no = b.auction_no
+          AND a.date_sold = b.date_sold
+    ");
+
+    $db->exec("
+        CREATE INDEX IF NOT EXISTS idx_kagera_catalogue_auction_no
+        ON public.kagera_auction_catalogue (auction_no)
+    ");
+
+    $db->exec("
+        CREATE INDEX IF NOT EXISTS idx_kagera_catalogue_lot_no
+        ON public.kagera_auction_catalogue (lot_no)
+    ");
+
+    $db->exec("
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_kagera_catalogue_lot_auction_date
+        ON public.kagera_auction_catalogue (lot_no, auction_no, date_sold)
+        WHERE lot_no IS NOT NULL
+          AND auction_no IS NOT NULL
+          AND date_sold IS NOT NULL
+    ");
+}
+
+/*
+|--------------------------------------------------------------------------
+| CATALOGUE UPLOAD
+|--------------------------------------------------------------------------
+*/
+function handle_kagera_catalogue_upload()
+{
+    if (!isset($_FILES["kagera_excel"])) {
+        kagera_json(false, "Please select a Catalogue Excel file.", [], 400);
+    }
+
+    $file = $_FILES["kagera_excel"];
+
+    if (($file["error"] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        kagera_json(false, "The Catalogue file could not be uploaded.", [], 400);
+    }
+
+    $ext = strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
+    $allowed = ["xlsx","xls","xlsm","xltx","xltm","xlsb","ods","csv","tsv","txt","xml","html","htm"];
+
+    if (!in_array($ext, $allowed, true)) {
+        kagera_json(false, "Unsupported Catalogue file format.", [], 400);
+    }
+
+    $rows = kagera_parse_excel($file["tmp_name"], $ext);
+
+    if (!is_array($rows) || count($rows) < 2) {
+        kagera_json(false, "The Catalogue Excel file does not contain enough data.", [], 400);
+    }
+
+    $headerIndex = null;
+    for ($r = 0; $r < min(count($rows), 15); $r++) {
+        $headers = array_map("kagera_norm", $rows[$r]);
+        if (
+            kagera_find_col($headers, ["lot_no","lot_number","lot"]) !== null &&
+            kagera_find_col($headers, ["auction_no","auction_number","auction"]) !== null &&
+            kagera_find_col($headers, ["auction_date","date","date_sold"]) !== null
+        ) {
+            $headerIndex = $r;
+            break;
+        }
+    }
+
+    if ($headerIndex === null) {
+        kagera_json(false, "Catalogue header row could not be identified. Required fields are Lot No., Auction No. and Auction Date.", [], 400);
+    }
+
+    $headers = array_map("kagera_norm", $rows[$headerIndex]);
+
+    $col = [
+        "lot_no" => kagera_find_col($headers, ["lot_no","lot_number","lot"]),
+        "auction_no" => kagera_find_col($headers, ["auction_no","auction_number","auction"]),
+        "date_sold" => kagera_find_col($headers, ["auction_date","date_sold","sold_date","date"]),
+        "union_name" => kagera_find_col($headers, ["union","union_name"]),
+        "production_group" => kagera_find_col($headers, ["production_group","production"]),
+        "amcos" => kagera_find_col($headers, ["amcos","amcos_name"]),
+        "district" => kagera_find_col($headers, ["district"]),
+        "warehouse" => kagera_find_col($headers, ["warehouse","warehouse_name"]),
+        "bags" => kagera_find_col($headers, ["bags","bag","no_of_bags","number_of_bags"]),
+        "net_weight" => kagera_find_col($headers, ["kgs","kg","net_weight","net_weight_kg"]),
+        "grade" => kagera_find_col($headers, ["grade"]),
+        "grade2" => kagera_find_col($headers, ["grade2","grade_2","grade_ii"]),
+        "certification" => kagera_find_col($headers, ["certification","certificate"])
+    ];
+
+    $records = [];
+    $rowErrors = [];
+
+    foreach ($rows as $r => $row) {
+        if ($r <= $headerIndex) continue;
+
+        $get = function($key) use ($row,$col) {
+            $i=$col[$key];
+            return $i === null ? "" : trim((string)($row[$i] ?? ""));
+        };
+
+        $lot=$get("lot_no");
+        $auction=$get("auction_no");
+        $date=kagera_normalize_date($get("date_sold"));
+
+        if ($lot === "" && $auction === "" && $date === null) continue;
+
+        $missing=[];
+        if ($lot==="") $missing[]="Lot No";
+        if ($auction==="") $missing[]="Auction No";
+        if ($date===null) $missing[]="Auction Date";
+
+        if ($missing) {
+            $rowErrors[]=["excel_row"=>$r+1,"missing_fields"=>$missing];
+            continue;
+        }
+
+        $key=$lot."\x1F".$auction."\x1F".$date;
+        $records[$key]=[
+            "lot_no"=>$lot,
+            "auction_no"=>$auction,
+            "date_sold"=>$date,
+            "union_name"=>$get("union_name"),
+            "production_group"=>$get("production_group"),
+            "amcos"=>$get("amcos"),
+            "district"=>$get("district"),
+            "warehouse"=>$get("warehouse"),
+            "bags"=>kagera_number($get("bags")),
+            "net_weight"=>kagera_number($get("net_weight")),
+            "grade"=>$get("grade"),
+            "grade2"=>$get("grade2"),
+            "certification"=>$get("certification")
+        ];
+    }
+
+    if ($rowErrors) {
+        kagera_json(false, "Some Catalogue rows have blank or invalid required fields. No data was uploaded.", ["errors"=>$rowErrors], 400);
+    }
+
+    if (!$records) {
+        kagera_json(false, "No valid Catalogue records were found in the Excel file.", [], 400);
+    }
+
+    ensure_kagera_catalogue_table();
+    $db=kagera_db();
+
+    $existing=[];
+    $stmt=$db->query("SELECT id,lot_no,auction_no,date_sold FROM public.kagera_auction_catalogue WHERE lot_no IS NOT NULL AND auction_no IS NOT NULL AND date_sold IS NOT NULL");
+    while($old=$stmt->fetch(PDO::FETCH_ASSOC)){
+        $key=trim((string)$old["lot_no"])."\x1F".trim((string)$old["auction_no"])."\x1F".$old["date_sold"];
+        $existing[$key]=$old;
+    }
+
+    $replacementKeys=array_values(array_intersect(array_keys($records),array_keys($existing)));
+    $confirmed=isset($_POST["confirm_replace"]) && (string)$_POST["confirm_replace"]==="1";
+
+    if ($replacementKeys && !$confirmed) {
+        kagera_json(true,"Existing matching Catalogue records were found. Confirmation is required before replacement.",[
+            "requires_confirmation"=>true,
+            "existing_count"=>count($replacementKeys),
+            "new_record_count"=>count($records)-count($replacementKeys),
+            "replacement_records"=>array_map(function($key) use($records){
+                return ["lot_no"=>$records[$key]["lot_no"],"auction_no"=>$records[$key]["auction_no"],"date_sold"=>$records[$key]["date_sold"]];
+            },$replacementKeys)
+        ]);
+    }
+
+    $db->beginTransaction();
+    try {
+        if($replacementKeys){
+            $del=$db->prepare("DELETE FROM public.kagera_auction_catalogue WHERE lot_no=:lot_no AND auction_no=:auction_no AND date_sold=:date_sold");
+            foreach($replacementKeys as $key){
+                $old=$existing[$key];
+                $del->execute(["lot_no"=>$old["lot_no"],"auction_no"=>$old["auction_no"],"date_sold"=>$old["date_sold"]]);
+            }
+        }
+
+        $ins=$db->prepare("
+            INSERT INTO public.kagera_auction_catalogue
+            (lot_no,auction_no,date_sold,union_name,production_group,amcos,district,warehouse,bags,net_weight,grade,grade2,certification)
+            VALUES
+            (:lot_no,:auction_no,:date_sold,:union_name,:production_group,:amcos,:district,:warehouse,:bags,:net_weight,:grade,:grade2,:certification)
+        ");
+        foreach($records as $record) $ins->execute($record);
+
+        $db->commit();
+    } catch(Throwable $e) {
+        if($db->inTransaction()) $db->rollBack();
+        error_log("Kagera Catalogue upload database error: ".$e->getMessage());
+        throw new Exception("The Catalogue records could not be saved to the database.");
+    }
+
+    $replaced=count($replacementKeys);
+    $added=count($records)-$replaced;
+
+    kagera_json(true,"Kagera Catalogue upload completed. {$added} new record(s) added and {$replaced} existing record(s) replaced.",[
+        "requires_confirmation"=>false,
+        "new_records"=>$added,
+        "replaced_records"=>$replaced,
+        "processed_records"=>count($records)
+    ]);
+}
+
+/*
+|--------------------------------------------------------------------------
+| CATALOGUE FETCH
+|--------------------------------------------------------------------------
+*/
+function handle_kagera_catalogue_fetch()
+{
+    ensure_kagera_catalogue_table();
+    $db=kagera_db();
+
+    $stmt=$db->query("
+        SELECT lot_no,auction_no,date_sold,union_name,production_group,amcos,district,warehouse,bags,net_weight,grade,grade2,certification
+        FROM public.kagera_auction_catalogue
+        ORDER BY
+            CASE WHEN auction_no ~ '^[0-9]+([.][0-9]+)?$' THEN auction_no::NUMERIC ELSE NULL END DESC NULLS LAST,
+            CASE WHEN lot_no ~ '^[0-9]+([.][0-9]+)?$' THEN lot_no::NUMERIC ELSE NULL END ASC NULLS LAST,
+            lot_no ASC
+    ");
+    kagera_json(true,"Kagera Catalogue loaded.",$stmt->fetchAll(),200);
+}
+
 /*
 |--------------------------------------------------------------------------
 | JSON RESPONSE
@@ -1334,19 +1601,24 @@ function handle_kagera_fetch()
 
 try {
 
+    $kageraType = strtolower(trim((string)($_REQUEST['kagera_type'] ?? 'results')));
+
     if (
         ($_GET['action'] ?? '') === 'fetch'
     ) {
-
+        if ($kageraType === 'catalogue') {
+            handle_kagera_catalogue_fetch();
+        }
         handle_kagera_fetch();
     }
 
     if (
-        ($_SERVER['REQUEST_METHOD'] ?? 'GET')
-        === 'POST' &&
+        ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' &&
         isset($_FILES['kagera_excel'])
     ) {
-
+        if ($kageraType === 'catalogue') {
+            handle_kagera_catalogue_upload();
+        }
         handle_kagera_upload();
     }
 
@@ -2031,6 +2303,27 @@ body.sidebar-collapsed .kagera-main {
     }
 }
 
+
+
+.kagera-display-type,
+.kagera-upload-type {
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    flex:0 0 auto;
+}
+.kagera-display-type label,
+.kagera-upload-type label {
+    color:#6b625e;
+    font-size:10px;
+    font-weight:700;
+}
+.kagera-upload-type .kagera-filter-select {
+    width:130px;
+}
+#kageraCatalogueTable {
+    display:none;
+}
 </style>
 
 </head>
@@ -2052,8 +2345,16 @@ body.sidebar-collapsed .kagera-main {
 <div class="kagera-data-header kagera-results-header">
 
     <div class="kagera-results-heading">
-        <h2>Kagera Auction Results</h2>
-        <p>Results currently stored in the database.</p>
+        <h2 id="kageraSectionTitle">Kagera Auction Results</h2>
+        <p id="kageraSectionSubtitle">Results currently stored in the database.</p>
+    </div>
+
+    <div class="kagera-display-type">
+        <label for="kageraDisplayType">Display</label>
+        <select id="kageraDisplayType" class="kagera-filter-select">
+            <option value="results">Auction Results</option>
+            <option value="catalogue">Auction Catalogue</option>
+        </select>
     </div>
 
     <div class="kagera-results-actions">
@@ -2084,6 +2385,14 @@ body.sidebar-collapsed .kagera-main {
                 enctype="multipart/form-data"
                 class="kagera-header-upload-form"
             >
+                <div class="kagera-upload-type">
+                    <label for="kageraUploadType">Upload</label>
+                    <select id="kageraUploadType" name="kagera_type" class="kagera-filter-select">
+                        <option value="results">Auction Results</option>
+                        <option value="catalogue">Auction Catalogue</option>
+                    </select>
+                </div>
+
                 <div class="kagera-file-area">
                     <input
                         type="file"
@@ -2129,48 +2438,26 @@ body.sidebar-collapsed .kagera-main {
 
 <div class="kagera-table-wrap">
 
-<table
-    id="kageraResultsTable"
-    class="kagera-results-table"
->
-
-<thead>
-
-<tr>
-
-<th>Lot No</th>
-<th>Auction No.</th>
-<th>Date Sold</th>
-<th>Warehouse</th>
-<th>Warehouse Location</th>
-<th>Net Weight (Kg)</th>
-<th>Grade</th>
-<th>Grade2</th>
-<th>Price</th>
-<th>Buyer Name</th>
-
-</tr>
-
-</thead>
-
-
+<table id="kageraResultsTable" class="kagera-results-table">
+<thead><tr>
+<th>Lot No.</th><th>Auction No.</th><th>Date Sold</th><th>Warehouse</th>
+<th>Warehouse Location</th><th>Net Weight (Kg)</th><th>Grade</th>
+<th>Grade2</th><th>Price</th><th>Buyer Name</th>
+</tr></thead>
 <tbody id="kageraResultsBody">
-
-<tr>
-
-<td
-    colspan="10"
-    class="kagera-empty-state"
->
-
-No Kagera Auction results loaded.
-
-</td>
-
-</tr>
-
+<tr><td colspan="10" class="kagera-empty-state">No Kagera Auction results loaded.</td></tr>
 </tbody>
+</table>
 
+<table id="kageraCatalogueTable" class="kagera-results-table" style="display:none;">
+<thead><tr>
+<th>Lot No.</th><th>Auction No.</th><th>Auction Date</th><th>Union</th>
+<th>Production Group</th><th>AMCOS</th><th>District</th><th>Warehouse</th>
+<th>Bags</th><th>Kgs</th><th>Grade</th><th>Grade2</th><th>Certification</th>
+</tr></thead>
+<tbody id="kageraCatalogueBody">
+<tr><td colspan="13" class="kagera-empty-state">No Kagera Catalogue loaded.</td></tr>
+</tbody>
 </table>
 
 </div>
@@ -2195,6 +2482,14 @@ const kageraUploadForm =
 
 const kageraUploadStatus =
     document.getElementById("kageraUploadStatus");
+const kageraDisplayType =
+    document.getElementById("kageraDisplayType");
+
+const kageraUploadType =
+    document.getElementById("kageraUploadType");
+
+let kageraCatalogueData = [];
+
 
 
 /*
@@ -2313,6 +2608,13 @@ if (kageraUploadForm) {
             async function submitUpload(confirmReplace) {
                 const formData =
                     new FormData(kageraUploadForm);
+
+                formData.set(
+                    "kagera_type",
+                    kageraUploadType
+                        ? kageraUploadType.value
+                        : "results"
+                );
 
                 if (confirmReplace) {
                     formData.set("confirm_replace", "1");
@@ -2540,90 +2842,47 @@ function kageraSortResults(rows)
 let kageraAllResults = [];
 let kageraResultsLoaded = false;
 
-function kageraPopulateSeasonFilter()
+function kageraPopulateSeasonFilterFromRows(rows)
 {
-    const seasonSelect =
-        document.getElementById("kageraSeasonFilter");
-
-    if (!seasonSelect) {
-        return;
-    }
+    const seasonSelect = document.getElementById("kageraSeasonFilter");
+    if (!seasonSelect) return;
 
     const seasons = new Set();
 
-    kageraAllResults.forEach(function (row) {
-
-        const season =
-            kageraGetSeason(row.date_sold);
-
-        if (season) {
-            seasons.add(season);
-        }
+    (rows || []).forEach(function(row) {
+        const season = kageraGetSeason(row.date_sold);
+        if (season) seasons.add(String(season));
     });
 
-    const sortedSeasons =
-        Array.from(seasons).sort(function (a, b) {
+    const sorted = Array.from(seasons).sort(function(a, b) {
+        const yearA = Number(String(a).split("/")[0]);
+        const yearB = Number(String(b).split("/")[0]);
+        return yearB - yearA;
+    });
 
-            /*
-             * Always normalize the values to strings before
-             * using string methods. This prevents:
-             * "b.substring is not a function"
-             */
-            const seasonA = String(a ?? "").trim();
-            const seasonB = String(b ?? "").trim();
+    seasonSelect.innerHTML = '<option value="">Select Season</option>';
 
-            const yearA =
-                Number(seasonA.split("/")[0]);
-
-            const yearB =
-                Number(seasonB.split("/")[0]);
-
-            if (
-                Number.isFinite(yearA) &&
-                Number.isFinite(yearB)
-            ) {
-                return yearB - yearA;
-            }
-
-            return seasonB.localeCompare(
-                seasonA,
-                undefined,
-                {
-                    numeric: true,
-                    sensitivity: "base"
-                }
-            );
-        });
-
-    seasonSelect.innerHTML =
-        '<option value="">Select Season</option>';
-
-    sortedSeasons.forEach(function (season) {
-
-        const option =
-            document.createElement("option");
-
+    sorted.forEach(function(season) {
+        const option = document.createElement("option");
         option.value = season;
         option.textContent = season;
-
         seasonSelect.appendChild(option);
     });
 }
 
-function kageraPopulateAuctionFilter()
+function kageraPopulateSeasonFilter()
 {
-    const seasonSelect =
-        document.getElementById("kageraSeasonFilter");
+    kageraPopulateSeasonFilterFromRows(kageraAllResults);
+}
 
-    const auctionSelect =
-        document.getElementById("kageraAuctionFilter");
+function kageraPopulateAuctionFilterFromRows(rows)
+{
+    const seasonSelect = document.getElementById("kageraSeasonFilter");
+    const auctionSelect = document.getElementById("kageraAuctionFilter");
 
-    if (!seasonSelect || !auctionSelect) {
-        return;
-    }
+    if (!seasonSelect || !auctionSelect) return;
 
-    const selectedSeason =
-        seasonSelect.value;
+    const selectedSeason = seasonSelect.value;
 
     auctionSelect.innerHTML =
         '<option value="">Select Auction</option>';
@@ -2635,66 +2894,43 @@ function kageraPopulateAuctionFilter()
 
     const auctions = new Set();
 
-    kageraAllResults.forEach(function (row) {
+    (rows || []).forEach(function(row) {
+        if (kageraGetSeason(row.date_sold) !== selectedSeason) return;
 
-        if (
-            kageraGetSeason(row.date_sold) !==
-            selectedSeason
-        ) {
-            return;
-        }
-
-        const auction =
-            String(row.auction_no ?? "").trim();
-
-        if (auction !== "") {
-            auctions.add(auction);
-        }
+        const auction = String(row.auction_no ?? "").trim();
+        if (auction) auctions.add(auction);
     });
 
-    const sortedAuctions =
-        Array.from(auctions).sort(function (a, b) {
+    const sorted = Array.from(auctions).sort(function(a, b) {
+        const numberA = kageraAuctionNumber(a);
+        const numberB = kageraAuctionNumber(b);
 
-            const numberA =
-                kageraAuctionNumber(a);
+        if (numberA !== null && numberB !== null) {
+            return numberB - numberA;
+        }
 
-            const numberB =
-                kageraAuctionNumber(b);
+        if (numberA !== null) return -1;
+        if (numberB !== null) return 1;
 
-            if (
-                numberA !== null &&
-                numberB !== null
-            ) {
-                return numberB - numberA;
-            }
-
-            if (numberA !== null) return -1;
-            if (numberB !== null) return 1;
-
-            return String(b ?? "").localeCompare(
-                String(a ?? ""),
-                undefined,
-                {
-                    numeric: true,
-                    sensitivity: "base"
-                }
-            );
+        return String(b).localeCompare(String(a), undefined, {
+            numeric: true,
+            sensitivity: "base"
         });
+    });
 
-    sortedAuctions.forEach(function (auction) {
-
-        const option =
-            document.createElement("option");
-
+    sorted.forEach(function(auction) {
+        const option = document.createElement("option");
         option.value = auction;
-        option.textContent =
-            "Auction " + auction;
-
+        option.textContent = "Auction " + auction;
         auctionSelect.appendChild(option);
     });
 
-    auctionSelect.disabled =
-        sortedAuctions.length === 0;
+    auctionSelect.disabled = sorted.length === 0;
+}
+
+function kageraPopulateAuctionFilter()
+{
+    kageraPopulateAuctionFilterFromRows(kageraAllResults);
 }
 
 function kageraGetFilteredResults()
@@ -2836,102 +3072,111 @@ function kageraRenderResults(rows)
             .join("");
 }
 
-async function loadKageraResults()
-{
-    const body =
-        document.getElementById(
-            "kageraResultsBody"
-        );
 
-    if (!body) {
+function kageraGetFilteredCatalogue()
+{
+    const seasonSelect = document.getElementById("kageraSeasonFilter");
+    const auctionSelect = document.getElementById("kageraAuctionFilter");
+
+    const selectedSeason = seasonSelect ? seasonSelect.value : "";
+    const selectedAuction = auctionSelect ? auctionSelect.value : "";
+
+    return kageraCatalogueData.filter(function(row) {
+        const rowSeason = kageraGetSeason(row.date_sold);
+        const rowAuction = String(row.auction_no ?? "").trim();
+
+        return (!selectedSeason || rowSeason === selectedSeason) &&
+               (!selectedAuction || rowAuction === selectedAuction);
+    });
+}
+
+function kageraRenderCatalogue(rows)
+{
+    const body=document.getElementById("kageraCatalogueBody");
+    if(!body) return;
+
+    const sorted=rows.slice().sort(function(a,b){
+        const aa=kageraAuctionNumber(a.auction_no), ab=kageraAuctionNumber(b.auction_no);
+        if(aa!==null && ab!==null && aa!==ab) return ab-aa;
+        const la=kageraAuctionNumber(a.lot_no), lb=kageraAuctionNumber(b.lot_no);
+        if(la!==null && lb!==null && la!==lb) return la-lb;
+        return String(a.lot_no??"").localeCompare(String(b.lot_no??""),undefined,{numeric:true,sensitivity:"base"});
+    });
+
+    if(!sorted.length){
+        body.innerHTML='<tr><td colspan="13" class="kagera-empty-state">No Kagera Catalogue records found for the selected filters.</td></tr>';
         return;
     }
 
-    if (!kageraResultsLoaded) {
+    body.innerHTML=sorted.map(function(row){
+        return "<tr>"+
+            "<td>"+escapeKageraHtml(row.lot_no??"")+"</td>"+
+            "<td>"+escapeKageraHtml(row.auction_no??"")+"</td>"+
+            "<td>"+escapeKageraHtml(formatKageraDate(row.date_sold??""))+"</td>"+
+            "<td>"+escapeKageraHtml(row.union_name??"")+"</td>"+
+            "<td>"+escapeKageraHtml(row.production_group??"")+"</td>"+
+            "<td>"+escapeKageraHtml(row.amcos??"")+"</td>"+
+            "<td>"+escapeKageraHtml(row.district??"")+"</td>"+
+            "<td>"+escapeKageraHtml(row.warehouse??"")+"</td>"+
+            "<td>"+escapeKageraHtml(row.bags??"")+"</td>"+
+            "<td>"+escapeKageraHtml(row.net_weight??"")+"</td>"+
+            "<td>"+escapeKageraHtml(row.grade??"")+"</td>"+
+            "<td>"+escapeKageraHtml(row.grade2??"")+"</td>"+
+            "<td>"+escapeKageraHtml(row.certification??"")+"</td>"+
+            "</tr>";
+    }).join("");
+}
 
-        body.innerHTML =
-            '<tr>' +
-            '<td colspan="10" class="kagera-empty-state">' +
-            'Loading results...' +
-            '</td>' +
-            '</tr>';
-    }
+async function loadKageraData(type)
+{
+    const isCatalogue=type==="catalogue";
+    const body=document.getElementById(isCatalogue ? "kageraCatalogueBody" : "kageraResultsBody");
+    if(!body) return;
 
-    try {
-
-        const response =
-            await fetch(
-                "kagera_auction.php?action=fetch",
-                {
-                    cache: "no-store",
-                    credentials: "same-origin"
-                }
-            );
-
-        const result =
-            await readKageraJson(response);
-
-        if (!result.data || !Array.isArray(result.data)) {
-
-            kageraAllResults = [];
-            kageraResultsLoaded = true;
-
-            kageraPopulateSeasonFilter();
-            kageraPopulateAuctionFilter();
-            kageraRenderResults([]);
-
-            return;
-        }
-
-        kageraAllResults =
-            result.data.slice();
-
-        kageraResultsLoaded = true;
-
-        /*
-        | Rebuild Season first.
-        */
-        kageraPopulateSeasonFilter();
-
-        /*
-        | Auction remains disabled until a Season is selected.
-        */
-        const auctionSelect =
-            document.getElementById(
-                "kageraAuctionFilter"
-            );
-
-        if (auctionSelect) {
-            auctionSelect.value = "";
-        }
-
-        kageraPopulateAuctionFilter();
-
-        /*
-        | No filters selected -> show all records,
-        | still correctly sorted.
-        */
-        kageraRenderResults(
-            kageraGetFilteredResults()
+    try{
+        const response=await fetch(
+            "kagera_auction.php?action=fetch&kagera_type="+encodeURIComponent(type),
+            {cache:"no-store",credentials:"same-origin"}
         );
+        const result=await readKageraJson(response);
 
-    } catch (error) {
-
-        console.error(
-            "Kagera fetch error:",
-            error
-        );
-
-        body.innerHTML =
-            '<tr>' +
-            '<td colspan="10" class="kagera-empty-state">' +
-            escapeKageraHtml(
-                error.message ||
-                "Unable to load results."
-            ) +
-            '</td>' +
-            '</tr>';
+        if(isCatalogue){
+            kageraCatalogueData=Array.isArray(result.data)?result.data:[];
+            kageraPopulateSeasonFilterFromRows(kageraCatalogueData);
+            const auctionSelect=document.getElementById("kageraAuctionFilter");
+            if(auctionSelect) auctionSelect.value="";
+            kageraPopulateAuctionFilterFromRows(kageraCatalogueData);
+            kageraRenderCatalogue(kageraGetFilteredCatalogue());
+        }else{
+            kageraAllResults=Array.isArray(result.data)?result.data:[];
+            kageraResultsLoaded=true;
+            kageraPopulateSeasonFilterFromRows(kageraAllResults);
+            const auctionSelect=document.getElementById("kageraAuctionFilter");
+            if(auctionSelect) auctionSelect.value="";
+            kageraPopulateAuctionFilterFromRows(kageraAllResults);
+            kageraRenderResults(kageraGetFilteredResults());
+        }
+    }catch(error){
+        body.innerHTML='<tr><td colspan="'+(isCatalogue?13:10)+'" class="kagera-empty-state">'+
+            escapeKageraHtml(error.message||"Unable to load records.")+"</td></tr>";
     }
+}
+
+async function loadKageraResults()
+{
+    const type=kageraDisplayType ? kageraDisplayType.value : "results";
+    const resultsTable=document.getElementById("kageraResultsTable");
+    const catalogueTable=document.getElementById("kageraCatalogueTable");
+    const title=document.getElementById("kageraSectionTitle");
+    const subtitle=document.getElementById("kageraSectionSubtitle");
+
+    if(resultsTable) resultsTable.style.display=type==="results"?"table":"none";
+    if(catalogueTable) catalogueTable.style.display=type==="catalogue"?"table":"none";
+
+    if(title) title.textContent=type==="catalogue"?"Kagera Auction Catalogue":"Kagera Auction Results";
+    if(subtitle) subtitle.textContent=type==="catalogue"?"Catalogue currently stored in the database.":"Results currently stored in the database.";
+
+    await loadKageraData(type);
 }
 
 /*
@@ -2969,9 +3214,12 @@ if (kageraSeasonSelect) {
             | Display all records in selected season
             | until an Auction is selected.
             */
-            kageraRenderResults(
-                kageraGetFilteredResults()
-            );
+            if (kageraDisplayType && kageraDisplayType.value === "catalogue") {
+                kageraPopulateAuctionFilterFromRows(kageraCatalogueData);
+                kageraRenderCatalogue(kageraGetFilteredCatalogue());
+            } else {
+                kageraRenderResults(kageraGetFilteredResults());
+            }
         }
     );
 }
@@ -2996,11 +3244,42 @@ if (kageraAuctionSelect) {
             | Selecting an Auction immediately filters
             | the table to that Auction within the selected Season.
             */
-            kageraRenderResults(
-                kageraGetFilteredResults()
-            );
+            if (kageraDisplayType && kageraDisplayType.value === "catalogue") {
+                kageraRenderCatalogue(kageraGetFilteredCatalogue());
+            } else {
+                kageraRenderResults(kageraGetFilteredResults());
+            }
         }
     );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| DISPLAY TYPE
+|--------------------------------------------------------------------------
+*/
+if(kageraDisplayType){
+    kageraDisplayType.addEventListener("change", function(){
+        loadKageraResults();
+    });
+}
+
+/*
+|--------------------------------------------------------------------------
+| UPLOAD TYPE
+|--------------------------------------------------------------------------
+*/
+if(kageraUploadType){
+    kageraUploadType.addEventListener("change", function(){
+        const type=this.value;
+        if(kageraFileName){
+            kageraFileName.textContent =
+                type==="catalogue"
+                ? "Select Catalogue Excel file"
+                : "Select Auction Results Excel file";
+        }
+    });
 }
 
 /*
