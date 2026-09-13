@@ -1603,6 +1603,65 @@ body {
 }
 
 .kagera-upload-btn,
+.kagera-filters {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    margin-left: auto;
+    margin-right: 10px;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 145px;
+}
+
+.filter-group label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #6b625e;
+}
+
+.kagera-filter-select {
+    width: 145px;
+    height: 36px;
+    padding: 0 30px 0 10px;
+    border: 1px solid #ddd4d0;
+    border-radius: 7px;
+    background: #fff;
+    color: #4e342e;
+    font-size: 12px;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+}
+
+.kagera-filter-select:focus {
+    border-color: #8d6e63;
+    box-shadow: 0 0 0 2px rgba(141, 110, 99, .12);
+}
+
+.kagera-filter-select:disabled {
+    background: #f5f2f0;
+    color: #aaa09b;
+    cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+    .kagera-data-header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .kagera-filters {
+        width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+    }
+}
+
 .kagera-refresh-btn {
     border: 0;
     border-radius: 8px;
@@ -1923,6 +1982,67 @@ Results currently stored in the database.
 </div>
 
 
+<div class="kagera-filters">
+
+
+
+    <div class="filter-group">
+
+
+
+        <label for="kageraSeasonFilter">Season</label>
+
+
+
+        <select id="kageraSeasonFilter" class="kagera-filter-select">
+
+
+
+            <option value="">Select Season</option>
+
+
+
+        </select>
+
+
+
+    </div>
+
+
+
+
+
+
+
+    <div class="filter-group">
+
+
+
+        <label for="kageraAuctionFilter">Auction No.</label>
+
+
+
+        <select id="kageraAuctionFilter" class="kagera-filter-select" disabled>
+
+
+
+            <option value="">Select Auction</option>
+
+
+
+        </select>
+
+
+
+    </div>
+
+
+
+</div>
+
+
+
+
 <button
     type="button"
     class="kagera-refresh-btn"
@@ -2241,9 +2361,286 @@ if (kageraUploadForm) {
 |--------------------------------------------------------------------------
 */
 
-async function loadKageraResults()
+async function kageraGetSeason(dateValue)
 {
+    if (!dateValue) {
+        return null;
+    }
 
+    const value = String(dateValue).trim();
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+    if (!match) {
+        return null;
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+
+    /*
+    |--------------------------------------------------------------------------
+    | KAGERA SEASON
+    |--------------------------------------------------------------------------
+    | 01 June YYYY to 30 May YYYY+1.
+    | Example: 2026/2027 = 01 June 2026 to 30 May 2027.
+    |--------------------------------------------------------------------------
+    */
+    return month >= 6
+        ? year + "/" + (year + 1)
+        : (year - 1) + "/" + year;
+}
+
+function kageraAuctionNumber(value)
+{
+    const number = Number(
+        String(value ?? "")
+            .replace(/,/g, "")
+            .trim()
+    );
+
+    return Number.isFinite(number)
+        ? number
+        : null;
+}
+
+function kageraSortResults(rows)
+{
+    return rows.slice().sort(function (a, b) {
+
+        const auctionA =
+            kageraAuctionNumber(a.auction_no);
+
+        const auctionB =
+            kageraAuctionNumber(b.auction_no);
+
+        /*
+        | Auction No: largest -> smallest
+        */
+        if (
+            auctionA !== null &&
+            auctionB !== null &&
+            auctionA !== auctionB
+        ) {
+            return auctionB - auctionA;
+        }
+
+        if (auctionA !== null && auctionB === null) {
+            return -1;
+        }
+
+        if (auctionA === null && auctionB !== null) {
+            return 1;
+        }
+
+        /*
+        | Same Auction: Lot No smallest -> largest
+        */
+        const lotA =
+            kageraAuctionNumber(a.lot_no);
+
+        const lotB =
+            kageraAuctionNumber(b.lot_no);
+
+        if (
+            lotA !== null &&
+            lotB !== null &&
+            lotA !== lotB
+        ) {
+            return lotA - lotB;
+        }
+
+        if (lotA !== null && lotB === null) {
+            return -1;
+        }
+
+        if (lotA === null && lotB !== null) {
+            return 1;
+        }
+
+        return String(a.lot_no ?? "").localeCompare(
+            String(b.lot_no ?? ""),
+            undefined,
+            {
+                numeric: true,
+                sensitivity: "base"
+            }
+        );
+    });
+}
+
+let kageraAllResults = [];
+let kageraResultsLoaded = false;
+
+function kageraPopulateSeasonFilter()
+{
+    const seasonSelect =
+        document.getElementById("kageraSeasonFilter");
+
+    if (!seasonSelect) {
+        return;
+    }
+
+    const seasons = new Set();
+
+    kageraAllResults.forEach(function (row) {
+
+        const season =
+            kageraGetSeason(row.date_sold);
+
+        if (season) {
+            seasons.add(season);
+        }
+    });
+
+    const sortedSeasons =
+        Array.from(seasons).sort(function (a, b) {
+
+            return Number(b.substring(0, 4)) -
+                   Number(a.substring(0, 4));
+        });
+
+    seasonSelect.innerHTML =
+        '<option value="">Select Season</option>';
+
+    sortedSeasons.forEach(function (season) {
+
+        const option =
+            document.createElement("option");
+
+        option.value = season;
+        option.textContent = season;
+
+        seasonSelect.appendChild(option);
+    });
+}
+
+function kageraPopulateAuctionFilter()
+{
+    const seasonSelect =
+        document.getElementById("kageraSeasonFilter");
+
+    const auctionSelect =
+        document.getElementById("kageraAuctionFilter");
+
+    if (!seasonSelect || !auctionSelect) {
+        return;
+    }
+
+    const selectedSeason =
+        seasonSelect.value;
+
+    auctionSelect.innerHTML =
+        '<option value="">Select Auction</option>';
+
+    if (!selectedSeason) {
+        auctionSelect.disabled = true;
+        return;
+    }
+
+    const auctions = new Set();
+
+    kageraAllResults.forEach(function (row) {
+
+        if (
+            kageraGetSeason(row.date_sold) !==
+            selectedSeason
+        ) {
+            return;
+        }
+
+        const auction =
+            String(row.auction_no ?? "").trim();
+
+        if (auction !== "") {
+            auctions.add(auction);
+        }
+    });
+
+    const sortedAuctions =
+        Array.from(auctions).sort(function (a, b) {
+
+            const numberA =
+                kageraAuctionNumber(a);
+
+            const numberB =
+                kageraAuctionNumber(b);
+
+            if (
+                numberA !== null &&
+                numberB !== null
+            ) {
+                return numberB - numberA;
+            }
+
+            if (numberA !== null) return -1;
+            if (numberB !== null) return 1;
+
+            return b.localeCompare(
+                a,
+                undefined,
+                {
+                    numeric: true,
+                    sensitivity: "base"
+                }
+            );
+        });
+
+    sortedAuctions.forEach(function (auction) {
+
+        const option =
+            document.createElement("option");
+
+        option.value = auction;
+        option.textContent =
+            "Auction " + auction;
+
+        auctionSelect.appendChild(option);
+    });
+
+    auctionSelect.disabled =
+        sortedAuctions.length === 0;
+}
+
+function kageraGetFilteredResults()
+{
+    const seasonSelect =
+        document.getElementById("kageraSeasonFilter");
+
+    const auctionSelect =
+        document.getElementById("kageraAuctionFilter");
+
+    const selectedSeason =
+        seasonSelect
+            ? seasonSelect.value
+            : "";
+
+    const selectedAuction =
+        auctionSelect
+            ? auctionSelect.value
+            : "";
+
+    return kageraAllResults.filter(function (row) {
+
+        const rowSeason =
+            kageraGetSeason(row.date_sold);
+
+        const rowAuction =
+            String(row.auction_no ?? "").trim();
+
+        const seasonMatches =
+            !selectedSeason ||
+            rowSeason === selectedSeason;
+
+        const auctionMatches =
+            !selectedAuction ||
+            rowAuction === selectedAuction;
+
+        return seasonMatches && auctionMatches;
+    });
+}
+
+function kageraRenderResults(rows)
+{
     const body =
         document.getElementById(
             "kageraResultsBody"
@@ -2253,12 +2650,116 @@ async function loadKageraResults()
         return;
     }
 
+    const sortedRows =
+        kageraSortResults(rows);
+
+    if (!sortedRows.length) {
+
+        body.innerHTML =
+            '<tr>' +
+            '<td colspan="10" class="kagera-empty-state">' +
+            'No Kagera Auction results found for the selected filters.' +
+            '</td>' +
+            '</tr>';
+
+        return;
+    }
+
     body.innerHTML =
-        '<tr>' +
-        '<td colspan="10" class="kagera-empty-state">' +
-        'Loading results...' +
-        '</td>' +
-        '</tr>';
+        sortedRows
+            .map(function (row) {
+
+                return (
+                    "<tr>" +
+
+                    "<td>" +
+                    escapeKageraHtml(
+                        row.lot_no ?? ""
+                    ) +
+                    "</td>" +
+
+                    "<td>" +
+                    escapeKageraHtml(
+                        row.auction_no ?? ""
+                    ) +
+                    "</td>" +
+
+                    "<td>" +
+                    escapeKageraHtml(
+                        formatKageraDate(
+                            row.date_sold ?? ""
+                        )
+                    ) +
+                    "</td>" +
+
+                    "<td>" +
+                    escapeKageraHtml(
+                        row.warehouse ?? ""
+                    ) +
+                    "</td>" +
+
+                    "<td>" +
+                    escapeKageraHtml(
+                        row.warehouse_location ?? ""
+                    ) +
+                    "</td>" +
+
+                    "<td>" +
+                    escapeKageraHtml(
+                        row.net_weight ?? ""
+                    ) +
+                    "</td>" +
+
+                    "<td>" +
+                    escapeKageraHtml(
+                        row.grade ?? ""
+                    ) +
+                    "</td>" +
+
+                    "<td>" +
+                    escapeKageraHtml(
+                        row.grade2 ?? ""
+                    ) +
+                    "</td>" +
+
+                    "<td>" +
+                    escapeKageraHtml(
+                        row.price ?? ""
+                    ) +
+                    "</td>" +
+
+                    "<td>" +
+                    escapeKageraHtml(
+                        row.buyer_name ?? ""
+                    ) +
+                    "</td>" +
+
+                    "</tr>"
+                );
+            })
+            .join("");
+}
+
+async function loadKageraResults()
+{
+    const body =
+        document.getElementById(
+            "kageraResultsBody"
+        );
+
+    if (!body) {
+        return;
+    }
+
+    if (!kageraResultsLoaded) {
+
+        body.innerHTML =
+            '<tr>' +
+            '<td colspan="10" class="kagera-empty-state">' +
+            'Loading results...' +
+            '</td>' +
+            '</tr>';
+    }
 
     try {
 
@@ -2272,98 +2773,51 @@ async function loadKageraResults()
             );
 
         const result =
-            await readKageraJson(
-                response
-            );
+            await readKageraJson(response);
 
-        if (
-            !result.data ||
-            !result.data.length
-        ) {
+        if (!result.data || !Array.isArray(result.data)) {
 
-            body.innerHTML =
-                '<tr>' +
-                '<td colspan="10" class="kagera-empty-state">' +
-                'No Kagera Auction results loaded.' +
-                '</td>' +
-                '</tr>';
+            kageraAllResults = [];
+            kageraResultsLoaded = true;
+
+            kageraPopulateSeasonFilter();
+            kageraPopulateAuctionFilter();
+            kageraRenderResults([]);
 
             return;
         }
 
+        kageraAllResults =
+            result.data.slice();
 
-        body.innerHTML =
-            result.data
-                .map(function (row) {
+        kageraResultsLoaded = true;
 
-                    return (
-                        "<tr>" +
+        /*
+        | Rebuild Season first.
+        */
+        kageraPopulateSeasonFilter();
 
-                        "<td>" +
-                        escapeKageraHtml(
-                            row.lot_no ?? ""
-                        ) +
-                        "</td>" +
+        /*
+        | Auction remains disabled until a Season is selected.
+        */
+        const auctionSelect =
+            document.getElementById(
+                "kageraAuctionFilter"
+            );
 
-                        "<td>" +
-                        escapeKageraHtml(
-                            row.auction_no ?? ""
-                        ) +
-                        "</td>" +
+        if (auctionSelect) {
+            auctionSelect.value = "";
+        }
 
-                        "<td>" +
-                        escapeKageraHtml(
-                            formatKageraDate(row.date_sold ?? "")
-                        ) +
-                        "</td>" +
+        kageraPopulateAuctionFilter();
 
-                        "<td>" +
-                        escapeKageraHtml(
-                            row.warehouse ?? ""
-                        ) +
-                        "</td>" +
-
-                        "<td>" +
-                        escapeKageraHtml(
-                            row.warehouse_location ?? ""
-                        ) +
-                        "</td>" +
-
-                        "<td>" +
-                        escapeKageraHtml(
-                            row.net_weight ?? ""
-                        ) +
-                        "</td>" +
-
-                        "<td>" +
-                        escapeKageraHtml(
-                            row.grade ?? ""
-                        ) +
-                        "</td>" +
-
-                        "<td>" +
-                        escapeKageraHtml(
-                            row.grade2 ?? ""
-                        ) +
-                        "</td>" +
-
-                        "<td>" +
-                        escapeKageraHtml(
-                            row.price ?? ""
-                        ) +
-                        "</td>" +
-
-                        "<td>" +
-                        escapeKageraHtml(
-                            row.buyer_name ?? ""
-                        ) +
-                        "</td>" +
-
-                        "</tr>"
-                    );
-
-                })
-                .join("");
+        /*
+        | No filters selected -> show all records,
+        | still correctly sorted.
+        */
+        kageraRenderResults(
+            kageraGetFilteredResults()
+        );
 
     } catch (error) {
 
@@ -2383,6 +2837,83 @@ async function loadKageraResults()
             '</tr>';
     }
 }
+
+/*
+|--------------------------------------------------------------------------
+| SEASON FILTER
+|--------------------------------------------------------------------------
+*/
+const kageraSeasonSelect =
+    document.getElementById(
+        "kageraSeasonFilter"
+    );
+
+if (kageraSeasonSelect) {
+
+    kageraSeasonSelect.addEventListener(
+        "change",
+        function () {
+
+            const auctionSelect =
+                document.getElementById(
+                    "kageraAuctionFilter"
+                );
+
+            if (auctionSelect) {
+                auctionSelect.value = "";
+            }
+
+            /*
+            | Selecting Season populates only auctions
+            | belonging to that season.
+            */
+            kageraPopulateAuctionFilter();
+
+            /*
+            | Display all records in selected season
+            | until an Auction is selected.
+            */
+            kageraRenderResults(
+                kageraGetFilteredResults()
+            );
+        }
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| AUCTION FILTER
+|--------------------------------------------------------------------------
+*/
+const kageraAuctionSelect =
+    document.getElementById(
+        "kageraAuctionFilter"
+    );
+
+if (kageraAuctionSelect) {
+
+    kageraAuctionSelect.addEventListener(
+        "change",
+        function () {
+
+            /*
+            | Selecting an Auction immediately filters
+            | the table to that Auction within the selected Season.
+            */
+            kageraRenderResults(
+                kageraGetFilteredResults()
+            );
+        }
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| INITIAL LOAD
+|--------------------------------------------------------------------------
+*/
+loadKageraResults();
+
 
 
 /*
