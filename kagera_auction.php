@@ -1716,6 +1716,11 @@ function handle_kagera_report()
         $heldOn = $heldStmt->fetchColumn() ?: null;
     }
 
+    /*
+     * High & Low keeps the existing Dry Cherry / Clean Coffee grouping.
+     * Sales Summary, however, must use the actual Grade column values from
+     * the uploaded data (for example Arabica, Robusta, Arabica Certified).
+     */
     $groups = [
         'Dry Cherry Coffee' => [
             'kilos_offered' => 0,
@@ -1767,7 +1772,78 @@ function handle_kagera_report()
         }
     }
 
+    /*
+     * SALES SUMMARY GROUPS — strictly from the Grade column.
+     * Catalogue supplies kilos offered; Auction Results supply kilos sold
+     * and value. Grade2 is deliberately never read here.
+     */
+    $salesGroups = [];
+
+    $addSalesGrade = function($grade) use (&$salesGroups) {
+        $label = trim((string)$grade);
+        if ($label === '') {
+            return null;
+        }
+
+        $key = strtolower(preg_replace('/\s+/', ' ', $label));
+
+        if (!isset($salesGroups[$key])) {
+            $salesGroups[$key] = [
+                'type' => $label,
+                'kilos_offered' => 0,
+                'kilos_sold' => 0,
+                'total_value' => 0,
+                'lowest_price' => null,
+                'average_price' => null,
+                'highest_price' => null
+            ];
+        }
+
+        return $key;
+    };
+
+    foreach ($catalogueRows as $row) {
+        $key = $addSalesGrade($row['grade'] ?? '');
+        if ($key !== null) {
+            $salesGroups[$key]['kilos_offered'] += (float)($row['kilos_offered'] ?? 0);
+        }
+    }
+
+    foreach ($resultRows as $row) {
+        $key = $addSalesGrade($row['grade'] ?? '');
+        if ($key !== null) {
+            $salesGroups[$key]['kilos_sold'] += (float)($row['kilos_sold'] ?? 0);
+            $salesGroups[$key]['total_value'] += (float)($row['total_value'] ?? 0);
+
+            if ($row['lowest_price'] !== null) {
+                $price = (float)$row['lowest_price'];
+                if ($price > 0 && ($salesGroups[$key]['lowest_price'] === null || $price < $salesGroups[$key]['lowest_price'])) {
+                    $salesGroups[$key]['lowest_price'] = $price;
+                }
+            }
+
+            if ($row['average_price'] !== null) {
+                $salesGroups[$key]['average_price'] = (float)$row['average_price'];
+            }
+
+            if ($row['highest_price'] !== null) {
+                $price = (float)$row['highest_price'];
+                if ($price > 0 && ($salesGroups[$key]['highest_price'] === null || $price > $salesGroups[$key]['highest_price'])) {
+                    $salesGroups[$key]['highest_price'] = $price;
+                }
+            }
+        }
+    }
+
     foreach ($groups as $type => &$g) {
+        $g['percentage_sold'] =
+            $g['kilos_offered'] > 0
+                ? ($g['kilos_sold'] / $g['kilos_offered']) * 100
+                : 0;
+    }
+    unset($g);
+
+    foreach ($salesGroups as &$g) {
         $g['percentage_sold'] =
             $g['kilos_offered'] > 0
                 ? ($g['kilos_sold'] / $g['kilos_offered']) * 100
@@ -1779,7 +1855,8 @@ function handle_kagera_report()
         'season' => $season,
         'auction_no' => $auction,
         'held_on' => $heldOn,
-        'groups' => $groups
+        'groups' => $groups,
+        'sales_groups' => array_values($salesGroups)
     ], 200);
 }
 
@@ -4096,18 +4173,27 @@ async function kageraShowReport()
             const body = document.getElementById("kageraSalesSummaryBody");
 
             if (body) {
-                const types = ["Dry Cherry Coffee", "Clean Coffee"];
+                // Sales Summary uses the actual Grade values from the
+                // uploaded catalogue/results data — never Grade2.
+                const salesGroups = result.data?.sales_groups || [];
+                const types = salesGroups.map(function(item) {
+                    return item.type;
+                });
+                const salesByType = {};
+                salesGroups.forEach(function(item) {
+                    salesByType[item.type] = item;
+                });
 
                 const totalOffered = types.reduce(function(sum, type) {
-                    return sum + kageraNumber((groups[type] || {}).kilos_offered);
+                    return sum + kageraNumber((salesByType[type] || {}).kilos_offered);
                 }, 0);
 
                 const totalSold = types.reduce(function(sum, type) {
-                    return sum + kageraNumber((groups[type] || {}).kilos_sold);
+                    return sum + kageraNumber((salesByType[type] || {}).kilos_sold);
                 }, 0);
 
                 const totalValue = types.reduce(function(sum, type) {
-                    return sum + kageraNumber((groups[type] || {}).total_value);
+                    return sum + kageraNumber((salesByType[type] || {}).total_value);
                 }, 0);
 
                 const totalPercentage =
@@ -4116,7 +4202,7 @@ async function kageraShowReport()
                         : 0;
 
                 body.innerHTML = types.map(function(type) {
-                    const g = groups[type] || {};
+                    const g = salesByType[type] || {};
 
                     return "<tr>" +
                         "<td>" + escapeKageraHtml(type) + "</td>" +
