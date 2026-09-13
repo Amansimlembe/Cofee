@@ -1690,6 +1690,38 @@ function handle_kagera_report()
     $stmt->execute($resultParams);
     $resultRows = $stmt->fetchAll();
 
+    /*
+     * Auction date for Held On:
+     * Always obtain it from Auction Results (date_sold) for the
+     * exact selected Auction No. Never use the browser's current date
+     * and never fall back to catalogue date.
+     */
+    $heldOn = null;
+
+    if ($auction !== '') {
+        $heldStmt = $db->prepare("
+            SELECT MIN(date_sold) AS auction_date
+            FROM public.kagera_auction_results
+            WHERE TRIM(auction_no) = :auction
+              AND date_sold IS NOT NULL
+              " . (
+                    $season !== '' && preg_match('/^(\d{4})\/(\d{4})$/', $season, $sm)
+                    ? "AND date_sold BETWEEN :held_start AND :held_end"
+                    : ""
+                ) . "
+        ");
+
+        $heldParams = ['auction' => $auction];
+
+        if ($season !== '' && preg_match('/^(\d{4})\/(\d{4})$/', $season, $sm)) {
+            $heldParams['held_start'] = $sm[1] . '-06-01';
+            $heldParams['held_end'] = $sm[2] . '-05-30';
+        }
+
+        $heldStmt->execute($heldParams);
+        $heldOn = $heldStmt->fetchColumn() ?: null;
+    }
+
     $groups = [
         'Dry Cherry Coffee' => [
             'kilos_offered' => 0,
@@ -1752,6 +1784,7 @@ function handle_kagera_report()
     kagera_json(true, 'Kagera report generated.', [
         'season' => $season,
         'auction_no' => $auction,
+        'held_on' => $heldOn,
         'groups' => $groups
     ], 200);
 }
@@ -3821,7 +3854,7 @@ function kageraRenderSalesSummaryReport(report)
 async function kageraShowReport()
 {
     const panel = document.getElementById("kageraReportPanel");
-    const highLow = document.getElementById("kageraHighLowTable");
+    const highLow = document.getElementById("kageraHighLowReport");
     const salesSummary = document.getElementById("kageraSalesSummaryTable");
     const title = document.getElementById("kageraReportTitle");
     const subtitle = document.getElementById("kageraReportSubtitle");
@@ -3846,20 +3879,6 @@ async function kageraShowReport()
 
     const season = seasonSelect ? String(seasonSelect.value || "") : "";
     const auction = auctionSelect ? String(auctionSelect.value || "") : "";
-
-    const selectedResultsForReport = kageraAllResults.filter(function(row) {
-        const rowAuction = String(row.auction_no ?? "").trim();
-        const rowSeason = kageraGetSeason(row.date_sold);
-        return (!season || rowSeason === season) &&
-               (!auction || rowAuction === auction);
-    });
-
-    const selectedCatalogueForReport = kageraCatalogueData.filter(function(row) {
-        const rowAuction = String(row.auction_no ?? "").trim();
-        const rowSeason = kageraGetSeason(row.date_sold);
-        return (!season || rowSeason === season) &&
-               (!auction || rowAuction === auction);
-    });
 
     try {
         const response = await fetch(
@@ -3910,19 +3929,13 @@ async function kageraShowReport()
             }
 
             /*
-             * Held On is taken from the selected auction result/catalogue
-             * date. Prefer the auction-results date, then catalogue date.
+             * Held On must be the Auction Date / Date Sold returned by
+             * PostgreSQL for the exact selected Auction No.
              */
-            let heldOn = "";
-
-            const dateRow =
-                selectedResultsForReport.find(function(row) {
-                    return String(row.auction_no ?? "").trim() === auction;
-                });
-
-            if (dateRow) {
-                heldOn = kageraFormatDate(dateRow.date_sold);
-            }
+            const heldOn =
+                result.data && result.data.held_on
+                    ? formatKageraDate(result.data.held_on)
+                    : "";
 
             if (heldEl) {
                 heldEl.textContent =
@@ -4018,11 +4031,6 @@ async function kageraShowReport()
                 "</td></tr>";
         }
     }
-}
-if (kageraReportType) {
-    kageraReportType.addEventListener("change", function() {
-        void kageraShowReport();
-    });
 }
 
 async function loadKageraResults()
@@ -4128,6 +4136,25 @@ if (kageraAuctionSelect) {
 */
 if(kageraDisplayType){
     kageraDisplayType.addEventListener("change", function(){
+        const value = String(this.value || "");
+
+        if (value === "high_low" || value === "sales_summary") {
+            // Report selection: hide both data tables and show only the
+            // selected report.
+            const resultsTable = document.getElementById("kageraResultsTable");
+            const catalogueTable = document.getElementById("kageraCatalogueTable");
+
+            if (resultsTable) resultsTable.style.display = "none";
+            if (catalogueTable) catalogueTable.style.display = "none";
+
+            void kageraShowReport();
+            return;
+        }
+
+        // Normal data display: reports must be completely hidden.
+        const reportPanel = document.getElementById("kageraReportPanel");
+        if (reportPanel) reportPanel.style.display = "none";
+
         loadKageraResults();
     });
 }
@@ -4288,26 +4315,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
-// Route High & Low / Sales Summary through the existing Display dropdown.
-// Catalogue and Auction Results continue using their normal display logic.
-(function () {
-    if (window.kageraDisplayReportRoutingInstalled) return;
-    window.kageraDisplayReportRoutingInstalled = true;
-
-    const display = document.getElementById("kageraDisplayType");
-    if (!display) return;
-
-    display.addEventListener("change", function () {
-        const value = String(display.value || "");
-
-        if (value === "high_low" || value === "sales_summary") {
-            void kageraShowReport();
-        } else {
-            const panel = document.getElementById("kageraReportPanel");
-            if (panel) panel.style.display = "none";
-        }
-    });
-})();
+// Display/report routing is handled by the main kageraDisplayType
+// change listener above. No second listener is required.
 
 </script>
 
