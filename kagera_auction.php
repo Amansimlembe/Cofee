@@ -140,7 +140,7 @@ function ensure_kagera_table()
 
             lot_no VARCHAR(100),
             auction_no VARCHAR(50),
-            date_sold VARCHAR(50),
+            date_sold DATE,
             warehouse VARCHAR(255),
             warehouse_location VARCHAR(255),
 
@@ -195,6 +195,41 @@ function ensure_kagera_table()
                 $definition
             );
         }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | DATE SOLD MIGRATION
+    |--------------------------------------------------------------------------
+    | Convert an existing text column to a real PostgreSQL DATE.
+    */
+    $dateTypeStmt = $db->query("
+        SELECT data_type
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'kagera_auction_results'
+          AND column_name = 'date_sold'
+    ");
+
+    $dateType = $dateTypeStmt->fetchColumn();
+
+    if ($dateType && strtolower($dateType) !== 'date') {
+        $db->exec("
+            ALTER TABLE public.kagera_auction_results
+            ALTER COLUMN date_sold TYPE DATE
+            USING CASE
+                WHEN date_sold IS NULL OR BTRIM(date_sold::text) = '' THEN NULL
+                WHEN date_sold::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                    THEN date_sold::text::date
+                WHEN date_sold::text ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
+                    THEN TO_DATE(date_sold::text, 'DD/MM/YYYY')
+                WHEN date_sold::text ~ '^[0-9]{2}-[0-9]{2}-[0-9]{4}$'
+                    THEN TO_DATE(date_sold::text, 'DD-MM-YYYY')
+                WHEN date_sold::text ~ '^[0-9]{1,2} [A-Za-z]+ [0-9]{4}$'
+                    THEN TO_DATE(date_sold::text, 'DD Month YYYY')
+                ELSE NULL
+            END
+        ");
     }
 
     $db->exec("
@@ -359,17 +394,9 @@ function kagera_find_col($headers, $names)
 | results. Convert all supported forms to a consistent YYYY-MM-DD value.
 |--------------------------------------------------------------------------
 */
-
-
-
-/*
-|--------------------------------------------------------------------------
-| DATE NORMALIZATION
-|--------------------------------------------------------------------------
-*/
 function kagera_normalize_date($value)
 {
-    if ($value === null || trim((string)$value) === '') {
+    if ($value === null) {
         return null;
     }
 
@@ -378,26 +405,44 @@ function kagera_normalize_date($value)
     }
 
     $value = trim((string)$value);
+    if ($value === '') {
+        return null;
+    }
 
-    // Excel serial number.
+    // Excel serial date.
     if (is_numeric($value)) {
         $serial = (float)$value;
+
         if ($serial >= 1 && $serial <= 100000) {
             try {
-                return \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($serial)
+                return \PhpOffice\PhpSpreadsheet\Shared\Date
+                    ::excelToDateTimeObject($serial)
                     ->format('Y-m-d');
             } catch (\Throwable $e) {
             }
         }
     }
 
-    $datePart = preg_split('/\s+/', $value)[0];
+    // Normalize spaces and remove time.
+    $value = preg_replace('/\s+/u', ' ', $value);
+    $value = preg_replace('/^(.+?)\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?$/i', '$1', $value);
+    $value = preg_replace('/\b(\d{1,2})(st|nd|rd|th)\b/i', '$1', $value);
+    $value = trim($value);
 
-    foreach ([
-        'Y-m-d', 'd/m/Y', 'm/d/Y', 'd-m-Y', 'm-d-Y',
-        'Y/m/d', 'd.m.Y', 'Y.m.d'
-    ] as $format) {
-        $date = \DateTime::createFromFormat('!' . $format, $datePart);
+    // All common numeric and text-month formats.
+    $formats = [
+        'Y-m-d', 'Y/m/d', 'Y.m.d',
+        'd/m/Y', 'd-m-Y', 'd.m.Y',
+        'm/d/Y', 'm-d-Y', 'm.d.Y',
+        'd/m/y', 'd-m-y', 'd.m.y',
+        'm/d/y', 'm-d-y', 'm.d.y',
+        'd F Y', 'd F, Y', 'd M Y', 'd M, Y',
+        'F d Y', 'F d, Y', 'M d Y', 'M d, Y',
+        'Y F d', 'Y F, d', 'Y M d', 'Y M, d'
+    ];
+
+    foreach ($formats as $format) {
+        $date = \DateTime::createFromFormat('!' . $format, $value);
         $errors = \DateTime::getLastErrors();
 
         if ($date !== false &&
@@ -407,6 +452,7 @@ function kagera_normalize_date($value)
         }
     }
 
+    // General fallback.
     try {
         return (new \DateTime($value))->format('Y-m-d');
     } catch (\Throwable $e) {
@@ -948,11 +994,11 @@ function handle_kagera_upload()
             kagera_find_col(
                 $headers,
                 [
+                    "auction_date",
                     "date_sold",
                     "sold_date",
                     "date_of_sale",
                     "date_sold_date",
-                    "auction_date",
                     "date"
                 ]
             ),
@@ -1049,7 +1095,7 @@ function handle_kagera_upload()
         (
             lot_no,
             auction_no,
-            TO_CHAR(date_sold, 'YYYY-MM-DD') AS date_sold,
+            date_sold,
             warehouse,
             warehouse_location,
             net_weight,
@@ -1115,7 +1161,10 @@ function handle_kagera_upload()
             $auction =
                 $get("auction_no");
 
-            $date = kagera_normalize_date($get("date_sold"));
+            $date =
+                kagera_normalize_date(
+                    $get("date_sold")
+                );
 
             $warehouse =
                 $get("warehouse");
