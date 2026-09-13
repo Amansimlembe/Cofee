@@ -2493,14 +2493,12 @@ body.sidebar-collapsed .kagera-main {
         <div class="kagera-upload-compact">
             <form
                 id="kageraUploadForm"
-                <input type="hidden" id="kageraUploadType" name="upload_type" value="auction_results">
-
-                
                 action="kagera_auction.php"
                 method="POST"
                 enctype="multipart/form-data"
                 class="kagera-header-upload-form"
             >
+                <input type="hidden" id="kageraUploadType" name="upload_type" value="auction_results">
                 
 
                 <div class="kagera-file-area">
