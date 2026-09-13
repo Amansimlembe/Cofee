@@ -1700,25 +1700,19 @@ function handle_kagera_report()
 
     if ($auction !== '') {
         $heldStmt = $db->prepare("
-            SELECT MIN(date_sold) AS auction_date
+            SELECT date_sold
             FROM public.kagera_auction_results
-            WHERE TRIM(auction_no) = :auction
+            WHERE TRIM(CAST(auction_no AS TEXT)) = :auction
               AND date_sold IS NOT NULL
-              " . (
-                    $season !== '' && preg_match('/^(\d{4})\/(\d{4})$/', $season, $sm)
-                    ? "AND date_sold BETWEEN :held_start AND :held_end"
-                    : ""
-                ) . "
+              AND TRIM(CAST(date_sold AS TEXT)) <> ''
+            ORDER BY id ASC
+            LIMIT 1
         ");
 
-        $heldParams = ['auction' => $auction];
+        $heldStmt->execute([
+            'auction' => $auction
+        ]);
 
-        if ($season !== '' && preg_match('/^(\d{4})\/(\d{4})$/', $season, $sm)) {
-            $heldParams['held_start'] = $sm[1] . '-06-01';
-            $heldParams['held_end'] = $sm[2] . '-05-30';
-        }
-
-        $heldStmt->execute($heldParams);
         $heldOn = $heldStmt->fetchColumn() ?: null;
     }
 
@@ -3602,8 +3596,6 @@ async function loadKageraData(type)
             if(auctionSelect) auctionSelect.value="";
             kageraPopulateAuctionFilterFromRows(kageraCatalogueData);
             kageraRenderCatalogue(kageraGetFilteredCatalogue());
-                       void kageraShowReport();
- void kageraShowReport();
         }else{
             kageraAllResults=Array.isArray(result.data)?result.data:[];
             kageraResultsLoaded=true;
@@ -3612,8 +3604,6 @@ async function loadKageraData(type)
             if(auctionSelect) auctionSelect.value="";
             kageraPopulateAuctionFilterFromRows(kageraAllResults);
             kageraRenderResults(kageraGetFilteredResults());
-                       void kageraShowReport();
- void kageraShowReport();
         }
     }catch(error){
         body.innerHTML='<tr><td colspan="'+(isCatalogue?13:10)+'" class="kagera-empty-state">'+
@@ -3861,11 +3851,24 @@ async function kageraShowReport()
 
     const selectedReport =
         kageraReportType
-            ? String(kageraReportType.value || "")
+            ? String(kageraReportType.value || "").trim()
             : "";
 
-    if (!selectedReport) {
+    // Only these two Display values are report views.
+    // Auction Results and Auction Catalogue must never show the report panel.
+    const isReportView =
+        selectedReport === "high_low" ||
+        selectedReport === "sales_summary";
+
+    if (!isReportView) {
         if (panel) panel.style.display = "none";
+        if (highLow) highLow.style.display = "none";
+        if (salesSummary) salesSummary.style.display = "none";
+
+        const genericHeader =
+            document.getElementById("kageraGenericReportHeader");
+        if (genericHeader) genericHeader.style.display = "none";
+
         return;
     }
 
@@ -4044,6 +4047,16 @@ async function loadKageraResults()
     if(resultsTable) resultsTable.style.display=type==="results"?"table":"none";
     if(catalogueTable) catalogueTable.style.display=type==="catalogue"?"table":"none";
 
+    const reportPanel = document.getElementById("kageraReportPanel");
+    const highLowReport = document.getElementById("kageraHighLowReport");
+    const salesSummaryReport = document.getElementById("kageraSalesSummaryTable");
+
+    if (type !== "high_low" && type !== "sales_summary") {
+        if (reportPanel) reportPanel.style.display = "none";
+        if (highLowReport) highLowReport.style.display = "none";
+        if (salesSummaryReport) salesSummaryReport.style.display = "none";
+    }
+
     if(title) title.textContent=type==="catalogue"?"Kagera Auction Catalogue":"Kagera Auction Results";
     if(subtitle) subtitle.textContent=type==="catalogue"?"Catalogue currently stored in the database.":"Results currently stored in the database.";
 
@@ -4088,11 +4101,13 @@ if (kageraSeasonSelect) {
             if (kageraDisplayType && kageraDisplayType.value === "catalogue") {
                 kageraPopulateAuctionFilterFromRows(kageraCatalogueData);
                 kageraRenderCatalogue(kageraGetFilteredCatalogue());
-                        void kageraShowReport();
-} else {
+            } else if (kageraDisplayType &&
+                       (kageraDisplayType.value === "high_low" ||
+                        kageraDisplayType.value === "sales_summary")) {
+                void kageraShowReport();
+            } else {
                 kageraRenderResults(kageraGetFilteredResults());
-                        void kageraShowReport();
-}
+            }
         }
     );
 }
@@ -4119,11 +4134,13 @@ if (kageraAuctionSelect) {
             */
             if (kageraDisplayType && kageraDisplayType.value === "catalogue") {
                 kageraRenderCatalogue(kageraGetFilteredCatalogue());
-                        void kageraShowReport();
-} else {
+            } else if (kageraDisplayType &&
+                       (kageraDisplayType.value === "high_low" ||
+                        kageraDisplayType.value === "sales_summary")) {
+                void kageraShowReport();
+            } else {
                 kageraRenderResults(kageraGetFilteredResults());
-                        void kageraShowReport();
-}
+            }
         }
     );
 }
@@ -4199,11 +4216,32 @@ function formatKageraDate(value)
 
     const text = String(value).trim();
 
-    // Stored database value is normally YYYY-MM-DD.
-    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    // PostgreSQL DATE: YYYY-MM-DD
+    let m = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) {
+        return m[3] + "/" + m[2] + "/" + m[1];
+    }
 
-    if (iso) {
-        return iso[3] + "/" + iso[2] + "/" + iso[1];
+    // PostgreSQL TIMESTAMP: YYYY-MM-DD HH:MM:SS or ISO timestamp.
+    m = text.match(/^(\d{4})-(\d{2})-(\d{2})[T\s]/);
+    if (m) {
+        return m[3] + "/" + m[2] + "/" + m[1];
+    }
+
+    // Excel/text date: 10 September 2026.
+    m = text.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+    if (m) {
+        const months = {
+            january: "01", february: "02", march: "03",
+            april: "04", may: "05", june: "06",
+            july: "07", august: "08", september: "09",
+            october: "10", november: "11", december: "12"
+        };
+
+        const month = months[m[2].toLowerCase()];
+        if (month) {
+            return String(m[1]).padStart(2, "0") + "/" + month + "/" + m[3];
+        }
     }
 
     return text;
@@ -4315,8 +4353,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
-// Display/report routing is handled by the main kageraDisplayType
-// change listener above. No second listener is required.
 
 </script>
 
