@@ -353,6 +353,78 @@ function kagera_find_col($headers, $names)
 
 /*
 |--------------------------------------------------------------------------
+| KAGERA DATE NORMALIZATION
+|--------------------------------------------------------------------------
+| Excel may store dates as serial numbers, formatted strings, or formula
+| results. Convert all supported forms to a consistent YYYY-MM-DD value.
+|--------------------------------------------------------------------------
+*/
+function kagera_normalize_date($value)
+{
+    if ($value === null) {
+        return "";
+    }
+
+    $value = trim((string)$value);
+
+    if ($value === "") {
+        return "";
+    }
+
+    // Excel serial date (1900 date system).
+    if (is_numeric($value)) {
+        $serial = (float)$value;
+
+        if ($serial >= 1 && $serial <= 100000) {
+            try {
+                $date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($serial);
+                return $date->format("Y-m-d");
+            } catch (Throwable $e) {
+                // Fall through to normal string parsing.
+            }
+        }
+    }
+
+    // Remove time where a date-time string is supplied.
+    $datePart = preg_split('/\\s+/', $value)[0];
+
+    $formats = [
+        "Y-m-d",
+        "d/m/Y",
+        "d-m-Y",
+        "d.m.Y",
+        "m/d/Y",
+        "m-d-Y",
+        "Y/m/d",
+        "Y.m.d"
+    ];
+
+    foreach ($formats as $format) {
+        $date = DateTime::createFromFormat("!" . $format, $datePart);
+        $errors = DateTime::getLastErrors();
+
+        if (
+            $date !== false &&
+            (
+                $errors === false ||
+                ($errors["warning_count"] === 0 && $errors["error_count"] === 0)
+            )
+        ) {
+            return $date->format("Y-m-d");
+        }
+    }
+
+    // Last fallback: let PHP parse recognizable date text.
+    try {
+        $date = new DateTime($value);
+        return $date->format("Y-m-d");
+    } catch (Throwable $e) {
+        return $value;
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
 | PHPSPREADSHEET XLSX READER
 |--------------------------------------------------------------------------
 */
@@ -886,6 +958,9 @@ function handle_kagera_upload()
                 $headers,
                 [
                     "date_sold",
+                    "sold_date",
+                    "date_of_sale",
+                    "date_sold_date",
                     "auction_date",
                     "date"
                 ]
@@ -1050,7 +1125,9 @@ function handle_kagera_upload()
                 $get("auction_no");
 
             $date =
-                $get("date_sold");
+                kagera_normalize_date(
+                    $get("date_sold")
+                );
 
             $warehouse =
                 $get("warehouse");
@@ -1838,7 +1915,7 @@ Refresh
 <tr>
 
 <td
-    colspan="11"
+    colspan="10"
     class="kagera-empty-state"
 >
 
@@ -2088,7 +2165,7 @@ async function loadKageraResults()
 
     body.innerHTML =
         '<tr>' +
-        '<td colspan="11" class="kagera-empty-state">' +
+        '<td colspan="10" class="kagera-empty-state">' +
         'Loading results...' +
         '</td>' +
         '</tr>';
@@ -2116,7 +2193,7 @@ async function loadKageraResults()
 
             body.innerHTML =
                 '<tr>' +
-                '<td colspan="11" class="kagera-empty-state">' +
+                '<td colspan="10" class="kagera-empty-state">' +
                 'No Kagera Auction results loaded.' +
                 '</td>' +
                 '</tr>';
@@ -2146,11 +2223,9 @@ async function loadKageraResults()
 
                         "<td>" +
                         escapeKageraHtml(
-                            row.date_sold ?? ""
+                            formatKageraDate(row.date_sold ?? "")
                         ) +
                         "</td>" +
-
-                        "<td>" +
 
                         "<td>" +
                         escapeKageraHtml(
@@ -2209,7 +2284,7 @@ async function loadKageraResults()
 
         body.innerHTML =
             '<tr>' +
-            '<td colspan="11" class="kagera-empty-state">' +
+            '<td colspan="10" class="kagera-empty-state">' +
             escapeKageraHtml(
                 error.message ||
                 "Unable to load results."
@@ -2225,6 +2300,24 @@ async function loadKageraResults()
 | HTML ESCAPE
 |--------------------------------------------------------------------------
 */
+
+function formatKageraDate(value)
+{
+    if (!value) {
+        return "";
+    }
+
+    const text = String(value).trim();
+
+    // Stored database value is normally YYYY-MM-DD.
+    const iso = text.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+
+    if (iso) {
+        return iso[3] + "/" + iso[2] + "/" + iso[1];
+    }
+
+    return text;
+}
 
 function escapeKageraHtml(value)
 {
