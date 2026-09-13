@@ -1,11 +1,102 @@
 <?php
 session_start();
 
+$isFetch = isset($_GET["action"]) && $_GET["action"] === "fetch";
+
 if (
     !isset($_SESSION["logged_in"]) ||
     $_SESSION["logged_in"] !== true
 ) {
+    if ($isFetch) {
+        header("Content-Type: application/json; charset=utf-8");
+        http_response_code(401);
+        echo json_encode([
+            "success" => false,
+            "message" => "Not authenticated."
+        ]);
+        exit;
+    }
+
     header("Location: login.php");
+    exit;
+}
+
+if ($isFetch) {
+    header("Content-Type: application/json; charset=utf-8");
+
+    try {
+        $databaseUrl = getenv("DATABASE_URL");
+
+        if ($databaseUrl) {
+            $parts = parse_url($databaseUrl);
+            if (!$parts || empty($parts["host"])) {
+                throw new Exception("Invalid DATABASE_URL.");
+            }
+
+            $host = $parts["host"];
+            $port = $parts["port"] ?? 3306;
+            $dbname = ltrim($parts["path"] ?? "", "/");
+            $username = $parts["user"] ?? "";
+            $password = $parts["pass"] ?? "";
+        } else {
+            $host = getenv("DB_HOST") ?: "127.0.0.1";
+            $port = getenv("DB_PORT") ?: 3306;
+            $dbname = getenv("DB_NAME") ?: "coffee_sales";
+            $username = getenv("DB_USER") ?: "root";
+            $password = getenv("DB_PASSWORD") ?: "";
+        }
+
+        $mysqli = new mysqli($host, $username, $password, $dbname, (int)$port);
+
+        if ($mysqli->connect_errno) {
+            throw new Exception("Database connection failed.");
+        }
+
+        $mysqli->set_charset("utf8mb4");
+
+        $result = $mysqli->query("
+            SELECT
+                auction_no,
+                date_sold,
+                lot_number,
+                invoice,
+                packages,
+                net_weight,
+                grade,
+                grade2,
+                price,
+                buyer_name,
+                warehouse,
+                status
+            FROM kagera_auction_results
+            ORDER BY date_sold DESC, id DESC
+        ");
+
+        if (!$result) {
+            throw new Exception("Unable to retrieve Kagera Auction results.");
+        }
+
+        $data = [];
+
+        while ($row = $result->fetch_assoc()) {
+            $data[] = $row;
+        }
+
+        $mysqli->close();
+
+        echo json_encode([
+            "success" => true,
+            "data" => $data
+        ], JSON_UNESCAPED_UNICODE);
+
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode([
+            "success" => false,
+            "message" => $e->getMessage()
+        ]);
+    }
+
     exit;
 }
 ?>
@@ -665,10 +756,19 @@ async function loadKageraResults() {
 
     try {
         const response =
-            await fetch("kagera_fetch.php");
+            await fetch("kagera_auction.php?action=fetch", { cache: "no-store" });
 
-        const result =
-            await response.json();
+        const responseText = await response.text();
+        let result;
+
+        try {
+            result = JSON.parse(responseText);
+        } catch (parseError) {
+            throw new Error(
+                "The Kagera data endpoint returned HTML instead of JSON. " +
+                "Please ensure kagera_auction.php is deployed correctly."
+            );
+        }
 
         if (!response.ok || !result.success) {
             throw new Error(
