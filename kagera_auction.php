@@ -1800,26 +1800,6 @@ function handle_kagera_report()
 
         return $gradeKeys[$key];
     };
-        $label = trim((string)$value);
-        if ($label === '') {
-            return null;
-        }
-
-        $key = strtolower(preg_replace('/\\s+/', ' ', $label));
-
-        if (!isset($gradeKeys[$key])) {
-            $gradeKeys[$key] = $label;
-            $gradeGroups[$label] = [
-                'kilos_offered' => 0,
-                'kilos_sold' => 0,
-                'total_value' => 0,
-                'percentage_sold' => 0
-            ];
-        }
-
-        return $gradeKeys[$key];
-    };
-
     foreach ($gradeCatalogueRows as $row) {
         $gradeLabel = $ensureGrade($row['grade'] ?? '');
         if ($gradeLabel !== null) {
