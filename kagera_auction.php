@@ -1727,7 +1727,79 @@ function handle_kagera_report()
     $gradeGroups = [];
     $gradeKeys = [];
 
-    $ensureGrade = function($value) use (&$gradeGroups, &$gradeKeys) {
+    /*
+     * Normalize Type of Coffee / Grade labels to one canonical form.
+     * Examples:
+     *   Arabica Certified        -> Arabica_Certified
+     *   Arabica Clean            -> Arabica_Clean
+     *   Arabica Clean Certified  -> Arabica_Clean_Certified
+     *   Robusta Certified        -> Robusta_Certified
+     *   Robusta Clean            -> Robusta_Clean
+     *   Robusta Clean Certified  -> Robusta_Clean_Certified
+     *
+     * Existing underscore values are preserved in the same canonical form.
+     */
+    $normalizeCoffeeType = function($value) {
+        $label = trim((string)$value);
+        if ($label === '') {
+            return '';
+        }
+
+        // Convert any run of whitespace and underscores to one separator.
+        $label = preg_replace('/[\\s_]+/', '_', $label);
+        $label = trim($label, '_');
+
+        // Normalize the known coffee-type components.
+        $parts = array_filter(explode('_', $label), function($part) {
+            return trim($part) !== '';
+        });
+
+        $normalizedParts = [];
+        foreach ($parts as $part) {
+            $p = strtolower(trim($part));
+
+            if ($p === 'arabica') {
+                $normalizedParts[] = 'Arabica';
+            } elseif ($p === 'robusta') {
+                $normalizedParts[] = 'Robusta';
+            } elseif ($p === 'clean') {
+                $normalizedParts[] = 'Clean';
+            } elseif ($p === 'certified') {
+                $normalizedParts[] = 'Certified';
+            } else {
+                // Preserve other Grade/Type values while cleaning spacing.
+                $normalizedParts[] = ucfirst($p);
+            }
+        }
+
+        return implode('_', $normalizedParts);
+    };
+
+    $ensureGrade = function($value) use (
+        &$gradeGroups,
+        &$gradeKeys,
+        $normalizeCoffeeType
+    ) {
+        $label = $normalizeCoffeeType($value);
+        if ($label === '') {
+            return null;
+        }
+
+        // Case-insensitive canonical key prevents duplicate rows.
+        $key = strtolower($label);
+
+        if (!isset($gradeKeys[$key])) {
+            $gradeKeys[$key] = $label;
+            $gradeGroups[$label] = [
+                'kilos_offered' => 0,
+                'kilos_sold' => 0,
+                'total_value' => 0,
+                'percentage_sold' => 0
+            ];
+        }
+
+        return $gradeKeys[$key];
+    };
         $label = trim((string)$value);
         if ($label === '') {
             return null;
@@ -4183,7 +4255,53 @@ async function kageraShowReport()
 
             // Use the actual Grade values: Arabica, Robusta, Arabica Certified,
             // and any other Grade present in the selected auction.
-            const gradeGroups = result.data?.grade_groups || {};
+            const rawGradeGroups = result.data?.grade_groups || {};
+            const gradeGroups = {};
+
+            Object.keys(rawGradeGroups).forEach(function(rawGrade) {
+                const normalizedGrade = String(rawGrade || "")
+                    .trim()
+                    .replace(/[\\s_]+/g, "_")
+                    .replace(/^_+|_+$/g, "")
+                    .split("_")
+                    .filter(Boolean)
+                    .map(function(part) {
+                        const p = part.toLowerCase();
+                        if (p === "arabica") return "Arabica";
+                        if (p === "robusta") return "Robusta";
+                        if (p === "clean") return "Clean";
+                        if (p === "certified") return "Certified";
+                        return p.charAt(0).toUpperCase() + p.slice(1);
+                    })
+                    .join("_");
+
+                if (!normalizedGrade) return;
+
+                if (!gradeGroups[normalizedGrade]) {
+                    gradeGroups[normalizedGrade] = {
+                        kilos_offered: 0,
+                        kilos_sold: 0,
+                        total_value: 0,
+                        percentage_sold: 0
+                    };
+                }
+
+                const source = rawGradeGroups[rawGrade] || {};
+                gradeGroups[normalizedGrade].kilos_offered +=
+                    kageraNumber(source.kilos_offered);
+                gradeGroups[normalizedGrade].kilos_sold +=
+                    kageraNumber(source.kilos_sold);
+                gradeGroups[normalizedGrade].total_value +=
+                    kageraNumber(source.total_value);
+            });
+
+            Object.keys(gradeGroups).forEach(function(grade) {
+                const g = gradeGroups[grade];
+                g.percentage_sold = g.kilos_offered > 0
+                    ? (g.kilos_sold / g.kilos_offered) * 100
+                    : 0;
+            });
+
             const gradeRows = Object.keys(gradeGroups);
 
             let totalOffered = 0;
