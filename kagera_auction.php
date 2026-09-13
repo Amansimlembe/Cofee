@@ -2581,11 +2581,6 @@ body.sidebar-collapsed .kagera-main {
     text-align: left;
 }
 
-.kagera-high-low-total-row td {
-    font-weight: 800;
-    border-top: 2px solid #333;
-}
-
 .kagera-prices-block {
     margin-top: 12px;
 }
@@ -2853,12 +2848,6 @@ body.sidebar-collapsed .kagera-main {
                 <td>0</td>
                 <td>0</td>
                 <td>0</td>
-            </tr>
-            <tr class="kagera-high-low-total-row">
-                <td>Total</td>
-                <td id="kageraHLTotalOffered">0</td>
-                <td id="kageraHLTotalSold">0</td>
-                <td id="kageraHLTotalValue">0.00</td>
             </tr>
         </tbody>
     </table>
@@ -3922,18 +3911,6 @@ async function kageraShowReport()
 
             const types = ["Dry Cherry Coffee", "Clean Coffee"];
 
-            const totalOffered = types.reduce(function(sum, type) {
-                return sum + kageraNumber((groups[type] || {}).kilos_offered);
-            }, 0);
-
-            const totalSold = types.reduce(function(sum, type) {
-                return sum + kageraNumber((groups[type] || {}).kilos_sold);
-            }, 0);
-
-            const totalValue = types.reduce(function(sum, type) {
-                return sum + kageraNumber((groups[type] || {}).total_value);
-            }, 0);
-
             const salesBody =
                 document.getElementById("kageraHighLowSalesBody");
             const pricesBody =
@@ -3978,30 +3955,20 @@ async function kageraShowReport()
                         "<td>" + kageraReportKg(g.kilos_sold) + "</td>" +
                         "<td>" + kageraReportMoney(g.total_value) + "</td>" +
                         "</tr>";
-                }).join("") +
-                "<tr class=\"kagera-high-low-total-row\">" +
-                    "<td>Total</td>" +
-                    "<td>" + kageraReportKg(totalOffered) + "</td>" +
-                    "<td>" + kageraReportKg(totalSold) + "</td>" +
-                    "<td>" + kageraReportMoney(totalValue) + "</td>" +
-                "</tr>";
+                }).join("");
             }
 
-            const totalOfferedEl =
-                document.getElementById("kageraHLTotalOffered");
-            const totalSoldEl =
-                document.getElementById("kageraHLTotalSold");
-            const totalValueEl =
-                document.getElementById("kageraHLTotalValue");
+            if (pricesBody) {
+                pricesBody.innerHTML = types.map(function(type) {
+                    const g = groups[type] || {};
 
-            if (totalOfferedEl) {
-                totalOfferedEl.textContent = kageraReportKg(totalOffered);
-            }
-            if (totalSoldEl) {
-                totalSoldEl.textContent = kageraReportKg(totalSold);
-            }
-            if (totalValueEl) {
-                totalValueEl.textContent = kageraReportMoney(totalValue);
+                    return "<tr>" +
+                        "<td>" + escapeKageraHtml(type) + "</td>" +
+                        "<td>" + (g.lowest_price === null ? "0" : kageraReportMoney(g.lowest_price)) + "</td>" +
+                        "<td>" + (g.average_price === null ? "-" : kageraReportMoney(g.average_price)) + "</td>" +
+                        "<td>" + (g.highest_price === null ? "0" : kageraReportMoney(g.highest_price)) + "</td>" +
+                        "</tr>";
+                }).join("");
             }
 
             const dry =
