@@ -135,33 +135,25 @@ function ensure_kagera_table()
 
     $db->exec("
         CREATE TABLE IF NOT EXISTS public.kagera_auction_results (
-
             id BIGSERIAL PRIMARY KEY,
-
             lot_no VARCHAR(100),
             auction_no VARCHAR(50),
             date_sold DATE,
             warehouse VARCHAR(255),
             warehouse_location VARCHAR(255),
-
             net_weight NUMERIC(15,2),
-
             grade VARCHAR(100),
             grade2 VARCHAR(100),
-
             price NUMERIC(15,4),
-
             buyer_name VARCHAR(255),
-
-            created_at TIMESTAMP WITHOUT TIME ZONE
-                DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
     ");
 
     $columns = [
         "lot_no" => "VARCHAR(100)",
         "auction_no" => "VARCHAR(50)",
-        "date_sold" => "VARCHAR(50)",
+        "date_sold" => "DATE",
         "warehouse" => "VARCHAR(255)",
         "warehouse_location" => "VARCHAR(255)",
         "net_weight" => "NUMERIC(15,2)",
@@ -172,7 +164,7 @@ function ensure_kagera_table()
     ];
 
     $check = $db->prepare("
-        SELECT column_name
+        SELECT data_type
         FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'kagera_auction_results'
@@ -180,28 +172,20 @@ function ensure_kagera_table()
     ");
 
     foreach ($columns as $column => $definition) {
-
-        $check->execute([
-            "column" => $column
-        ]);
+        $check->execute(["column" => $column]);
 
         if (!$check->fetchColumn()) {
-
             $db->exec(
                 'ALTER TABLE public.kagera_auction_results
-                 ADD COLUMN "' .
-                $column .
-                '" ' .
-                $definition
+                 ADD COLUMN "' . $column . '" ' . $definition
             );
         }
     }
 
     /*
     |--------------------------------------------------------------------------
-    | DATE SOLD MIGRATION
+    | CONVERT OLD date_sold TEXT/VARCHAR TO DATE
     |--------------------------------------------------------------------------
-    | Convert an existing text column to a real PostgreSQL DATE.
     */
     $dateTypeStmt = $db->query("
         SELECT data_type
@@ -218,20 +202,59 @@ function ensure_kagera_table()
             ALTER TABLE public.kagera_auction_results
             ALTER COLUMN date_sold TYPE DATE
             USING CASE
-                WHEN date_sold IS NULL OR BTRIM(date_sold::text) = '' THEN NULL
+                WHEN date_sold IS NULL
+                  OR BTRIM(date_sold::text) = '' THEN NULL
                 WHEN date_sold::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-                    THEN date_sold::text::date
+                  THEN date_sold::text::date
                 WHEN date_sold::text ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
-                    THEN TO_DATE(date_sold::text, 'DD/MM/YYYY')
+                  THEN TO_DATE(date_sold::text, 'DD/MM/YYYY')
                 WHEN date_sold::text ~ '^[0-9]{2}-[0-9]{2}-[0-9]{4}$'
-                    THEN TO_DATE(date_sold::text, 'DD-MM-YYYY')
-                WHEN date_sold::text ~ '^[0-9]{1,2} [A-Za-z]+ [0-9]{4}$'
-                    THEN TO_DATE(date_sold::text, 'DD Month YYYY')
+                  THEN TO_DATE(date_sold::text, 'DD-MM-YYYY')
+                WHEN date_sold::text ~ '^[0-9]{1,2} [A-Za-z]+,? [0-9]{4}$'
+                  THEN TO_DATE(date_sold::text, 'DD Month YYYY')
+                WHEN date_sold::text ~ '^[A-Za-z]+ [0-9]{1,2},? [0-9]{4}$'
+                  THEN TO_DATE(date_sold::text, 'Month DD YYYY')
                 ELSE NULL
             END
         ");
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | NORMALIZE KEY SPACES
+    |--------------------------------------------------------------------------
+    */
+    $db->exec("
+        UPDATE public.kagera_auction_results
+        SET
+            lot_no = NULLIF(BTRIM(lot_no), ''),
+            auction_no = NULLIF(BTRIM(auction_no), '')
+    ");
+
+    /*
+    |--------------------------------------------------------------------------
+    | AUTOMATIC DUPLICATE CLEANUP
+    |--------------------------------------------------------------------------
+    | The newest row (highest id) is retained.
+    |--------------------------------------------------------------------------
+    */
+    $db->exec("
+        DELETE FROM public.kagera_auction_results a
+        USING public.kagera_auction_results b
+        WHERE a.id < b.id
+          AND a.lot_no = b.lot_no
+          AND a.auction_no = b.auction_no
+          AND a.date_sold = b.date_sold
+          AND a.lot_no IS NOT NULL
+          AND a.auction_no IS NOT NULL
+          AND a.date_sold IS NOT NULL
+    ");
+
+    /*
+    |--------------------------------------------------------------------------
+    | INDEXES
+    |--------------------------------------------------------------------------
+    */
     $db->exec("
         CREATE INDEX IF NOT EXISTS idx_kagera_auction_no
         ON public.kagera_auction_results (auction_no)
@@ -240,6 +263,22 @@ function ensure_kagera_table()
     $db->exec("
         CREATE INDEX IF NOT EXISTS idx_kagera_lot_no
         ON public.kagera_auction_results (lot_no)
+    ");
+
+    /*
+    |--------------------------------------------------------------------------
+    | THREE-FIELD UNIQUE CONSTRAINT
+    |--------------------------------------------------------------------------
+    | Lot No + Auction No + Date Sold must be unique as a combination.
+    |--------------------------------------------------------------------------
+    */
+    $db->exec("
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_kagera_lot_auction_date
+        ON public.kagera_auction_results
+        (lot_no, auction_no, date_sold)
+        WHERE lot_no IS NOT NULL
+          AND auction_no IS NOT NULL
+          AND date_sold IS NOT NULL
     ");
 }
 
@@ -773,124 +812,45 @@ function kagera_parse_excel(
 
 function handle_kagera_upload()
 {
-    if (
-        !isset($_FILES["kagera_excel"]) ||
-        !is_array($_FILES["kagera_excel"])
-    ) {
-
-        kagera_json(
-            false,
-            "Please select an Excel file.",
-            [],
-            400
-        );
+    if (!isset($_FILES["kagera_excel"]) || !is_array($_FILES["kagera_excel"])) {
+        kagera_json(false, "Please select an Excel file.", [], 400);
     }
 
     $file = $_FILES["kagera_excel"];
 
-    if (
-        ($file["error"] ?? UPLOAD_ERR_NO_FILE)
-        !== UPLOAD_ERR_OK
-    ) {
+    if (($file["error"] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        $errorCode = (int)($file["error"] ?? 0);
 
-        $errorCode =
-            (int)($file["error"] ?? 0);
+        $message = match ($errorCode) {
+            UPLOAD_ERR_INI_SIZE,
+            UPLOAD_ERR_FORM_SIZE => "The uploaded file is too large.",
+            UPLOAD_ERR_PARTIAL => "The file upload was incomplete.",
+            UPLOAD_ERR_NO_FILE => "Please select an Excel file.",
+            default => "File upload failed. Please try again."
+        };
 
-        $message =
-            match ($errorCode) {
-
-                UPLOAD_ERR_INI_SIZE,
-                UPLOAD_ERR_FORM_SIZE =>
-                    "The uploaded file is too large.",
-
-                UPLOAD_ERR_PARTIAL =>
-                    "The file upload was incomplete.",
-
-                UPLOAD_ERR_NO_FILE =>
-                    "Please select an Excel file.",
-
-                default =>
-                    "File upload failed. Please try again."
-            };
-
-        kagera_json(
-            false,
-            $message,
-            [],
-            400
-        );
+        kagera_json(false, $message, [], 400);
     }
 
-    $ext =
-        strtolower(
-            pathinfo(
-                $file["name"],
-                PATHINFO_EXTENSION
-            )
-        );
+    $ext = strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
 
     $allowed = [
-        "xlsx",
-        "xls",
-        "xlsm",
-        "xltx",
-        "xltm",
-        "xlsb",
-        "ods",
-        "csv",
-        "tsv",
-        "txt",
-        "xml",
-        "html",
-        "htm"
+        "xlsx", "xls", "xlsm", "xltx", "xltm", "xlsb",
+        "ods", "csv", "tsv", "txt", "xml", "html", "htm"
     ];
 
-    if (
-        !in_array(
-            $ext,
-            $allowed,
-            true
-        )
-    ) {
-
-        kagera_json(
-            false,
-            "Unsupported file format.",
-            [],
-            400
-        );
+    if (!in_array($ext, $allowed, true)) {
+        kagera_json(false, "Unsupported file format.", [], 400);
     }
 
-    if (
-        !isset($file["tmp_name"]) ||
-        !is_uploaded_file($file["tmp_name"])
-    ) {
-
-        kagera_json(
-            false,
-            "The uploaded file could not be accessed.",
-            [],
-            400
-        );
+    if (!isset($file["tmp_name"]) || !is_uploaded_file($file["tmp_name"])) {
+        kagera_json(false, "The uploaded file could not be accessed.", [], 400);
     }
 
-    $rows =
-        kagera_parse_excel(
-            $file["tmp_name"],
-            $ext
-        );
+    $rows = kagera_parse_excel($file["tmp_name"], $ext);
 
-    if (
-        !is_array($rows) ||
-        count($rows) < 2
-    ) {
-
-        kagera_json(
-            false,
-            "The Excel file does not contain enough data.",
-            [],
-            400
-        );
+    if (!is_array($rows) || count($rows) < 2) {
+        kagera_json(false, "The Excel file does not contain enough data.", [], 400);
     }
 
     /*
@@ -898,374 +858,358 @@ function handle_kagera_upload()
     | FIND HEADER ROW
     |--------------------------------------------------------------------------
     */
-
     $headerIndex = null;
 
-    for (
-        $r = 0;
-        $r < min(count($rows), 15);
-        $r++
-    ) {
-
-        $headers =
-            array_map(
-                "kagera_norm",
-                $rows[$r]
-            );
+    for ($r = 0; $r < min(count($rows), 15); $r++) {
+        $headers = array_map("kagera_norm", $rows[$r]);
 
         $signals = [
-            "lot_no",
-            "lot_number",
-            "lot",
-            "auction_no",
-            "auction_number",
-            "date_sold",
-            "warehouse",
-            "warehouse_location",
-            "net_weight",
-            "net_weight_kg",
-            "grade",
-            "grade2",
-            "price",
-            "buyer_name",
-            "buyer"
+            "lot_no", "lot_number", "lot",
+            "auction_no", "auction_number", "auction",
+            "auction_date", "date_sold", "sold_date",
+            "date_of_sale", "date_sold_date", "date",
+            "warehouse", "warehouse_name",
+            "warehouse_location", "location",
+            "net_weight", "net_weight_kg", "kgs", "kg",
+            "grade", "grade2", "price", "buyer_name", "buyer"
         ];
 
-        $matches =
-            count(
-                array_intersect(
-                    $signals,
-                    $headers
-                )
-            );
-
-        if ($matches >= 2) {
-
+        if (count(array_intersect($signals, $headers)) >= 2) {
             $headerIndex = $r;
             break;
         }
     }
 
     if ($headerIndex === null) {
-
-        kagera_json(
-            false,
-            "The Excel file header row could not be identified.",
-            [],
-            400
-        );
+        kagera_json(false, "The Excel file header row could not be identified.", [], 400);
     }
 
-    $headers =
-        array_map(
-            "kagera_norm",
-            $rows[$headerIndex]
-        );
+    $headers = array_map("kagera_norm", $rows[$headerIndex]);
 
     /*
     |--------------------------------------------------------------------------
     | COLUMN MAPPING
     |--------------------------------------------------------------------------
+    | Auction Date from Excel is stored in date_sold.
+    |--------------------------------------------------------------------------
     */
-
     $col = [
+        "lot_no" => kagera_find_col(
+            $headers,
+            ["lot_no", "lot_number", "lot"]
+        ),
 
-        "lot_no" =>
-            kagera_find_col(
-                $headers,
-                [
-                    "lot_no",
-                    "lot_number",
-                    "lot"
-                ]
-            ),
+        "auction_no" => kagera_find_col(
+            $headers,
+            ["auction_no", "auction_number", "auction"]
+        ),
 
-        "auction_no" =>
-            kagera_find_col(
-                $headers,
-                [
-                    "auction_no",
-                    "auction_number",
-                    "auction"
-                ]
-            ),
+        "date_sold" => kagera_find_col(
+            $headers,
+            [
+                "auction_date",
+                "date_sold",
+                "sold_date",
+                "date_of_sale",
+                "date_sold_date",
+                "date"
+            ]
+        ),
 
-        "date_sold" =>
-            kagera_find_col(
-                $headers,
-                [
-                    "auction_date",
-                    "date_sold",
-                    "sold_date",
-                    "date_of_sale",
-                    "date_sold_date",
-                    "date"
-                ]
-            ),
+        "warehouse" => kagera_find_col(
+            $headers,
+            ["warehouse", "warehouse_name"]
+        ),
 
-        
-        "warehouse" =>
-            kagera_find_col(
-                $headers,
-                [
-                    "warehouse",
-                    "warehouse_name"
-                ]
-            ),
+        "warehouse_location" => kagera_find_col(
+            $headers,
+            ["warehouse_location", "location", "warehouse_loc"]
+        ),
 
-        "warehouse_location" =>
-            kagera_find_col(
-                $headers,
-                [
-                    "warehouse_location",
-                    "location",
-                    "warehouse_loc"
-                ]
-            ),
+        "net_weight" => kagera_find_col(
+            $headers,
+            ["net_weight", "net_weight_kg", "net_kg", "kgs", "kg"]
+        ),
 
-        "net_weight" =>
-            kagera_find_col(
-                $headers,
-                [
-                    "net_weight",
-                    "net_weight_kg",
-                    "net_kg",
-                    "kgs",
-                    "kg"
-                ]
-            ),
+        "grade" => kagera_find_col(
+            $headers,
+            ["grade"]
+        ),
 
-        "grade" =>
-            kagera_find_col(
-                $headers,
-                [
-                    "grade"
-                ]
-            ),
+        "grade2" => kagera_find_col(
+            $headers,
+            ["grade2", "grade_2", "grade_ii"]
+        ),
 
-        "grade2" =>
-            kagera_find_col(
-                $headers,
-                [
-                    "grade2",
-                    "grade_2",
-                    "grade_ii"
-                ]
-            ),
+        "price" => kagera_find_col(
+            $headers,
+            ["price", "price_usd", "price_tzs", "unit_price"]
+        ),
 
-        "price" =>
-            kagera_find_col(
-                $headers,
-                [
-                    "price",
-                    "price_usd",
-                    "price_tzs",
-                    "unit_price"
-                ]
-            ),
-
-        "buyer_name" =>
-            kagera_find_col(
-                $headers,
-                [
-                    "buyer_name",
-                    "buyer"
-                ]
-            )
+        "buyer_name" => kagera_find_col(
+            $headers,
+            ["buyer_name", "buyer"]
+        )
     ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | DATABASE
-    |--------------------------------------------------------------------------
-    */
+    if (
+        $col["lot_no"] === null ||
+        $col["auction_no"] === null ||
+        $col["date_sold"] === null
+    ) {
+        kagera_json(
+            false,
+            "The Excel file must contain Lot No, Auction No. and Auction Date columns.",
+            [],
+            400
+        );
+    }
 
     ensure_kagera_table();
-
     $db = kagera_db();
 
     /*
     |--------------------------------------------------------------------------
-    | PREPARED INSERT
+    | READ AND DEDUPLICATE UPLOAD
     |--------------------------------------------------------------------------
     */
+    $records = [];
 
-    $stmt = $db->prepare("
-        INSERT INTO public.kagera_auction_results
-        (
-            lot_no,
-            auction_no,
-            date_sold,
-            warehouse,
-            warehouse_location,
-            net_weight,
-            grade,
-            grade2,
-            price,
-            buyer_name
-        )
-        VALUES
-        (
-            :lot_no,
-            :auction_no,
-            :date_sold,
-            :warehouse,
-            :warehouse_location,
-            :net_weight,
-            :grade,
-            :grade2,
-            :price,
-            :buyer_name
-        )
-    ");
+    foreach ($rows as $r => $row) {
+        if ($r <= $headerIndex) {
+            continue;
+        }
 
-    $processed = 0;
+        $get = function ($key) use ($row, $col) {
+            $i = $col[$key];
+
+            if ($i === null) {
+                return "";
+            }
+
+            return trim((string)($row[$i] ?? ""));
+        };
+
+        $lot = $get("lot_no");
+        $auction = $get("auction_no");
+        $date = kagera_normalize_date($get("date_sold"));
+
+        $warehouse = $get("warehouse");
+        $location = $get("warehouse_location");
+        $weight = kagera_number($get("net_weight"));
+        $grade = $get("grade");
+        $grade2 = $get("grade2");
+        $price = kagera_number($get("price"));
+        $buyer = $get("buyer_name");
+
+        if (
+            $lot === "" &&
+            $auction === "" &&
+            $date === null &&
+            $warehouse === "" &&
+            $location === "" &&
+            $grade === "" &&
+            $grade2 === "" &&
+            $buyer === ""
+        ) {
+            continue;
+        }
+
+        if ($lot === "" || $auction === "" || $date === null) {
+            kagera_json(
+                false,
+                "Every auction row must contain Lot No, Auction No. and a valid Auction Date.",
+                ["excel_row" => $r + 1],
+                400
+            );
+        }
+
+        $key = $lot . "\x1F" . $auction . "\x1F" . $date;
+
+        /*
+        | If the same three-field key occurs more than once in the
+        | uploaded Excel, keep the last occurrence.
+        */
+        $records[$key] = [
+            "lot_no" => $lot,
+            "auction_no" => $auction,
+            "date_sold" => $date,
+            "warehouse" => $warehouse,
+            "warehouse_location" => $location,
+            "net_weight" => $weight,
+            "grade" => $grade,
+            "grade2" => $grade2,
+            "price" => $price,
+            "buyer_name" => $buyer
+        ];
+    }
+
+    if (empty($records)) {
+        kagera_json(false, "No valid auction records were found in the Excel file.", [], 400);
+    }
 
     /*
     |--------------------------------------------------------------------------
-    | TRANSACTION
+    | FIND EXISTING EXACT MATCHES
     |--------------------------------------------------------------------------
     */
+    $existing = [];
 
+    $existingStmt = $db->query("
+        SELECT id, lot_no, auction_no, date_sold
+        FROM public.kagera_auction_results
+        WHERE lot_no IS NOT NULL
+          AND auction_no IS NOT NULL
+          AND date_sold IS NOT NULL
+    ");
+
+    while ($old = $existingStmt->fetch(PDO::FETCH_ASSOC)) {
+        $key =
+            trim((string)$old["lot_no"]) . "\x1F" .
+            trim((string)$old["auction_no"]) . "\x1F" .
+            $old["date_sold"];
+
+        $existing[$key] = $old;
+    }
+
+    $replacementKeys = array_values(
+        array_intersect(array_keys($records), array_keys($existing))
+    );
+
+    $confirmed =
+        isset($_POST["confirm_replace"]) &&
+        (string)$_POST["confirm_replace"] === "1";
+
+    /*
+    |--------------------------------------------------------------------------
+    | PREVIEW: DO NOT CHANGE DATABASE UNTIL USER CONFIRMS
+    |--------------------------------------------------------------------------
+    */
+    if (!empty($replacementKeys) && !$confirmed) {
+        $preview = [];
+
+        foreach ($replacementKeys as $key) {
+            $preview[] = [
+                "lot_no" => $records[$key]["lot_no"],
+                "auction_no" => $records[$key]["auction_no"],
+                "date_sold" => $records[$key]["date_sold"]
+            ];
+        }
+
+        kagera_json(
+            true,
+            "Existing matching records were found. Confirmation is required before replacement.",
+            [
+                "requires_confirmation" => true,
+                "existing_count" => count($replacementKeys),
+                "new_record_count" => count($records) - count($replacementKeys),
+                "replacement_records" => $preview
+            ],
+            200
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | CONFIRMED REPLACEMENT / INSERT
+    |--------------------------------------------------------------------------
+    */
     $db->beginTransaction();
 
     try {
+        if (!empty($replacementKeys)) {
+            $deleteStmt = $db->prepare("
+                DELETE FROM public.kagera_auction_results
+                WHERE lot_no = :lot_no
+                  AND auction_no = :auction_no
+                  AND date_sold = :date_sold
+            ");
 
-        foreach ($rows as $r => $row) {
+            foreach ($replacementKeys as $key) {
+                $old = $existing[$key];
 
-            if ($r <= $headerIndex) {
-                continue;
+                $deleteStmt->execute([
+                    "lot_no" => trim((string)$old["lot_no"]),
+                    "auction_no" => trim((string)$old["auction_no"]),
+                    "date_sold" => $old["date_sold"]
+                ]);
             }
-
-            $get = function ($key) use (
-                $row,
-                $col
-            ) {
-
-                $i = $col[$key];
-
-                if ($i === null) {
-                    return "";
-                }
-
-                return trim(
-                    (string)(
-                        $row[$i] ?? ""
-                    )
-                );
-            };
-
-            $lot =
-                $get("lot_no");
-
-            $auction =
-                $get("auction_no");
-
-            $date =
-                kagera_normalize_date(
-                    $get("date_sold")
-                );
-
-            $warehouse =
-                $get("warehouse");
-
-            $location =
-                $get("warehouse_location");
-
-            $weight =
-                kagera_number(
-                    $get("net_weight")
-                );
-
-            $grade =
-                $get("grade");
-
-            $grade2 =
-                $get("grade2");
-
-            $price =
-                kagera_number(
-                    $get("price")
-                );
-
-            $buyer =
-                $get("buyer_name");
-
-            /*
-            | Skip completely empty rows
-            */
-            if (
-                $lot === "" &&
-                $auction === "" &&
-                $date === "" &&
-                $warehouse === "" &&
-                $location === "" &&
-                $grade === "" &&
-                $grade2 === "" &&
-                $buyer === ""
-            ) {
-
-                continue;
-            }
-
-            $stmt->execute([
-                "lot_no" =>
-                    $lot,
-
-                "auction_no" =>
-                    $auction,
-
-                "date_sold" =>
-                    $date,
-
-
-                "warehouse" =>
-                    $warehouse,
-
-                "warehouse_location" =>
-                    $location,
-
-                "net_weight" =>
-                    $weight,
-
-                "grade" =>
-                    $grade,
-
-                "grade2" =>
-                    $grade2,
-
-                "price" =>
-                    $price,
-
-                "buyer_name" =>
-                    $buyer
-            ]);
-
-            $processed++;
         }
+
+        $insertStmt = $db->prepare("
+            INSERT INTO public.kagera_auction_results
+            (
+                lot_no,
+                auction_no,
+                date_sold,
+                warehouse,
+                warehouse_location,
+                net_weight,
+                grade,
+                grade2,
+                price,
+                buyer_name
+            )
+            VALUES
+            (
+                :lot_no,
+                :auction_no,
+                :date_sold,
+                :warehouse,
+                :warehouse_location,
+                :net_weight,
+                :grade,
+                :grade2,
+                :price,
+                :buyer_name
+            )
+        ");
+
+        foreach ($records as $record) {
+            $insertStmt->execute($record);
+        }
+
+        /*
+        | Final safety cleanup. The unique index also prevents future duplicates.
+        */
+        $db->exec("
+            DELETE FROM public.kagera_auction_results a
+            USING public.kagera_auction_results b
+            WHERE a.id < b.id
+              AND a.lot_no = b.lot_no
+              AND a.auction_no = b.auction_no
+              AND a.date_sold = b.date_sold
+              AND a.lot_no IS NOT NULL
+              AND a.auction_no IS NOT NULL
+              AND a.date_sold IS NOT NULL
+        ");
 
         $db->commit();
 
     } catch (Throwable $e) {
-
         if ($db->inTransaction()) {
             $db->rollBack();
         }
 
-        error_log(
-            "Kagera upload database error: " .
-            $e->getMessage()
-        );
+        error_log("Kagera upload database error: " . $e->getMessage());
 
         throw new Exception(
             "The auction records could not be saved to the database."
         );
     }
 
+    $replaced = count($replacementKeys);
+    $added = count($records) - $replaced;
+
     kagera_json(
         true,
-        "Kagera Auction results uploaded successfully. {$processed} record(s) processed.",
-        [],
+        "Kagera Auction upload completed. {$added} new record(s) added and {$replaced} existing record(s) replaced.",
+        [
+            "requires_confirmation" => false,
+            "new_records" => $added,
+            "replaced_records" => $replaced,
+            "processed_records" => count($records)
+        ],
         200
     );
 }
@@ -2087,46 +2031,31 @@ async function readKageraJson(response)
 */
 
 if (kageraUploadForm) {
-
     kageraUploadForm.addEventListener(
         "submit",
         async function (event) {
-
             event.preventDefault();
 
-            if (
-                !kageraExcelFile.files.length
-            ) {
-
+            if (!kageraExcelFile.files.length) {
                 showKageraStatus(
                     "Please select an Excel file first.",
                     "error"
                 );
-
                 return;
             }
 
             const button =
-                document.getElementById(
-                    "kageraUploadButton"
-                );
+                document.getElementById("kageraUploadButton");
 
-            const formData =
-                new FormData(
-                    kageraUploadForm
-                );
+            async function submitUpload(confirmReplace) {
+                const formData =
+                    new FormData(kageraUploadForm);
 
-            button.disabled = true;
-
-            button.innerHTML =
-                "<span>⏳</span> Uploading...";
-
-            showKageraStatus(
-                "Uploading auction results...",
-                "success"
-            );
-
-            try {
+                if (confirmReplace) {
+                    formData.set("confirm_replace", "1");
+                } else {
+                    formData.delete("confirm_replace");
+                }
 
                 const response =
                     await fetch(
@@ -2139,16 +2068,69 @@ if (kageraUploadForm) {
                         }
                     );
 
-                const result =
-                    await readKageraJson(
-                        response
+                return await readKageraJson(response);
+            }
+
+            button.disabled = true;
+            button.innerHTML =
+                "<span>⏳</span> Checking...";
+
+            showKageraStatus(
+                "Checking Lot No, Auction No. and Auction Date...",
+                "success"
+            );
+
+            try {
+                const firstResult =
+                    await submitUpload(false);
+
+                const info =
+                    firstResult.data || {};
+
+                if (
+                    info.requires_confirmation === true
+                ) {
+                    const count =
+                        Number(info.existing_count || 0);
+
+                    const confirmed =
+                        window.confirm(
+                            count +
+                            " matching record(s) already exist in the database.\n\n" +
+                            "The match is based on:\n" +
+                            "Lot No + Auction No. + Date Sold.\n\n" +
+                            "Do you want to REPLACE the existing record(s) with the new Excel data?\n\n" +
+                            "OK = Replace existing records\n" +
+                            "Cancel = Keep the existing records"
+                        );
+
+                    if (!confirmed) {
+                        showKageraStatus(
+                            "Upload cancelled. No existing records were changed.",
+                            "success"
+                        );
+                        return;
+                    }
+
+                    button.innerHTML =
+                        "<span>⏳</span> Replacing...";
+
+                    const finalResult =
+                        await submitUpload(true);
+
+                    showKageraStatus(
+                        finalResult.message ||
+                        "Kagera Auction results uploaded successfully.",
+                        "success"
                     );
 
-                showKageraStatus(
-                    result.message ||
-                    "Results uploaded successfully.",
-                    "success"
-                );
+                } else {
+                    showKageraStatus(
+                        firstResult.message ||
+                        "Kagera Auction results uploaded successfully.",
+                        "success"
+                    );
+                }
 
                 kageraUploadForm.reset();
 
@@ -2158,7 +2140,6 @@ if (kageraUploadForm) {
                 await loadKageraResults();
 
             } catch (error) {
-
                 console.error(
                     "Kagera upload error:",
                     error
@@ -2171,9 +2152,7 @@ if (kageraUploadForm) {
                 );
 
             } finally {
-
                 button.disabled = false;
-
                 button.innerHTML =
                     "<span>↑</span> Upload Results";
             }
@@ -2347,7 +2326,7 @@ function formatKageraDate(value)
     const text = String(value).trim();
 
     // Stored database value is normally YYYY-MM-DD.
-    const iso = text.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
     if (iso) {
         return iso[3] + "/" + iso[2] + "/" + iso[1];
