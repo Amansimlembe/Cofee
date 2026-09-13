@@ -1644,10 +1644,10 @@ function handle_kagera_report()
     }
 
     $catalogueSql = "
-        SELECT grade2, COALESCE(SUM(net_weight),0) AS kilos_offered
+        SELECT grade, COALESCE(SUM(net_weight),0) AS kilos_offered
         FROM public.kagera_auction_catalogue
         " . ($catalogueWhere ? 'WHERE ' . implode(' AND ', $catalogueWhere) : '') . "
-        GROUP BY grade2
+        GROUP BY grade
     ";
 
     $stmt = $db->prepare($catalogueSql);
@@ -1656,7 +1656,7 @@ function handle_kagera_report()
 
     $resultSql = "
         SELECT
-            grade2,
+            grade,
             COALESCE(SUM(net_weight),0) AS kilos_sold,
             COALESCE(SUM(net_weight * COALESCE(price,0)),0) AS total_value,
             MIN(CASE WHEN price > 0 AND net_weight > 0 THEN price END) AS lowest_price,
@@ -1683,7 +1683,7 @@ function handle_kagera_report()
             MAX(CASE WHEN price > 0 AND net_weight > 0 THEN price END) AS highest_price
         FROM public.kagera_auction_results
         " . ($resultWhere ? 'WHERE ' . implode(' AND ', $resultWhere) : '') . "
-        GROUP BY grade2
+        GROUP BY grade
     ";
 
     $stmt = $db->prepare($resultSql);
@@ -1750,14 +1750,14 @@ function handle_kagera_report()
     };
 
     foreach ($catalogueRows as $row) {
-        $type = $normaliseType($row['grade2'] ?? '');
+        $type = $normaliseType($row['grade'] ?? '');
         if ($type !== null) {
             $groups[$type]['kilos_offered'] += (float)($row['kilos_offered'] ?? 0);
         }
     }
 
     foreach ($resultRows as $row) {
-        $type = $normaliseType($row['grade2'] ?? '');
+        $type = $normaliseType($row['grade'] ?? '');
         if ($type !== null) {
             $groups[$type]['kilos_sold'] = (float)($row['kilos_sold'] ?? 0);
             $groups[$type]['total_value'] = (float)($row['total_value'] ?? 0);
@@ -4098,6 +4098,23 @@ async function kageraShowReport()
             if (body) {
                 const types = ["Dry Cherry Coffee", "Clean Coffee"];
 
+                const totalOffered = types.reduce(function(sum, type) {
+                    return sum + kageraNumber((groups[type] || {}).kilos_offered);
+                }, 0);
+
+                const totalSold = types.reduce(function(sum, type) {
+                    return sum + kageraNumber((groups[type] || {}).kilos_sold);
+                }, 0);
+
+                const totalValue = types.reduce(function(sum, type) {
+                    return sum + kageraNumber((groups[type] || {}).total_value);
+                }, 0);
+
+                const totalPercentage =
+                    totalOffered > 0
+                        ? (totalSold / totalOffered) * 100
+                        : 0;
+
                 body.innerHTML = types.map(function(type) {
                     const g = groups[type] || {};
 
@@ -4108,7 +4125,14 @@ async function kageraShowReport()
                         "<td>" + kageraReportMoney(g.total_value) + "</td>" +
                         "<td>" + kageraNumber(g.percentage_sold).toFixed(2) + "%</td>" +
                         "</tr>";
-                }).join("");
+                }).join("") +
+                "<tr class=\"kagera-high-low-total-row\">" +
+                    "<td>Total</td>" +
+                    "<td>" + kageraReportKg(totalOffered) + "</td>" +
+                    "<td>" + kageraReportKg(totalSold) + "</td>" +
+                    "<td>" + kageraReportMoney(totalValue) + "</td>" +
+                    "<td>" + totalPercentage.toFixed(2) + "%</td>" +
+                "</tr>";
             }
         }
 
