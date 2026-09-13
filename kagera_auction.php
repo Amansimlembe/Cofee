@@ -2495,8 +2495,35 @@ function kageraPopulateSeasonFilter()
     const sortedSeasons =
         Array.from(seasons).sort(function (a, b) {
 
-            return Number(b.substring(0, 4)) -
-                   Number(a.substring(0, 4));
+            /*
+             * Always normalize the values to strings before
+             * using string methods. This prevents:
+             * "b.substring is not a function"
+             */
+            const seasonA = String(a ?? "").trim();
+            const seasonB = String(b ?? "").trim();
+
+            const yearA =
+                Number(seasonA.split("/")[0]);
+
+            const yearB =
+                Number(seasonB.split("/")[0]);
+
+            if (
+                Number.isFinite(yearA) &&
+                Number.isFinite(yearB)
+            ) {
+                return yearB - yearA;
+            }
+
+            return seasonB.localeCompare(
+                seasonA,
+                undefined,
+                {
+                    numeric: true,
+                    sensitivity: "base"
+                }
+            );
         });
 
     seasonSelect.innerHTML =
@@ -2575,8 +2602,8 @@ function kageraPopulateAuctionFilter()
             if (numberA !== null) return -1;
             if (numberB !== null) return 1;
 
-            return b.localeCompare(
-                a,
+            return String(b ?? "").localeCompare(
+                String(a ?? ""),
                 undefined,
                 {
                     numeric: true,
