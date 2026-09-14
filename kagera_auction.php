@@ -2937,6 +2937,13 @@ body.sidebar-collapsed .kagera-main {
     }
 }
 
+
+.kagera-loading-state {
+    text-align: center;
+    padding: 28px 16px;
+    font-weight: 600;
+    opacity: .75;
+}
 </style>
 
 </head>
@@ -3038,7 +3045,7 @@ body.sidebar-collapsed .kagera-main {
         <button
             type="button"
             class="kagera-refresh-btn"
-            onclick="loadKageraResults()"
+            onclick="loadKageraResults({force:true})"
         >
             <span>↻</span> Refresh
         </button>
@@ -3102,7 +3109,7 @@ body.sidebar-collapsed .kagera-main {
             <button
             type="button"
             class="kagera-refresh-btn"
-            onclick="loadKageraResults()"
+            onclick="loadKageraResults({force:true})"
         >
             <span>↻</span> Refresh
         </button>
@@ -3454,7 +3461,8 @@ if (kageraUploadForm) {
                 kageraFileName.textContent =
                     "Supported formats: .xlsx, .xls, .xlsm, .xltx, .xltm, .xlsb, .ods, .csv, .tsv, .txt, .xml, .html";
 
-                await loadKageraResults();
+                kageraInvalidateDataCache();
+                        await loadKageraResults({force:true});
 
             } catch (error) {
                 console.error(
@@ -3594,6 +3602,68 @@ function kageraSortResults(rows)
 let kageraAllResults = [];
 let kageraResultsLoaded = false;
 
+/*
+|--------------------------------------------------------------------------
+| FETCH / RENDER PERFORMANCE STATE
+|--------------------------------------------------------------------------
+| Keep one in-memory copy of each dataset, prevent duplicate requests,
+| cancel stale requests, and prevent an older response from rendering over
+| a newer selection. This is especially important on large Kagera datasets.
+|--------------------------------------------------------------------------
+*/
+const kageraDataCache = {
+    results: { loaded: false, rows: [], promise: null, controller: null },
+    catalogue: { loaded: false, rows: [], promise: null, controller: null }
+};
+
+let kageraActiveDataRequest = 0;
+let kageraActiveReportRequest = 0;
+let kageraReportController = null;
+const kageraReportCache = new Map();
+
+function kageraNextFrame(callback)
+{
+    if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(callback);
+    } else {
+        setTimeout(callback, 0);
+    }
+}
+
+function kageraSetLoading(body, colspan, message = "Loading records…")
+{
+    if (!body) return;
+    body.innerHTML =
+        '<tr><td colspan="' + colspan + '" class="kagera-empty-state kagera-loading-state">' +
+        escapeKageraHtml(message) +
+        '</td></tr>';
+}
+
+function kageraInvalidateDataCache(type = null)
+{
+    const types = type ? [type] : ["results", "catalogue"];
+    types.forEach(function(key) {
+        const cache = kageraDataCache[key];
+        if (!cache) return;
+        if (cache.controller) cache.controller.abort();
+        cache.loaded = false;
+        cache.rows = [];
+        cache.promise = null;
+        cache.controller = null;
+    });
+
+    if (!type || type === "results") {
+        kageraAllResults = [];
+        kageraResultsLoaded = false;
+    }
+    if (!type || type === "catalogue") {
+        kageraCatalogueData = [];
+    }
+
+    kageraReportCache.clear();
+}
+
+
 function kageraPopulateSeasonFilterFromRows(rows)
 {
     const seasonSelect = document.getElementById("kageraSeasonFilter");
@@ -3612,14 +3682,23 @@ function kageraPopulateSeasonFilterFromRows(rows)
         return yearB - yearA;
     });
 
-    seasonSelect.innerHTML = '<option value="">Select Season</option>';
+    const currentValue = seasonSelect.value;
+    const optionsHtml = ['<option value="">Select Season</option>']
+        .concat(sorted.map(function(season) {
+            return '<option value="' + escapeKageraHtml(season) + '">' +
+                   escapeKageraHtml(season) + '</option>';
+        }))
+        .join("");
 
-    sorted.forEach(function(season) {
-        const option = document.createElement("option");
-        option.value = season;
-        option.textContent = season;
-        seasonSelect.appendChild(option);
-    });
+    if (seasonSelect.innerHTML !== optionsHtml) {
+        seasonSelect.innerHTML = optionsHtml;
+    }
+
+    if (sorted.indexOf(currentValue) >= 0) {
+        seasonSelect.value = currentValue;
+    } else if (!currentValue) {
+        seasonSelect.value = "";
+    }
 }
 
 function kageraPopulateSeasonFilter()
@@ -3636,48 +3715,24 @@ function kageraPopulateAuctionFilterFromRows(rows)
 
     const selectedSeason = seasonSelect.value;
 
-    auctionSelect.innerHTML =
-        '<option value="">Select Auction</option>';
+    const currentAuction = auctionSelect.value;
+    const auctionOptionsHtml = ['<option value="">Select Auction</option>']
+        .concat(sorted.map(function(auction) {
+            return '<option value="' + escapeKageraHtml(auction) + '">Auction ' +
+                   escapeKageraHtml(auction) + '</option>';
+        }))
+        .join("");
 
-    if (!selectedSeason) {
-        auctionSelect.disabled = true;
-        return;
+    if (auctionSelect.innerHTML !== auctionOptionsHtml) {
+        auctionSelect.innerHTML = auctionOptionsHtml;
     }
 
-    const auctions = new Set();
-
-    (rows || []).forEach(function(row) {
-        if (kageraGetSeason(row.date_sold) !== selectedSeason) return;
-
-        const auction = String(row.auction_no ?? "").trim();
-        if (auction) auctions.add(auction);
-    });
-
-    const sorted = Array.from(auctions).sort(function(a, b) {
-        const numberA = kageraAuctionNumber(a);
-        const numberB = kageraAuctionNumber(b);
-
-        if (numberA !== null && numberB !== null) {
-            return numberB - numberA;
-        }
-
-        if (numberA !== null) return -1;
-        if (numberB !== null) return 1;
-
-        return String(b).localeCompare(String(a), undefined, {
-            numeric: true,
-            sensitivity: "base"
-        });
-    });
-
-    sorted.forEach(function(auction) {
-        const option = document.createElement("option");
-        option.value = auction;
-        option.textContent = "Auction " + auction;
-        auctionSelect.appendChild(option);
-    });
-
     auctionSelect.disabled = sorted.length === 0;
+    if (sorted.indexOf(currentAuction) >= 0) {
+        auctionSelect.value = currentAuction;
+    } else {
+        auctionSelect.value = "";
+    }
 }
 
 function kageraPopulateAuctionFilter()
@@ -3879,39 +3934,124 @@ function kageraRenderCatalogue(rows)
     }).join("");
 }
 
-async function loadKageraData(type)
+async function loadKageraData(type, options = {})
 {
-    const isCatalogue=type==="catalogue";
-    const body=document.getElementById(isCatalogue ? "kageraCatalogueBody" : "kageraResultsBody");
-    if(!body) return;
+    const isCatalogue = type === "catalogue";
+    const body = document.getElementById(
+        isCatalogue ? "kageraCatalogueBody" : "kageraResultsBody"
+    );
+    if (!body) return [];
 
-    try{
-        const response=await fetch(
-            "kagera_auction.php?action=fetch&kagera_type="+encodeURIComponent(type),
-            {cache:"no-store",credentials:"same-origin"}
-        );
-        const result=await readKageraJson(response);
+    const cache = kageraDataCache[type];
+    if (!cache) return [];
 
-        if(isCatalogue){
-            kageraCatalogueData=Array.isArray(result.data)?result.data:[];
-            kageraPopulateSeasonFilterFromRows(kageraCatalogueData);
-            const auctionSelect=document.getElementById("kageraAuctionFilter");
-            if(auctionSelect) auctionSelect.value="";
-            kageraPopulateAuctionFilterFromRows(kageraCatalogueData);
-            kageraRenderCatalogue(kageraGetFilteredCatalogue());
-        }else{
-            kageraAllResults=Array.isArray(result.data)?result.data:[];
-            kageraResultsLoaded=true;
-            kageraPopulateSeasonFilterFromRows(kageraAllResults);
-            const auctionSelect=document.getElementById("kageraAuctionFilter");
-            if(auctionSelect) auctionSelect.value="";
-            kageraPopulateAuctionFilterFromRows(kageraAllResults);
-            kageraRenderResults(kageraGetFilteredResults());
+    const force = options.force === true;
+
+    /* Reuse already fetched data instead of downloading the same large JSON again. */
+    if (!force && cache.loaded) {
+        if (isCatalogue) {
+            kageraCatalogueData = cache.rows;
+            kageraPopulateSeasonFilterFromRows(cache.rows);
+            kageraPopulateAuctionFilterFromRows(cache.rows);
+            kageraNextFrame(function() {
+                kageraRenderCatalogue(kageraGetFilteredCatalogue());
+            });
+        } else {
+            kageraAllResults = cache.rows;
+            kageraResultsLoaded = true;
+            kageraPopulateSeasonFilterFromRows(cache.rows);
+            kageraPopulateAuctionFilterFromRows(cache.rows);
+            kageraNextFrame(function() {
+                kageraRenderResults(kageraGetFilteredResults());
+            });
         }
-    }catch(error){
-        body.innerHTML='<tr><td colspan="'+(isCatalogue?13:10)+'" class="kagera-empty-state">'+
-            escapeKageraHtml(error.message||"Unable to load records.")+"</td></tr>";
+        return cache.rows;
     }
+
+    /* If the same request is already running, all callers share it. */
+    if (!force && cache.promise) {
+        return cache.promise;
+    }
+
+    if (cache.controller) {
+        cache.controller.abort();
+    }
+
+    const controller = new AbortController();
+    cache.controller = controller;
+    const requestId = ++kageraActiveDataRequest;
+    const colspan = isCatalogue ? 13 : 10;
+
+    kageraSetLoading(body, colspan, "Loading records…");
+
+    cache.promise = (async function() {
+        try {
+            const response = await fetch(
+                "kagera_auction.php?action=fetch&kagera_type=" + encodeURIComponent(type),
+                {
+                    cache: "no-store",
+                    credentials: "same-origin",
+                    signal: controller.signal,
+                    headers: { "Accept": "application/json" }
+                }
+            );
+
+            const result = await readKageraJson(response);
+            if (!result || result.success === false) {
+                throw new Error(result?.message || "Unable to load records.");
+            }
+
+            const rows = Array.isArray(result.data) ? result.data : [];
+
+            /* Never let a stale response repaint the current screen. */
+            if (requestId !== kageraActiveDataRequest || controller.signal.aborted) {
+                return rows;
+            }
+
+            cache.rows = rows;
+            cache.loaded = true;
+
+            if (isCatalogue) {
+                kageraCatalogueData = rows;
+                kageraPopulateSeasonFilterFromRows(rows);
+                const auctionSelect = document.getElementById("kageraAuctionFilter");
+                if (auctionSelect) auctionSelect.value = "";
+                kageraPopulateAuctionFilterFromRows(rows);
+                kageraNextFrame(function() {
+                    kageraRenderCatalogue(kageraGetFilteredCatalogue());
+                });
+            } else {
+                kageraAllResults = rows;
+                kageraResultsLoaded = true;
+                kageraPopulateSeasonFilterFromRows(rows);
+                const auctionSelect = document.getElementById("kageraAuctionFilter");
+                if (auctionSelect) auctionSelect.value = "";
+                kageraPopulateAuctionFilterFromRows(rows);
+                kageraNextFrame(function() {
+                    kageraRenderResults(kageraGetFilteredResults());
+                });
+            }
+
+            return rows;
+        } catch (error) {
+            if (error && error.name === "AbortError") {
+                return cache.rows;
+            }
+
+            if (requestId === kageraActiveDataRequest && body) {
+                body.innerHTML =
+                    '<tr><td colspan="' + colspan + '" class="kagera-empty-state">' +
+                    escapeKageraHtml(error.message || "Unable to load records.") +
+                    "</td></tr>";
+            }
+            throw error;
+        } finally {
+            if (cache.controller === controller) cache.controller = null;
+            if (cache.promise) cache.promise = null;
+        }
+    })();
+
+    return cache.promise;
 }
 
 
@@ -4837,18 +4977,49 @@ async function kageraShowReport()
     const season = seasonSelect ? String(seasonSelect.value || "") : "";
     const auction = auctionSelect ? String(auctionSelect.value || "") : "";
 
-    try {
-        const response = await fetch(
-            "kagera_auction.php?action=report" +
-            "&season=" + encodeURIComponent(season) +
-            "&auction_no=" + encodeURIComponent(auction),
-            {
-                cache: "no-store",
-                credentials: "same-origin"
-            }
-        );
+    let result;
 
-        const result = await readKageraJson(response);
+    try {
+        const reportKey = season + "|" + auction;
+
+        /* Cancel a previous report request when the user changes Season/Auction. */
+        if (kageraReportController) {
+            kageraReportController.abort();
+        }
+
+        if (kageraReportCache.has(reportKey)) {
+            result = kageraReportCache.get(reportKey);
+        } else {
+            const controller = new AbortController();
+            kageraReportController = controller;
+            const reportRequestId = ++kageraActiveReportRequest;
+
+            const response = await fetch(
+                "kagera_auction.php?action=report" +
+                "&season=" + encodeURIComponent(season) +
+                "&auction_no=" + encodeURIComponent(auction),
+                {
+                    cache: "no-store",
+                    credentials: "same-origin",
+                    signal: controller.signal,
+                    headers: { "Accept": "application/json" }
+                }
+            );
+
+            const fetchedResult = await readKageraJson(response);
+
+            if (reportRequestId !== kageraActiveReportRequest || controller.signal.aborted) {
+                return;
+            }
+
+            if (!fetchedResult || fetchedResult.success === false) {
+                throw new Error(fetchedResult?.message || "Unable to generate report.");
+            }
+
+            kageraReportCache.set(reportKey, fetchedResult);
+            result = fetchedResult;
+            kageraReportController = null;
+        }
 
         if (!result.success) {
             throw new Error(result.message || "Unable to generate report.");
@@ -5132,6 +5303,8 @@ async function kageraShowReport()
         }
 
     } catch (error) {
+        if (error && error.name === "AbortError") return;
+
         const body =
             selectedReport === "high_low"
                 ? document.getElementById("kageraHighLowBody")
@@ -5148,16 +5321,18 @@ async function kageraShowReport()
     }
 }
 
-async function loadKageraResults()
+async function loadKageraResults(options = {})
 {
-    const type=kageraDisplayType ? kageraDisplayType.value : "results";
-    const resultsTable=document.getElementById("kageraResultsTable");
-    const catalogueTable=document.getElementById("kageraCatalogueTable");
-    const title=document.getElementById("kageraSectionTitle");
-    const subtitle=document.getElementById("kageraSectionSubtitle");
+    const type = kageraDisplayType ? kageraDisplayType.value : "results";
+    const force = options.force === true;
 
-    if(resultsTable) resultsTable.style.display=type==="results"?"table":"none";
-    if(catalogueTable) catalogueTable.style.display=type==="catalogue"?"table":"none";
+    const resultsTable = document.getElementById("kageraResultsTable");
+    const catalogueTable = document.getElementById("kageraCatalogueTable");
+    const title = document.getElementById("kageraSectionTitle");
+    const subtitle = document.getElementById("kageraSectionSubtitle");
+
+    if (resultsTable) resultsTable.style.display = type === "results" ? "table" : "none";
+    if (catalogueTable) catalogueTable.style.display = type === "catalogue" ? "table" : "none";
 
     const reportPanel = document.getElementById("kageraReportPanel");
     const highLowReport = document.getElementById("kageraHighLowReport");
@@ -5169,10 +5344,33 @@ async function loadKageraResults()
         if (salesSummaryReport) salesSummaryReport.style.display = "none";
     }
 
-    if(title) title.textContent=type==="catalogue"?"Kagera Auction Catalogue":"Kagera Auction Results";
-    if(subtitle) subtitle.textContent=type==="catalogue"?"Catalogue currently stored in the database.":"Results currently stored in the database.";
+    if (title) {
+        title.textContent = type === "catalogue" ? "Kagera Auction Catalogue" : "Kagera Auction Results";
+    }
+    if (subtitle) {
+        subtitle.textContent = type === "catalogue"
+            ? "Catalogue currently stored in the database."
+            : "Results currently stored in the database.";
+    }
 
-    await loadKageraData(type);
+    if (type === "high_low" || type === "sales_summary") {
+        return kageraShowReport();
+    }
+
+    return loadKageraData(type, { force: force });
+}
+
+let kageraReportRenderTimer = null;
+function kageraQueueReportRender()
+{
+    if (kageraReportRenderTimer) {
+        clearTimeout(kageraReportRenderTimer);
+    }
+
+    kageraReportRenderTimer = setTimeout(function() {
+        kageraReportRenderTimer = null;
+        void kageraShowReport();
+    }, 80);
 }
 
 /*
@@ -5216,7 +5414,7 @@ if (kageraSeasonSelect) {
             } else if (kageraDisplayType &&
                        (kageraDisplayType.value === "high_low" ||
                         kageraDisplayType.value === "sales_summary")) {
-                void kageraShowReport();
+                kageraQueueReportRender();
             } else {
                 kageraRenderResults(kageraGetFilteredResults());
             }
@@ -5249,7 +5447,7 @@ if (kageraAuctionSelect) {
             } else if (kageraDisplayType &&
                        (kageraDisplayType.value === "high_low" ||
                         kageraDisplayType.value === "sales_summary")) {
-                void kageraShowReport();
+                kageraQueueReportRender();
             } else {
                 kageraRenderResults(kageraGetFilteredResults());
             }
