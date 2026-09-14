@@ -3715,6 +3715,40 @@ function kageraPopulateAuctionFilterFromRows(rows)
 
     const selectedSeason = seasonSelect.value;
 
+    // Build the auction list from the currently loaded results and, when
+    // selected, restrict it to the chosen season. This also guarantees that
+    // `sorted` is defined before it is used below.
+    const auctions = new Set();
+
+    (rows || []).forEach(function(row) {
+        const auction = String(row.auction_no ?? "").trim();
+        if (!auction) return;
+
+        if (selectedSeason) {
+            const rowSeason = kageraGetSeason(row.date_sold);
+            if (rowSeason !== selectedSeason) return;
+        }
+
+        auctions.add(auction);
+    });
+
+    const sorted = Array.from(auctions).sort(function(a, b) {
+        const numberA = kageraAuctionNumber(a);
+        const numberB = kageraAuctionNumber(b);
+
+        if (numberA !== null && numberB !== null && numberA !== numberB) {
+            return numberB - numberA;
+        }
+
+        if (numberA !== null && numberB === null) return -1;
+        if (numberA === null && numberB !== null) return 1;
+
+        return String(b).localeCompare(String(a), undefined, {
+            numeric: true,
+            sensitivity: "base"
+        });
+    });
+
     const currentAuction = auctionSelect.value;
     const auctionOptionsHtml = ['<option value="">Select Auction</option>']
         .concat(sorted.map(function(auction) {
