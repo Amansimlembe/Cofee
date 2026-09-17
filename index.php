@@ -1305,6 +1305,8 @@ submenu names.
                     ▶
                 </span>
 
+
+
             </div>
 
 
@@ -1313,7 +1315,7 @@ submenu names.
                 <li>
                     <a onclick="openCleanAuction(this)">
 
-                    Kagera Auction
+                    Clean Auction
                 </a>
                 </li>
 
@@ -1333,7 +1335,7 @@ submenu names.
                
 <a onclick="openCleanAuction(this)">
 
-                    Kagera Auction
+                    Clean Auction
                 </a>
                 <a onclick="openKageraAuction(this)">
                     Kagera Auction
