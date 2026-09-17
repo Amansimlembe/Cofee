@@ -810,14 +810,14 @@ submenu names.
    KAGERA AUCTION PAGE
 ========================================================= */
 
-.kagera-page-section {
+.kagera-page-section, .clean-page-section {
     width: 100%;
     min-height: calc(100vh - 130px);
     padding: 0;
     overflow: hidden;
 }
 
-.kagera-auction-frame {
+.kagera-auction-frame, .clean-auction-frame {
     display: block;
     width: 100%;
     min-height: calc(100vh - 130px);
@@ -829,11 +829,13 @@ submenu names.
 }
 
 @media (max-width: 700px) {
-    .kagera-page-section {
+
+
+    .kagera-page-section, .clean-page-section {
         min-height: calc(100vh - 110px);
     }
 
-    .kagera-auction-frame {
+    .kagera-auction-frame, .clean-auction-frame {
         min-height: calc(100vh - 110px);
         height: calc(100vh - 110px);
     }
@@ -1132,11 +1134,18 @@ submenu names.
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
     }
-
+.clean-page-section {
+        min-height: calc(100vh - 108px);
+    }
     .kagera-page-section {
         min-height: calc(100vh - 108px);
     }
 
+.clean-auction-frame {
+        min-height: calc(100vh - 108px);
+        height: calc(100vh - 108px);
+    }
+}
     .kagera-auction-frame {
         min-height: calc(100vh - 108px);
         height: calc(100vh - 108px);
@@ -1302,9 +1311,10 @@ submenu names.
             <ul class="submenu">
 
                 <li>
-                    <a onclick="showSection('clean-auction', this)">
-                        Clean Auction
-                    </a>
+                    <a onclick="openCleanAuction(this)">
+
+                    Kagera Auction
+                </a>
                 </li>
 
                 <li>
@@ -1320,10 +1330,11 @@ submenu names.
 
             <div class="collapsed-tooltip">
 
-                <a onclick="showSection('clean-auction', this)">
-                    Clean Auction
-                </a>
+               
+<a onclick="openCleanAuction(this)">
 
+                    Kagera Auction
+                </a>
                 <a onclick="openKageraAuction(this)">
                     Kagera Auction
                 </a>
@@ -1628,27 +1639,23 @@ submenu names.
 
         </section>
 
-        
         <!-- CLEAN AUCTION -->
 
         <section
             id="clean-auction"
-            class="section">
+            class="section clean-page-section">
 
-            <div class="section-box">
-
-                <h2>
-                    Clean Auction
-                </h2>
-
-                <p>
-                    Clean Auction sales data and analysis
-                    will appear here.
-                </p>
-
-            </div>
+            <iframe
+                id="cleanAuctionFrame"
+                src="about:blank"
+                title="Clean Auction"
+                class="clean-auction-frame">
+            </iframe>
 
         </section>
+
+        
+       
 
 
 
@@ -1892,7 +1899,60 @@ function toggleSubmenu(element) {
     menuItem.classList.toggle("open");
 
 }
+/* =========================================================
+   CLEAN AUCTION NAVIGATION
+========================================================= */
 
+function openCleanAuction(clickedElement) {
+
+    document.querySelectorAll(".section").forEach(function(section) {
+        section.classList.remove("active");
+    });
+
+    const CleanSection = document.getElementById("Clean-auction");
+
+    if (CleanSection) {
+        CleanSection.classList.add("active");
+    }
+
+    const frame = document.getElementById("cleanAuctionFrame");
+
+    if (frame) {
+        /* The Kagera page normally has its own sidebar offset.
+           Inside index.php it must start at the main-content edge. */
+        frame.onload = function () {
+            try {
+                const CleanDocument = frame.contentDocument || frame.contentWindow.document;
+                const CleanMain = CleanDocument.querySelector(".clean-main");
+
+                if (CleanMain) {
+                    CleanMain.style.marginLeft = "0";
+                    CleanMain.style.minHeight = "100%";
+                }
+            } catch (error) {
+                console.warn("Unable to adjust Kagera page layout.", error);
+            }
+        };
+
+        if (frame.getAttribute("src") === "about:blank") {
+            frame.src = "Clean_auction.php";
+        }
+    }
+
+    document.querySelectorAll(".menu-link, .submenu a").forEach(function(link) {
+        link.classList.remove("active");
+    });
+
+    if (clickedElement) {
+        clickedElement.classList.add("active");
+    }
+
+    const topbarTitle = document.getElementById("topbarTitle");
+
+    if (topbarTitle) {
+        topbarTitle.textContent = "Clean Auction";
+    }
+}
 
 /* =========================================================
    KAGERA AUCTION NAVIGATION
