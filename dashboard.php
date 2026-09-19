@@ -53,18 +53,128 @@ function top_rows($db,$from,$to,$type,$column,$limit=5){
 }
 $buyers=[];$amcos=[]; foreach(array_keys($summary) as $type){$buyers[$type]=top_rows($db,$from,$to,$type,'buyer');$amcos[$type]=top_rows($db,$from,$to,$type,'warehouse');}
 ?>
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kagera Auction Dashboard</title>
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kagera Auction Dashboard</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f7f4f2;color:#33231f;font:14px Arial,sans-serif}.wrap{padding:22px;max-width:1600px;margin:auto}.head{display:flex;justify-content:space-between;gap:16px;align-items:end;margin-bottom:18px}.head h1{margin:0 0 5px;font-size:25px}.muted{color:#806f68}.filter label{font-size:12px;font-weight:700;display:block;margin-bottom:5px}.filter select{padding:9px 32px 9px 10px;border:1px solid #cdbfb9;border-radius:7px;background:#fff}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.panel{background:#fff;border:1px solid #eadfda;border-radius:12px;box-shadow:0 3px 14px #3e27230d;overflow:hidden}.panel-head{padding:14px 17px;background:#4e342e;color:#fff;font-weight:700}.cards{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:18px}.card{background:#fff;border:1px solid #eadfda;border-radius:10px;padding:14px;border-top:3px solid #6d4c41}.card small{display:block;color:#806f68;margin-bottom:7px}.card strong{font-size:18px}.type{font-weight:700;color:#5d4037;margin-bottom:4px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{padding:10px 12px;border-bottom:1px solid #eee5e1;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{font-size:12px;background:#f7f2ef;color:#5d4037}.section-title{margin:24px 0 10px;font-size:18px}.empty{text-align:center!important;color:#999;padding:20px!important}@media(max-width:1100px){.cards{grid-template-columns:repeat(3,1fr)}}@media(max-width:760px){.grid{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,1fr)}.head{align-items:stretch;flex-direction:column}}
-</style></head><body><div class="wrap">
-<div class="head"><div><h1>Kagera Auction Dashboard</h1><div class="muted">Season performance summary — Dry Cherry and Clean Coffee reported separately.</div></div><form class="filter" method="get"><label>Season</label><select name="season" onchange="this.form.submit()"><?php foreach($seasons ?: [$season] as $s):?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach?></select></form></div>
-<div class="cards">
-<div class="card"><small>Season</small><strong><?=htmlspecialchars($season)?></strong></div><div class="card"><small>Auctions Held</small><strong><?=nf($auctions)?></strong></div>
-<?php foreach($summary as $type=>$x):?><div class="card"><div class="type"><?=htmlspecialchars($type)?></div><small>Offered / Sold (Kg)</small><strong><?=nf($x['offered'],2)?> / <?=nf($x['sold'],2)?></strong></div><div class="card"><div class="type"><?=htmlspecialchars($type)?></div><small>Average Price / Sold</small><strong>TZS <?=nf($x['avg'],2)?> · <?=nf($x['pct'],2)?>%</strong></div><?php endforeach?>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f6f3f1;color:#352720;font-family:Arial,sans-serif}
+.dashboard{height:100vh;padding:10px 12px;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:8px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.title{display:flex;align-items:baseline;gap:9px;min-width:0}
+.title h1{font-size:16px;margin:0;color:#3f2b24;white-space:nowrap}
+.title span{font-size:10px;color:#8a7a72;white-space:nowrap}
+.season{display:flex;align-items:center;gap:6px}
+.season label{font-size:10px;font-weight:700;color:#6b554b}
+.season select{height:29px;padding:0 27px 0 9px;border:1px solid #d7ccc7;border-radius:7px;background:#fff;color:#4b3830;font-size:11px;font-weight:700}
+
+.kpis{display:grid;grid-template-columns:115px 90px repeat(6,minmax(105px,1fr));gap:6px}
+.kpi{min-width:0;background:#fff;border:1px solid #e7ddd8;border-radius:8px;padding:7px 9px;box-shadow:0 1px 5px rgba(62,39,35,.035)}
+.kpi .label{display:block;font-size:8px;text-transform:uppercase;letter-spacing:.35px;color:#8a7971;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi strong{display:block;font-size:13px;color:#3f2b24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .sub{font-size:8px;color:#9a8b84;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi.dry{border-top:2px solid #6d4c41}.kpi.clean{border-top:2px solid #9b7b68}
+
+.analytics{min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px}
+.panel{min-height:0;background:#fff;border:1px solid #e7ddd8;border-radius:9px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 7px rgba(62,39,35,.04)}
+.panel-head{height:30px;flex:0 0 30px;padding:0 9px;display:flex;align-items:center;justify-content:space-between;background:#4b342c;color:#fff}
+.panel-head strong{font-size:10px;letter-spacing:.1px}
+.panel-head span{font-size:8px;color:#dfd2cc}
+.table-box{min-height:0;flex:1;overflow:hidden}
+table{width:100%;height:100%;border-collapse:collapse;table-layout:fixed}
+thead th{height:24px;background:#f5f0ed;color:#6a5147;font-size:8px;font-weight:700;border-bottom:1px solid #e7ddd8}
+th,td{padding:3px 6px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+th:first-child,td:first-child{text-align:left}
+tbody td{font-size:9px;border-bottom:1px solid #f0e9e5;color:#493931}
+tbody tr:last-child td{border-bottom:0}
+tbody td:first-child{font-weight:600}
+.empty{text-align:center!important;color:#a2958e!important}
+.rank{display:inline-flex;width:15px;height:15px;border-radius:50%;align-items:center;justify-content:center;background:#eee6e1;color:#654b40;font-size:7px;margin-right:4px}
+.type-tag{font-size:8px;font-weight:700;padding:2px 5px;border-radius:8px;background:#f1e9e5;color:#654a40}
+@media(max-width:1050px){
+ .kpis{grid-template-columns:repeat(4,1fr)}
+ .title span{display:none}
+}
+</style>
+</head>
+<body>
+<div class="dashboard">
+    <div class="topbar">
+        <div class="title">
+            <h1>Kagera Auction — Season Performance</h1>
+            <span>Compact analytical summary</span>
+        </div>
+        <form class="season" method="get">
+            <label>Season</label>
+            <select name="season" onchange="this.form.submit()">
+                <?php foreach($seasons ?: [$season] as $s): ?>
+                    <option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option>
+                <?php endforeach ?>
+            </select>
+        </form>
+    </div>
+
+    <div class="kpis">
+        <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=htmlspecialchars($from)?> — <?=htmlspecialchars($to)?></div></div>
+        <div class="kpi"><span class="label">Auctions Held</span><strong><?=nf($auctions)?></strong><div class="sub">Distinct auction numbers</div></div>
+
+        <?php foreach(['Dry Cherry Coffee','Clean Coffee'] as $type): $x=$summary[$type]; $cls=$type==='Dry Cherry Coffee'?'dry':'clean'; ?>
+        <div class="kpi <?=$cls?>"><span class="label"><?=$type?> Offered</span><strong><?=nf($x['offered'],2)?> kg</strong><div class="sub">Catalogue</div></div>
+        <div class="kpi <?=$cls?>"><span class="label"><?=$type?> Sold</span><strong><?=nf($x['sold'],2)?> kg</strong><div class="sub"><?=nf($x['pct'],2)?>% of offered</div></div>
+        <div class="kpi <?=$cls?>"><span class="label"><?=$type?> Avg. Price</span><strong>TZS <?=nf($x['avg'],2)?></strong><div class="sub">per kg</div></div>
+        <?php endforeach ?>
+    </div>
+
+    <div class="analytics">
+        <?php foreach(['Dry Cherry Coffee','Clean Coffee'] as $type): ?>
+        <section class="panel">
+            <div class="panel-head"><strong>Top 5 Buyers</strong><span class="type-tag"><?=htmlspecialchars($type)?></span></div>
+            <div class="table-box">
+                <table>
+                    <thead><tr><th style="width:29%">Buyer</th><th>Qty (kg)</th><th>Value (TZS)</th><th>Qty %</th><th>Value %</th></tr></thead>
+                    <tbody>
+                    <?php if(!$buyers[$type]): ?><tr><td colspan="5" class="empty">No sales data for this season</td></tr><?php endif; ?>
+                    <?php foreach($buyers[$type] as $i=>$r): ?>
+                    <tr>
+                        <td title="<?=htmlspecialchars($r['name'])?>"><span class="rank"><?=$i+1?></span><?=htmlspecialchars($r['name'])?></td>
+                        <td><?=nf($r['qty'],2)?></td>
+                        <td><?=nf($r['val'],2)?></td>
+                        <td><?=nf(pct($r['qty'],$summary[$type]['sold']),2)?>%</td>
+                        <td><?=nf(pct($r['val'],$summary[$type]['value']),2)?>%</td>
+                    </tr>
+                    <?php endforeach ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        <?php endforeach ?>
+
+        <?php foreach(['Dry Cherry Coffee','Clean Coffee'] as $type): ?>
+        <section class="panel">
+            <div class="panel-head"><strong>Top 5 AMCOS / Warehouses</strong><span class="type-tag"><?=htmlspecialchars($type)?></span></div>
+            <div class="table-box">
+                <table>
+                    <thead><tr><th style="width:31%">AMCOS / Warehouse</th><th>Qty Sold</th><th>Value (TZS)</th><th>Qty %</th><th>Value %</th></tr></thead>
+                    <tbody>
+                    <?php if(!$amcos[$type]): ?><tr><td colspan="5" class="empty">No sales data for this season</td></tr><?php endif; ?>
+                    <?php foreach($amcos[$type] as $i=>$r): ?>
+                    <tr>
+                        <td title="<?=htmlspecialchars($r['name'])?>"><span class="rank"><?=$i+1?></span><?=htmlspecialchars($r['name'])?></td>
+                        <td><?=nf($r['qty'],2)?></td>
+                        <td><?=nf($r['val'],2)?></td>
+                        <td><?=nf(pct($r['qty'],$summary[$type]['sold']),2)?>%</td>
+                        <td><?=nf(pct($r['val'],$summary[$type]['value']),2)?>%</td>
+                    </tr>
+                    <?php endforeach ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        <?php endforeach ?>
+    </div>
 </div>
-<div class="grid">
-<?php foreach($summary as $type=>$x):?><div class="panel"><div class="panel-head"><?=htmlspecialchars($type)?> — Season Summary</div><div class="table-wrap"><table><tr><th>Metric</th><th>Result</th></tr><tr><td>Coffee Offered</td><td><?=nf($x['offered'],2)?> Kg</td></tr><tr><td>Coffee Sold</td><td><?=nf($x['sold'],2)?> Kg</td></tr><tr><td>Total Value</td><td>TZS <?=nf($x['value'],2)?></td></tr><tr><td>Average Price</td><td>TZS <?=nf($x['avg'],2)?>/Kg</td></tr><tr><td>Percentage Sold</td><td><?=nf($x['pct'],2)?>%</td></tr></table></div></div><?php endforeach?>
-</div>
-<h2 class="section-title">Top Five Buyers</h2><div class="grid"><?php foreach($buyers as $type=>$rows):?><div class="panel"><div class="panel-head"><?=htmlspecialchars($type)?></div><div class="table-wrap"><table><thead><tr><th>Buyer</th><th>Quantity (Kg)</th><th>Value (TZS)</th><th>Qty Contribution</th><th>Value Contribution</th></tr></thead><tbody><?php if(!$rows):?><tr><td colspan="5" class="empty">No sales data</td></tr><?php endif; foreach($rows as $r):?><tr><td><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['qty'],2)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['qty'],$summary[$type]['sold']),2)?>%</td><td><?=nf(pct($r['val'],$summary[$type]['value']),2)?>%</td></tr><?php endforeach?></tbody></table></div></div><?php endforeach?></div>
-<h2 class="section-title">Top Five AMCOS / Warehouses by Quantity Sold</h2><div class="grid"><?php foreach($amcos as $type=>$rows):?><div class="panel"><div class="panel-head"><?=htmlspecialchars($type)?></div><div class="table-wrap"><table><thead><tr><th>AMCOS / Warehouse</th><th>Quantity Sold (Kg)</th><th>Value (TZS)</th><th>Qty Contribution</th><th>Value Contribution</th></tr></thead><tbody><?php if(!$rows):?><tr><td colspan="5" class="empty">No sales data</td></tr><?php endif; foreach($rows as $r):?><tr><td><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['qty'],2)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['qty'],$summary[$type]['sold']),2)?>%</td><td><?=nf(pct($r['val'],$summary[$type]['value']),2)?>%</td></tr><?php endforeach?></tbody></table></div></div><?php endforeach?></div>
-</div></body></html>
+</body>
+</html>
