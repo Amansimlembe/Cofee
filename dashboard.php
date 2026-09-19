@@ -100,26 +100,25 @@ $amcosCombined=top5_with_other(combined_rank_rows($db,$from,$to,'warehouse'),'AM
 
 /*
 |--------------------------------------------------------------------------
-| AUCTION TREND
-|--------------------------------------------------------------------------
-| Quantity sold and weighted average price by auction. Only Results records
-| classified as Dry Cherry or Clean Coffee are included, matching the KPI logic.
+| AUCTION TREND — DRY CHERRY VS CLEAN
 |--------------------------------------------------------------------------
 */
 $case=coffee_case_sql();
 $trendSql="SELECT
     auction_no,
     MIN(auction_date) AS auction_date,
-    SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END) AS qty_sold,
-    CASE
-      WHEN SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END) > 0
-      THEN SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END)
-           / SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END)
-      ELSE 0
-    END AS avg_price
+    SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) AS dry_qty,
+    SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) AS clean_qty,
+    CASE WHEN SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END)>0
+      THEN SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END)
+         / SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END)
+      ELSE NULL END AS dry_avg_price,
+    CASE WHEN SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END)>0
+      THEN SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END)
+         / SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END)
+      ELSE NULL END AS clean_avg_price
   FROM public.kagera_auction_results
-  WHERE auction_date BETWEEN :f AND :t
-    AND $case IS NOT NULL
+  WHERE auction_date BETWEEN :f AND :t AND $case IS NOT NULL
   GROUP BY auction_no
   ORDER BY
     CASE WHEN auction_no ~ '^[0-9]+$' THEN auction_no::integer ELSE NULL END ASC NULLS LAST,
@@ -127,8 +126,6 @@ $trendSql="SELECT
 $trendStmt=$db->prepare($trendSql);
 $trendStmt->execute(['f'=>$from,'t'=>$to]);
 $auctionTrend=$trendStmt->fetchAll(PDO::FETCH_ASSOC);
-
-
 ?>
 <!doctype html>
 <html>
@@ -139,7 +136,7 @@ $auctionTrend=$trendStmt->fetchAll(PDO::FETCH_ASSOC);
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f6f3f1;color:#352720;font-family:Arial,sans-serif}
-.dashboard{height:100vh;padding:7px 10px;display:grid;grid-template-rows:auto auto minmax(0,.82fr) minmax(150px,1.18fr);gap:6px}
+.dashboard{height:100vh;padding:6px 9px;display:grid;grid-template-rows:auto auto minmax(190px,.95fr) minmax(170px,1.05fr);gap:5px}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .title{display:flex;align-items:baseline;gap:9px;min-width:0}
 .title h1{font-size:16px;margin:0;color:#3f2b24;white-space:nowrap}
@@ -148,8 +145,8 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f6f3f1;col
 .season label{font-size:10px;font-weight:700;color:#6b554b}
 .season select{height:22px;padding:0 27px 0 9px;border:1px solid #d7ccc7;border-radius:7px;background:#fff;color:#4b3830;font-size:11px;font-weight:700}
 
-.kpis{display:grid;grid-template-columns:115px 90px repeat(6,minmax(105px,1fr));gap:6px}
-.kpi{min-width:0;background:#fff;border:1px solid #e7ddd8;border-radius:8px;padding:5px 7px;box-shadow:0 1px 5px rgba(62,39,35,.035)}
+.kpis{display:grid;grid-template-columns:100px 74px repeat(2,minmax(0,1fr));gap:5px}
+.kpi{min-width:0;background:#fff;border:1px solid #e7ddd8;border-radius:7px;padding:4px 6px;box-shadow:0 1px 4px rgba(62,39,35,.03)}
 .kpi .label{display:block;font-size:8px;text-transform:uppercase;letter-spacing:.35px;color:#8a7971;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi strong{display:block;font-size:13px;color:#3f2b24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi .sub{font-size:8px;color:#9a8b84;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -182,6 +179,21 @@ tbody td:first-child{font-weight:600}
 .trend-wrap{position:relative;min-height:0;flex:1;padding:4px 8px 3px}
 #auctionTrendChart{width:100%!important;height:100%!important}
 
+
+.metric-group{display:grid;grid-template-columns:1.18fr 1.18fr .9fr;gap:0;background:#fff;border:1px solid #e7ddd8;border-radius:7px;overflow:hidden}
+.metric-group.dry{border-top:2px solid #6d4c41}.metric-group.clean{border-top:2px solid #9b7b68}
+.metric{padding:4px 7px;min-width:0;border-right:1px solid #eee7e2}.metric:last-child{border-right:0}
+.metric .m-label{font-size:7px;text-transform:uppercase;letter-spacing:.25px;color:#8a7971;white-space:nowrap}
+.metric strong{display:block;margin-top:2px;font-size:11px;color:#3f2b24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.metric small{display:block;margin-top:1px;font-size:7px;color:#9a8b84;white-space:nowrap}
+.metric-group .coffee-name{font-weight:700;color:#5d4439}
+.panel{overflow:visible!important}
+.table-box{overflow:visible!important}
+table{height:auto!important}
+thead th{height:20px!important;padding:2px 4px!important}
+tbody td{height:20px;padding:2px 4px!important}
+tfoot td{height:21px;padding:2px 4px!important;position:relative;z-index:2}
+
 </style>
 </head>
 <body>
@@ -202,17 +214,35 @@ tbody td:first-child{font-weight:600}
     </div>
 
     <div class="kpis">
-        <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=htmlspecialchars($from)?> — <?=htmlspecialchars($to)?></div></div>
-        <div class="kpi"><span class="label">Auctions Held</span><strong><?=nf($auctions)?></strong><div class="sub">Distinct auction numbers</div></div>
+ <div class="kpi">
+  <span class="label">Season</span>
+  <strong><?=htmlspecialchars($season)?></strong>
+  <div class="sub"><?=date('d M',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div>
+ </div>
+ <div class="kpi">
+  <span class="label">Auctions</span>
+  <strong><?=nf($auctions)?></strong>
+  <div class="sub">Held</div>
+ </div>
+ <?php foreach(['Dry Cherry Coffee','Clean Coffee'] as $type): $x=$summary[$type]; $cls=$type==='Dry Cherry Coffee'?'dry':'clean'; ?>
+ <div class="metric-group <?=$cls?>">
+  <div class="metric">
+   <span class="m-label coffee-name"><?=$type==='Dry Cherry Coffee'?'Dry Cherry':'Clean Coffee'?> · Offered</span>
+   <strong><?=nf($x['offered'],0)?> kg</strong><small>Catalogue</small>
+  </div>
+  <div class="metric">
+   <span class="m-label">Sold</span>
+   <strong><?=nf($x['sold'],0)?> kg</strong><small><?=nf($x['pct'],2)?>% of offered</small>
+  </div>
+  <div class="metric">
+   <span class="m-label">Avg. Price</span>
+   <strong><?=nf($x['avg'],2)?></strong><small>TZS/kg</small>
+  </div>
+ </div>
+ <?php endforeach ?>
+</div>
 
-        <?php foreach(['Dry Cherry Coffee','Clean Coffee'] as $type): $x=$summary[$type]; $cls=$type==='Dry Cherry Coffee'?'dry':'clean'; ?>
-        <div class="kpi <?=$cls?>"><span class="label"><?=$type?> Offered</span><strong><?=nf($x['offered'],2)?> kg</strong><div class="sub">Catalogue</div></div>
-        <div class="kpi <?=$cls?>"><span class="label"><?=$type?> Sold</span><strong><?=nf($x['sold'],2)?> kg</strong><div class="sub"><?=nf($x['pct'],2)?>% of offered</div></div>
-        <div class="kpi <?=$cls?>"><span class="label"><?=$type?> Avg. Price</span><strong>TZS <?=nf($x['avg'],2)?></strong><div class="sub">per kg</div></div>
-        <?php endforeach ?>
-    </div>
-
-    <div class="analytics">
+<div class="analytics">
 <?php foreach([
  ['Top 5 Buyers',$buyersCombined,'Buyer'],
  ['Top 5 AMCOS / Warehouses',$amcosCombined,'AMCOS / Warehouse']
@@ -257,7 +287,7 @@ tbody td:first-child{font-weight:600}
 <section class="trend-panel">
  <div class="trend-head">
   <strong>Auction Performance Trend</strong>
-  <span>Quantity sold (kg) and weighted average price (TZS/kg) by auction</span>
+  <span>Dry Cherry and Clean Coffee · quantity sold & weighted average price</span>
  </div>
  <div class="trend-wrap"><canvas id="auctionTrendChart"></canvas></div>
 </section>
@@ -267,62 +297,30 @@ tbody td:first-child{font-weight:600}
 const auctionTrend = <?=json_encode($auctionTrend, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>;
 const ctx = document.getElementById('auctionTrendChart');
 if (ctx && window.Chart) {
-  new Chart(ctx, {
-    type:'bar',
-    data:{
-      labels:auctionTrend.map(r=>'Auction '+r.auction_no),
-      datasets:[
-        {
-          type:'bar',
-          label:'Quantity Sold (kg)',
-          data:auctionTrend.map(r=>Number(r.qty_sold)||0),
-          yAxisID:'yQty',
-          borderWidth:0,
-          maxBarThickness:26
-        },
-        {
-          type:'line',
-          label:'Average Price (TZS/kg)',
-          data:auctionTrend.map(r=>Number(r.avg_price)||0),
-          yAxisID:'yPrice',
-          borderWidth:2,
-          pointRadius:2,
-          pointHoverRadius:4,
-          tension:.25
-        }
-      ]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{position:'top',labels:{boxWidth:10,boxHeight:10,font:{size:9}}},
-        tooltip:{callbacks:{
-          label:(c)=>{
-            const v=Number(c.raw)||0;
-            return c.dataset.label+': '+v.toLocaleString(undefined,{maximumFractionDigits:2});
-          }
-        }}
-      },
-      scales:{
-        x:{grid:{display:false},ticks:{font:{size:8},maxRotation:0,autoSkip:true}},
-        yQty:{
-          position:'left',
-          beginAtZero:true,
-          title:{display:true,text:'Quantity sold (kg)',font:{size:8}},
-          ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}
-        },
-        yPrice:{
-          position:'right',
-          beginAtZero:false,
-          title:{display:true,text:'Avg. price (TZS/kg)',font:{size:8}},
-          grid:{drawOnChartArea:false},
-          ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}
-        }
-      }
-    }
-  });
+ new Chart(ctx,{
+  data:{
+   labels:auctionTrend.map(r=>'A'+r.auction_no),
+   datasets:[
+    {type:'bar',label:'Dry Cherry Qty (kg)',data:auctionTrend.map(r=>Number(r.dry_qty)||0),yAxisID:'yQty',borderWidth:0,maxBarThickness:18},
+    {type:'bar',label:'Clean Coffee Qty (kg)',data:auctionTrend.map(r=>Number(r.clean_qty)||0),yAxisID:'yQty',borderWidth:0,maxBarThickness:18},
+    {type:'line',label:'Dry Cherry Avg Price',data:auctionTrend.map(r=>r.dry_avg_price===null?null:Number(r.dry_avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25,spanGaps:false},
+    {type:'line',label:'Clean Coffee Avg Price',data:auctionTrend.map(r=>r.clean_avg_price===null?null:Number(r.clean_avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25,spanGaps:false}
+   ]
+  },
+  options:{
+   responsive:true,maintainAspectRatio:false,
+   interaction:{mode:'index',intersect:false},
+   plugins:{
+    legend:{position:'top',labels:{boxWidth:9,boxHeight:9,font:{size:8},padding:8}},
+    tooltip:{callbacks:{label:c=>c.dataset.label+': '+(Number(c.raw)||0).toLocaleString(undefined,{maximumFractionDigits:2})}}
+   },
+   scales:{
+    x:{grid:{display:false},ticks:{font:{size:8},maxRotation:0,autoSkip:false}},
+    yQty:{position:'left',beginAtZero:true,title:{display:true,text:'Quantity sold (kg)',font:{size:8}},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}},
+    yPrice:{position:'right',beginAtZero:false,title:{display:true,text:'Avg. price (TZS/kg)',font:{size:8}},grid:{drawOnChartArea:false},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}}
+   }
+  }
+ });
 }
 </script>
 </body>
