@@ -65,14 +65,37 @@ function combined_rank_rows($db,$from,$to,$column,$limit=5){
       WHERE auction_date BETWEEN :f AND :t AND $case IS NOT NULL
       GROUP BY 1
       HAVING SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END)>0
-      ORDER BY total_qty DESC,total_value DESC LIMIT $limit";
+      ORDER BY total_qty DESC,total_value DESC";
     $s=$db->prepare($sql); $s->execute(['f'=>$from,'t'=>$to]);
     return $s->fetchAll(PDO::FETCH_ASSOC);
 }
 $grandSold=$summary['Dry Cherry Coffee']['sold']+$summary['Clean Coffee']['sold'];
 $grandValue=$summary['Dry Cherry Coffee']['value']+$summary['Clean Coffee']['value'];
-$buyersCombined=combined_rank_rows($db,$from,$to,'buyer');
-$amcosCombined=combined_rank_rows($db,$from,$to,'warehouse');
+function top5_with_other($rows,$entityLabel){
+    $top=array_slice($rows,0,5);
+    $other=array_slice($rows,5);
+
+    if($other){
+        $agg=[
+            'name'=>'Other ('.count($other).' '.$entityLabel.')',
+            'cherry_qty'=>0,
+            'clean_qty'=>0,
+            'total_qty'=>0,
+            'total_value'=>0,
+            '_other'=>true
+        ];
+        foreach($other as $r){
+            $agg['cherry_qty']+=(float)$r['cherry_qty'];
+            $agg['clean_qty']+=(float)$r['clean_qty'];
+            $agg['total_qty']+=(float)$r['total_qty'];
+            $agg['total_value']+=(float)$r['total_value'];
+        }
+        $top[]=$agg;
+    }
+    return $top;
+}
+$buyersCombined=top5_with_other(combined_rank_rows($db,$from,$to,'buyer'),'buyers');
+$amcosCombined=top5_with_other(combined_rank_rows($db,$from,$to,'warehouse'),'AMCOS / warehouses');
 
 ?>
 <!doctype html>
@@ -167,7 +190,10 @@ tbody td:first-child{font-weight:600}
   <?php if(!$rows): ?><tr><td colspan="6" class="empty">No sales data for this season</td></tr><?php endif; ?>
   <?php foreach($rows as $i=>$r): ?>
    <tr>
-    <td title="<?=htmlspecialchars($r['name'])?>"><span class="rank"><?=$i+1?></span><?=htmlspecialchars($r['name'])?></td>
+    <td title="<?=htmlspecialchars($r['name'])?>">
+      <?php if(empty($r['_other'])): ?><span class="rank"><?=$i+1?></span><?php endif; ?>
+      <?=htmlspecialchars($r['name'])?>
+    </td>
     <td><?=nf($r['cherry_qty'],2)?></td>
     <td><?=nf($r['clean_qty'],2)?></td>
     <td><?=nf($r['total_qty'],2)?></td>
