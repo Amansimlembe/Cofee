@@ -2168,22 +2168,29 @@ function handle_kagera_report()
 try {
 
     /*
-    | Prefer the explicit upload_type sent by the form for POST uploads.
-    | This prevents a stale/duplicate kagera_type value from overriding
-    | the current Display selection.
+    | Resolve the upload destination from the current Display selection.
+    | For POST uploads, never use $_REQUEST or kagera_type because those can
+    | contain stale values and invert Catalogue/Results routing.
     */
     if (
         ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' &&
         isset($_FILES['kagera_excel'])
     ) {
-        $kageraType = strtolower(trim((string)($_POST['upload_type'] ?? '')));
+        $kageraType = strtolower(trim((string)(
+            $_POST['upload_destination']
+            ?? $_POST['upload_type']
+            ?? ''
+        )));
     } else {
-        $kageraType = strtolower(trim((string)($_GET['kagera_type'] ?? $_REQUEST['kagera_type'] ?? 'results')));
+        $kageraType = strtolower(trim((string)(
+            $_GET['kagera_type']
+            ?? 'results'
+        )));
     }
 
-    if (in_array($kageraType, ['results', 'auction_results', 'auction_result', 'result'], true)) {
+    if (in_array($kageraType, ['results','result','auction_results','auction_result'], true)) {
         $kageraType = 'results';
-    } elseif (in_array($kageraType, ['catalogue', 'auction_catalogue', 'catalog'], true)) {
+    } elseif (in_array($kageraType, ['catalogue','catalog','auction_catalogue','auction_catalog'], true)) {
         $kageraType = 'catalogue';
     } else {
         $kageraType = '';
@@ -2213,8 +2220,11 @@ try {
         }
         if ($kageraType === 'catalogue') {
             handle_kagera_catalogue_upload(); // public.kagera_auction_catalogue
+        } elseif ($kageraType === 'results') {
+            handle_kagera_upload(); // public.kagera_auction_results
+        } else {
+            kagera_json(false, 'Invalid upload destination.', [], 422);
         }
-        handle_kagera_upload(); // public.kagera_auction_results
     }
 
 } catch (Throwable $e) {
@@ -3497,42 +3507,63 @@ let kageraCatalogueData = [];
 
 function kageraSyncUploadWithDisplay()
 {
-    const displayValue = kageraDisplayType ? String(kageraDisplayType.value || "").trim().toLowerCase() : "";
-    const isResults = displayValue === "results" || displayValue === "auction_results";
-    const isCatalogue = displayValue === "catalogue" || displayValue === "auction_catalogue";
-    const enabled = isResults || isCatalogue;
-    const type = isCatalogue ? "catalogue" : (isResults ? "results" : "");
-
-    if (kageraUploadType) kageraUploadType.value = type;
-    if (kageraExcelFile) {
-        kageraExcelFile.disabled = !enabled;
-        if (!enabled) kageraExcelFile.value = "";
-    }
+    const display = document.getElementById("kageraDisplayType");
+    const uploadTypeInput = document.getElementById("kageraUploadType");
+    const fileName = document.getElementById("kageraFileName");
     const uploadButton = document.getElementById("kageraUploadButton");
+
+    const rawValue = String(display ? display.value : "").trim().toLowerCase();
+
+    // Canonical mapping:
+    // Display "results"   -> Results upload/validator/table
+    // Display "catalogue" -> Catalogue upload/validator/table
+    let uploadType = "";
+
+    if (
+        rawValue === "results" ||
+        rawValue === "result" ||
+        rawValue === "auction_results" ||
+        rawValue === "auction_result"
+    ) {
+        uploadType = "results";
+    } else if (
+        rawValue === "catalogue" ||
+        rawValue === "catalog" ||
+        rawValue === "auction_catalogue" ||
+        rawValue === "auction_catalog"
+    ) {
+        uploadType = "catalogue";
+    }
+
+    if (uploadTypeInput) {
+        uploadTypeInput.value = uploadType;
+    }
+
+    if (fileName) {
+        fileName.textContent =
+            uploadType === "results"
+                ? "Select Auction Results file"
+                : uploadType === "catalogue"
+                    ? "Select Auction Catalogue file"
+                    : "Select Auction Results or Catalogue from Display";
+    }
+
     if (uploadButton) {
-        uploadButton.disabled = !enabled;
-        if (isCatalogue) {
-            uploadButton.innerHTML = "<span>↑</span> Upload Catalogue";
-            uploadButton.title = "Upload Auction Catalogue";
-        } else if (isResults) {
+        uploadButton.disabled = uploadType === "";
+
+        if (uploadType === "results") {
             uploadButton.innerHTML = "<span>↑</span> Upload Auction Results";
             uploadButton.title = "Upload Auction Results";
+        } else if (uploadType === "catalogue") {
+            uploadButton.innerHTML = "<span>↑</span> Upload Catalogue";
+            uploadButton.title = "Upload Auction Catalogue";
         } else {
             uploadButton.innerHTML = "<span>↑</span> Upload";
-            uploadButton.title = "Select Auction Results or Auction Catalogue from Display to enable upload";
+            uploadButton.title = "Select Auction Results or Auction Catalogue first";
         }
     }
-    const fileLabel = document.querySelector('label[for="kageraExcelFile"]');
-    if (fileLabel) {
-        fileLabel.style.opacity = enabled ? "1" : ".55";
-        fileLabel.style.cursor = enabled ? "pointer" : "not-allowed";
-    }
-    if (kageraFileName) {
-        kageraFileName.textContent = enabled
-            ? (isCatalogue ? "Select Catalogue file" : "Select Auction Results file")
-            : "Upload available for Auction Results or Auction Catalogue only";
-    }
-    return type;
+
+    return uploadType;
 }
 
 
@@ -3639,10 +3670,10 @@ if (kageraUploadForm) {
         async function (event) {
             event.preventDefault();
 
+            // Resolve destination directly from the current Display selection.
+            // Never infer it from a previous upload or hidden-field state.
             const selectedUploadType = kageraSyncUploadWithDisplay();
 
-            // Keep the POST destination synchronized with the Display
-            // selection at the exact moment Upload is clicked.
             if (kageraUploadType) {
                 kageraUploadType.value = selectedUploadType;
             }
@@ -3668,7 +3699,9 @@ if (kageraUploadForm) {
                     new FormData(kageraUploadForm);
 
                 formData.delete("kagera_type");
+                formData.delete("upload_type");
                 formData.set("upload_type", selectedUploadType);
+                formData.set("upload_destination", selectedUploadType);
 
                 if (confirmReplace) {
                     formData.set("confirm_replace", "1");
