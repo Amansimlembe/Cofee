@@ -3391,6 +3391,20 @@ body.sidebar-collapsed .kagera-main {
 .kagera-row-actions .delete{color:#9b2c2c}
 .kagera-edit-input{width:100%;min-width:80px;padding:6px 7px;border:1px solid #cfc7bd;border-radius:5px;font:inherit}
 
+
+.kagera-actions-head,.kagera-row-actions{display:none}
+body.kagera-edit-mode .kagera-actions-head,
+body.kagera-edit-mode .kagera-row-actions{display:table-cell}
+.kagera-row-actions{text-align:center;white-space:nowrap;min-width:88px}
+.kagera-action-icon{width:31px;height:29px;display:inline-flex;align-items:center;justify-content:center;padding:0!important;margin:0 2px!important;border:1px solid #d8d1c7!important;border-radius:7px!important;background:#fff!important;cursor:pointer;font-size:15px}
+.kagera-action-icon.edit{color:#5b432f}
+.kagera-action-icon.edit:hover{background:#f5f0e9!important}
+.kagera-action-icon.delete{color:#a12e2e}
+.kagera-action-icon.delete:hover{background:#fff0f0!important}
+.kagera-action-icon.save{color:#28613e}
+.kagera-action-icon.save:hover{background:#eef8f1!important}
+.kagera-action-icon:disabled{opacity:.45;cursor:not-allowed}
+
 </style>
 
 </head>
@@ -4359,114 +4373,43 @@ function kageraGetFilteredResults()
 
 function kageraRenderResults(rows)
 {
-    const body =
-        document.getElementById(
-            "kageraResultsBody"
-        );
+    const body = document.getElementById("kageraResultsBody");
+    if (!body) return;
 
-    if (!body) {
-        return;
-    }
-
-    const sortedRows =
-        kageraSortResults(rows);
+    const sortedRows = kageraSortResults(rows);
 
     if (!sortedRows.length) {
-
         body.innerHTML =
-            '<tr>' +
-            '<td colspan="10" class="kagera-empty-state">' +
+            '<tr><td colspan="12" class="kagera-empty-state">' +
             'No Kagera Auction results found for the selected filters.' +
-            '</td>' +
-            '</tr>';
-
+            '</td></tr>';
         return;
     }
 
-    body.innerHTML =
-        sortedRows
-            .map(function (row) {
+    body.innerHTML = sortedRows.map(function(row) {
+        const actions = kageraEditMode
+            ? '<td class="kagera-row-actions">' +
+              '<button type="button" class="kagera-action-icon edit" onclick="kageraBeginRowEdit(this)" title="Edit row" aria-label="Edit row">✎</button>' +
+              '<button type="button" class="kagera-action-icon delete" onclick="kageraDeleteRow(' + Number(row.id) + ')" title="Delete row" aria-label="Delete row">⌫</button>' +
+              '</td>'
+            : '<td class="kagera-row-actions"></td>';
 
-                return (
-                    "<tr>" +
-
-                    "<td>" +
-                    escapeKageraHtml(
-                        row.lot_no ?? ""
-                    ) +
-                    "</td>" +
-
-                    "<td>" +
-                    escapeKageraHtml(
-                        row.auction_no ?? ""
-                    ) +
-                    "</td>" +
-
-                    "<td>" +
-                    escapeKageraHtml(
-                        formatKageraDate(
-                            row.auction_date ?? ""
-                        )
-                    ) +
-                    "</td>" +
-
-                    "<td>" +
-                    escapeKageraHtml(
-                        row.warehouse ?? ""
-                    ) +
-                    "</td>" +
-
-                    "<td>" +
-                    escapeKageraHtml(
-                        row.warehouse_location_district ?? ""
-                    ) +
-                    "</td>" +
-
-                    "<td>" +
-                    kageraFormatNumber(
-                        row.kgs ?? "",
-                        4
-                    ) +
-                    "</td>" +
-
-                    "<td>" +
-                    escapeKageraHtml(
-                        row.grade ?? ""
-                    ) +
-                    "</td>" +
-
-                    "<td>" +
-                    escapeKageraHtml(
-                        row.grade2 ?? ""
-                    ) +
-                    "</td>" +
-
-                    "<td>" +
-                    kageraFormatNumber(
-                        row.price ?? "",
-                        4
-                    ) +
-                    "</td>" +
-
-                    "<td>" +
-                    kageraFormatNumber(
-                        row.value ?? "",
-                        2
-                    ) +
-                    "</td>" +
-
-                    "<td>" +
-                    escapeKageraHtml(
-                        row.buyer ?? ""
-                    ) +
-                    "</td>" +
-
-                    "</tr>"
-                );
-            })
-            .join("");
+        return '<tr data-row-id="' + escapeKageraHtml(row.id ?? "") + '">' +
+            '<td data-field="lot_no" data-raw="' + escapeKageraHtml(row.lot_no ?? "") + '">' + escapeKageraHtml(row.lot_no ?? "") + '</td>' +
+            '<td data-field="auction_no" data-raw="' + escapeKageraHtml(row.auction_no ?? "") + '">' + escapeKageraHtml(row.auction_no ?? "") + '</td>' +
+            '<td data-field="auction_date" data-raw="' + escapeKageraHtml(row.auction_date ?? "") + '">' + escapeKageraHtml(formatKageraDate(row.auction_date ?? "")) + '</td>' +
+            '<td data-field="warehouse" data-raw="' + escapeKageraHtml(row.warehouse ?? "") + '">' + escapeKageraHtml(row.warehouse ?? "") + '</td>' +
+            '<td data-field="warehouse_location_district" data-raw="' + escapeKageraHtml(row.warehouse_location_district ?? "") + '">' + escapeKageraHtml(row.warehouse_location_district ?? "") + '</td>' +
+            '<td data-field="kgs" data-raw="' + escapeKageraHtml(row.kgs ?? "") + '">' + kageraFormatNumber(row.kgs ?? "",4) + '</td>' +
+            '<td data-field="grade" data-raw="' + escapeKageraHtml(row.grade ?? "") + '">' + escapeKageraHtml(row.grade ?? "") + '</td>' +
+            '<td data-field="grade2" data-raw="' + escapeKageraHtml(row.grade2 ?? "") + '">' + escapeKageraHtml(row.grade2 ?? "") + '</td>' +
+            '<td data-field="price" data-raw="' + escapeKageraHtml(row.price ?? "") + '">' + kageraFormatNumber(row.price ?? "",4) + '</td>' +
+            '<td data-field="value" data-raw="' + escapeKageraHtml(row.value ?? "") + '">' + kageraFormatNumber(row.value ?? "",2) + '</td>' +
+            '<td data-field="buyer" data-raw="' + escapeKageraHtml(row.buyer ?? "") + '">' + escapeKageraHtml(row.buyer ?? "") + '</td>' +
+            actions +
+            '</tr>';
+    }).join("");
 }
-
 
 function kageraGetFilteredCatalogue()
 {
@@ -4487,10 +4430,10 @@ function kageraGetFilteredCatalogue()
 
 function kageraRenderCatalogue(rows)
 {
-    const body=document.getElementById("kageraCatalogueBody");
-    if(!body) return;
+    const body = document.getElementById("kageraCatalogueBody");
+    if (!body) return;
 
-    const sorted=rows.slice().sort(function(a,b){
+    const sorted = rows.slice().sort(function(a,b){
         const aa=kageraAuctionNumber(a.auction_no), ab=kageraAuctionNumber(b.auction_no);
         if(aa!==null && ab!==null && aa!==ab) return ab-aa;
         const la=kageraAuctionNumber(a.lot_no), lb=kageraAuctionNumber(b.lot_no);
@@ -4499,23 +4442,31 @@ function kageraRenderCatalogue(rows)
     });
 
     if(!sorted.length){
-        body.innerHTML='<tr><td colspan="10" class="kagera-empty-state">No Kagera Catalogue records found for the selected filters.</td></tr>';
+        body.innerHTML='<tr><td colspan="11" class="kagera-empty-state">No Kagera Catalogue records found for the selected filters.</td></tr>';
         return;
     }
 
     body.innerHTML=sorted.map(function(row){
-        return "<tr>"+
-            "<td>"+escapeKageraHtml(row.lot_no??"")+"</td>"+
-            "<td>"+escapeKageraHtml(row.auction_no??"")+"</td>"+
-            "<td>"+escapeKageraHtml(formatKageraDate(row.auction_date??""))+"</td>"+
-            "<td>"+escapeKageraHtml(row.union_name??"")+"</td>"+
-            "<td>"+escapeKageraHtml(row.warehouse_name_amcos??"")+"</td>"+
-            "<td>"+escapeKageraHtml(row.warehouse_location_district??"")+"</td>"+
-            "<td>"+escapeKageraHtml(row.kgs??"")+"</td>"+
-            "<td>"+escapeKageraHtml(row.grade??"")+"</td>"+
-            "<td>"+escapeKageraHtml(row.grade2??"")+"</td>"+
-            "<td>"+escapeKageraHtml(row.certification??"")+"</td>"+
-            "</tr>";
+        const actions = kageraEditMode
+            ? '<td class="kagera-row-actions">' +
+              '<button type="button" class="kagera-action-icon edit" onclick="kageraBeginRowEdit(this)" title="Edit row" aria-label="Edit row">✎</button>' +
+              '<button type="button" class="kagera-action-icon delete" onclick="kageraDeleteRow(' + Number(row.id) + ')" title="Delete row" aria-label="Delete row">⌫</button>' +
+              '</td>'
+            : '<td class="kagera-row-actions"></td>';
+
+        return '<tr data-row-id="' + escapeKageraHtml(row.id ?? "") + '">' +
+            '<td data-field="lot_no" data-raw="' + escapeKageraHtml(row.lot_no??"") + '">' + escapeKageraHtml(row.lot_no??"") + '</td>' +
+            '<td data-field="auction_no" data-raw="' + escapeKageraHtml(row.auction_no??"") + '">' + escapeKageraHtml(row.auction_no??"") + '</td>' +
+            '<td data-field="auction_date" data-raw="' + escapeKageraHtml(row.auction_date??"") + '">' + escapeKageraHtml(formatKageraDate(row.auction_date??"")) + '</td>' +
+            '<td data-field="union_name" data-raw="' + escapeKageraHtml(row.union_name??"") + '">' + escapeKageraHtml(row.union_name??"") + '</td>' +
+            '<td data-field="warehouse_name_amcos" data-raw="' + escapeKageraHtml(row.warehouse_name_amcos??"") + '">' + escapeKageraHtml(row.warehouse_name_amcos??"") + '</td>' +
+            '<td data-field="warehouse_location_district" data-raw="' + escapeKageraHtml(row.warehouse_location_district??"") + '">' + escapeKageraHtml(row.warehouse_location_district??"") + '</td>' +
+            '<td data-field="kgs" data-raw="' + escapeKageraHtml(row.kgs??"") + '">' + kageraFormatNumber(row.kgs??"",4) + '</td>' +
+            '<td data-field="grade" data-raw="' + escapeKageraHtml(row.grade??"") + '">' + escapeKageraHtml(row.grade??"") + '</td>' +
+            '<td data-field="grade2" data-raw="' + escapeKageraHtml(row.grade2??"") + '">' + escapeKageraHtml(row.grade2??"") + '</td>' +
+            '<td data-field="certification" data-raw="' + escapeKageraHtml(row.certification??"") + '">' + escapeKageraHtml(row.certification??"") + '</td>' +
+            actions +
+            '</tr>';
     }).join("");
 }
 
@@ -6245,6 +6196,7 @@ document.getElementById("kageraEditModeBtn")?.addEventListener("click", function
         return;
     }
     kageraEditMode = !kageraEditMode;
+    document.body.classList.toggle("kagera-edit-mode", kageraEditMode);
     this.textContent = kageraEditMode ? "✓ Finish editing" : "✎ Edit selected display";
     document.getElementById("kageraSettingsMenu").style.display = "none";
     loadKageraResults({force:true});
@@ -6283,7 +6235,7 @@ async function kageraDeleteRow(id)
     const type = kageraCurrentEditableType();
     if (!type || !id) return;
 
-    if (!confirm("Permanently delete this row from the database?")) return;
+    if (!confirm("Delete this specific row permanently from the database? This cannot be undone.")) return;
 
     try {
         const result = await kageraPostAction({
@@ -6305,22 +6257,34 @@ function kageraBeginRowEdit(button)
 
     const id = tr.dataset.rowId;
     const type = kageraCurrentEditableType();
-    const fields = type === "results"
-        ? ["lot_no","auction_no","auction_date","warehouse","warehouse_location_district","kgs","grade","grade2","price","value","buyer"]
+    if (!id || !type) return;
+
+    const editableFields = type === "results"
+        ? ["lot_no","auction_no","auction_date","warehouse","warehouse_location_district","kgs","grade","grade2","price","buyer"]
         : ["lot_no","auction_no","auction_date","union_name","warehouse_name_amcos","warehouse_location_district","kgs","grade","grade2","certification"];
 
-    [...tr.querySelectorAll("td[data-field]")].forEach(td => {
+    tr.querySelectorAll("td[data-field]").forEach(td => {
         const field = td.dataset.field;
-        if (!fields.includes(field) || field === "value") return;
-        const original = td.dataset.raw ?? td.textContent.trim();
-        td.innerHTML = '<input class="kagera-edit-input" data-edit-field="' +
-            field + '" value="' + escapeKageraHtml(original) + '">';
+        if (!editableFields.includes(field)) return;
+
+        const input = document.createElement("input");
+        input.className = "kagera-edit-input";
+        input.dataset.editField = field;
+        input.value = td.dataset.raw ?? "";
+        if (field === "kgs" || field === "price") input.inputMode = "decimal";
+        td.replaceChildren(input);
     });
 
-    button.textContent = "Save";
-    button.onclick = () => kageraSaveRowEdit(tr, id);
-}
+    button.classList.remove("edit");
+    button.classList.add("save");
+    button.innerHTML = "✓";
+    button.title = "Save changes";
+    button.setAttribute("aria-label","Save changes");
+    button.onclick = function(){ kageraSaveRowEdit(tr,id); };
 
+    const del = tr.querySelector(".kagera-action-icon.delete");
+    if (del) del.disabled = true;
+}
 async function kageraSaveRowEdit(tr, id)
 {
     const type = kageraCurrentEditableType();
@@ -6380,6 +6344,16 @@ const kageraEditObserver = new MutationObserver(() => kageraTagEditableCells());
     const el = document.getElementById(id);
     if (el) kageraEditObserver.observe(el, {childList:true});
 });
+
+
+if (kageraDisplayType) {
+    kageraDisplayType.addEventListener("change", function(){
+        kageraEditMode = false;
+        document.body.classList.remove("kagera-edit-mode");
+        const editButton = document.getElementById("kageraEditModeBtn");
+        if (editButton) editButton.textContent = "✎ Edit selected display";
+    });
+}
 
 </script>
 
