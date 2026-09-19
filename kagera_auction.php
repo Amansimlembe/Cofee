@@ -3488,6 +3488,20 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
 .kagera-action-icon.save:hover{background:#eef8f1!important}
 .kagera-action-icon:disabled{opacity:.45;cursor:not-allowed}
 
+
+.kagera-expected-columns{display:none;position:absolute;right:0;top:calc(100% + 7px);z-index:120;width:min(570px,90vw);padding:11px 12px;border:1px solid #ded6cd;border-radius:9px;background:#fff;box-shadow:0 12px 30px rgba(62,39,35,.14)}
+.kagera-file-area{position:relative}
+.kagera-expected-columns.show{display:block}
+.kagera-expected-columns-title{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
+.kagera-schema-icon{width:26px;height:26px;flex:0 0 26px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:#eee7df;color:#5d4037;font-size:14px}
+.kagera-expected-columns-title strong{display:block;color:#3e2723;font-size:11px;line-height:1.3}
+.kagera-expected-columns-title small{display:block;margin-top:2px;color:#81766f;font-size:9px;line-height:1.4}
+.kagera-column-chips{display:flex;flex-wrap:wrap;gap:5px}
+.kagera-column-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 7px;border:1px solid #e1d9d1;border-radius:999px;background:#fbfaf8;color:#4d4039;font-size:9px;font-weight:600;white-space:nowrap}
+.kagera-column-chip .n{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 3px;border-radius:50%;background:#ede5dd;color:#604a3b;font-size:8px}
+.kagera-schema-note{margin-top:8px;padding-top:7px;border-top:1px solid #eee8e2;color:#766a63;font-size:9px;line-height:1.45}
+.kagera-schema-note strong{color:#4f3b30}
+
 </style>
 
 </head>
@@ -3571,6 +3585,18 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
                         </span>
                         <span class="kagera-browse">Browse</span>
                     </label>
+
+                    <div id="kageraExpectedColumns" class="kagera-expected-columns" aria-live="polite">
+                        <div class="kagera-expected-columns-title">
+                            <span class="kagera-schema-icon">▦</span>
+                            <div>
+                                <strong id="kageraExpectedTitle">Expected Excel Columns</strong>
+                                <small id="kageraExpectedSubtitle"></small>
+                            </div>
+                        </div>
+                        <div id="kageraExpectedColumnList" class="kagera-column-chips"></div>
+                        <div id="kageraExpectedNote" class="kagera-schema-note"></div>
+                    </div>
                 </div>
 
                 <button
@@ -6494,6 +6520,60 @@ function kageraHandleRowActionClick(event)
 
 document.getElementById("kageraResultsBody")?.addEventListener("click", kageraHandleRowActionClick);
 document.getElementById("kageraCatalogueBody")?.addEventListener("click", kageraHandleRowActionClick);
+
+
+const kageraExpectedSchemas = {
+    results: {
+        title: "Auction Results — Expected Excel Columns",
+        subtitle: "Upload exactly 10 Excel columns for Auction Results.",
+        columns: ["Lot No.","Auction No.","Auction Date","Warehouse Name/Amcos","Warehouse Location/District","Kgs","Grade","Grade2","Price","Buyer"],
+        note: "<strong>Value is not an Excel column.</strong> The database creates it automatically as Kgs × Price, giving 11 database fields."
+    },
+    catalogue: {
+        title: "Auction Catalogue — Expected Excel Columns",
+        subtitle: "Upload exactly 10 Excel columns for Auction Catalogue.",
+        columns: ["Lot No.","Auction No.","Auction Date","Union","Warehouse Name/Amcos","Warehouse Location/District","Kgs","Grade","Grade2","Certification"],
+        note: "The file is validated against these Catalogue columns before upload."
+    }
+};
+
+function kageraShowExpectedColumns()
+{
+    const panel=document.getElementById("kageraExpectedColumns");
+    const title=document.getElementById("kageraExpectedTitle");
+    const subtitle=document.getElementById("kageraExpectedSubtitle");
+    const list=document.getElementById("kageraExpectedColumnList");
+    const note=document.getElementById("kageraExpectedNote");
+    if(!panel||!title||!subtitle||!list||!note) return;
+
+    const selected=String(kageraDisplayType?.value||"").toLowerCase();
+    const type=["results","auction_results"].includes(selected) ? "results"
+        : ["catalogue","catalog","auction_catalogue"].includes(selected) ? "catalogue" : "";
+    const schema=kageraExpectedSchemas[type];
+
+    if(!schema){panel.classList.remove("show");return;}
+
+    title.textContent=schema.title;
+    subtitle.textContent=schema.subtitle;
+    list.innerHTML=schema.columns.map((column,index)=>
+        '<span class="kagera-column-chip"><span class="n">'+(index+1)+'</span>'+
+        escapeKageraHtml(column)+'</span>'
+    ).join("");
+    note.innerHTML=schema.note;
+    panel.classList.add("show");
+}
+
+document.querySelector(".kagera-file-label")?.addEventListener("click", function(){
+    kageraShowExpectedColumns();
+});
+document.getElementById("kageraExcelFile")?.addEventListener("change", function(){
+    kageraShowExpectedColumns();
+});
+document.addEventListener("click", function(event){
+    const area=document.querySelector(".kagera-file-area");
+    const panel=document.getElementById("kageraExpectedColumns");
+    if(area&&panel&&!area.contains(event.target)) panel.classList.remove("show");
+});
 
 </script>
 
