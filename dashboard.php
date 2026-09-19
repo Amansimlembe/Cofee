@@ -51,7 +51,29 @@ function top_rows($db,$from,$to,$type,$column,$limit=5){
     $sql="SELECT COALESCE(NULLIF(TRIM($column),''),'Unspecified') name, SUM(COALESCE(kgs,0)) qty, SUM(COALESCE(kgs,0) * COALESCE(price,0)) val FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t AND $case=:type GROUP BY 1 ORDER BY qty DESC, val DESC LIMIT $limit";
     $s=$db->prepare($sql);$s->execute(['f'=>$from,'t'=>$to,'type'=>$type]);return $s->fetchAll(PDO::FETCH_ASSOC);
 }
-$buyers=[];$amcos=[]; foreach(array_keys($summary) as $type){$buyers[$type]=top_rows($db,$from,$to,$type,'buyer');$amcos[$type]=top_rows($db,$from,$to,$type,'warehouse');}
+
+function combined_rank_rows($db,$from,$to,$column,$limit=5){
+    if(!in_array($column,['buyer','warehouse'],true)) return [];
+    $case=coffee_case_sql();
+    $sql="SELECT
+        COALESCE(NULLIF(TRIM($column),''),'Unspecified') name,
+        SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) cherry_qty,
+        SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) clean_qty,
+        SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END) total_qty,
+        SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END) total_value
+      FROM public.kagera_auction_results
+      WHERE auction_date BETWEEN :f AND :t AND $case IS NOT NULL
+      GROUP BY 1
+      HAVING SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END)>0
+      ORDER BY total_qty DESC,total_value DESC LIMIT $limit";
+    $s=$db->prepare($sql); $s->execute(['f'=>$from,'t'=>$to]);
+    return $s->fetchAll(PDO::FETCH_ASSOC);
+}
+$grandSold=$summary['Dry Cherry Coffee']['sold']+$summary['Clean Coffee']['sold'];
+$grandValue=$summary['Dry Cherry Coffee']['value']+$summary['Clean Coffee']['value'];
+$buyersCombined=combined_rank_rows($db,$from,$to,'buyer');
+$amcosCombined=combined_rank_rows($db,$from,$to,'warehouse');
+
 ?>
 <!doctype html>
 <html>
@@ -78,7 +100,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f6f3f1;col
 .kpi .sub{font-size:8px;color:#9a8b84;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi.dry{border-top:2px solid #6d4c41}.kpi.clean{border-top:2px solid #9b7b68}
 
-.analytics{min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px}
+.analytics{min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .panel{min-height:0;background:#fff;border:1px solid #e7ddd8;border-radius:9px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 7px rgba(62,39,35,.04)}
 .panel-head{height:30px;flex:0 0 30px;padding:0 9px;display:flex;align-items:center;justify-content:space-between;background:#4b342c;color:#fff}
 .panel-head strong{font-size:10px;letter-spacing:.1px}
@@ -91,7 +113,7 @@ th:first-child,td:first-child{text-align:left}
 tbody td{font-size:9px;border-bottom:1px solid #f0e9e5;color:#493931}
 tbody tr:last-child td{border-bottom:0}
 tbody td:first-child{font-weight:600}
-.empty{text-align:center!important;color:#a2958e!important}
+.empty{text-align:center!important;color:#a2958e!important} tfoot td{font-size:9px;font-weight:700;background:#f7f3f0;border-top:1px solid #dfd5cf;color:#3f2b24}
 .rank{display:inline-flex;width:15px;height:15px;border-radius:50%;align-items:center;justify-content:center;background:#eee6e1;color:#654b40;font-size:7px;margin-right:4px}
 .type-tag{font-size:8px;font-weight:700;padding:2px 5px;border-radius:8px;background:#f1e9e5;color:#654a40}
 @media(max-width:1050px){
@@ -129,52 +151,42 @@ tbody td:first-child{font-weight:600}
     </div>
 
     <div class="analytics">
-        <?php foreach(['Dry Cherry Coffee','Clean Coffee'] as $type): ?>
-        <section class="panel">
-            <div class="panel-head"><strong>Top 5 Buyers</strong><span class="type-tag"><?=htmlspecialchars($type)?></span></div>
-            <div class="table-box">
-                <table>
-                    <thead><tr><th style="width:29%">Buyer</th><th>Qty (kg)</th><th>Value (TZS)</th><th>Qty %</th><th>Value %</th></tr></thead>
-                    <tbody>
-                    <?php if(!$buyers[$type]): ?><tr><td colspan="5" class="empty">No sales data for this season</td></tr><?php endif; ?>
-                    <?php foreach($buyers[$type] as $i=>$r): ?>
-                    <tr>
-                        <td title="<?=htmlspecialchars($r['name'])?>"><span class="rank"><?=$i+1?></span><?=htmlspecialchars($r['name'])?></td>
-                        <td><?=nf($r['qty'],2)?></td>
-                        <td><?=nf($r['val'],2)?></td>
-                        <td><?=nf(pct($r['qty'],$summary[$type]['sold']),2)?>%</td>
-                        <td><?=nf(pct($r['val'],$summary[$type]['value']),2)?>%</td>
-                    </tr>
-                    <?php endforeach ?>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-        <?php endforeach ?>
-
-        <?php foreach(['Dry Cherry Coffee','Clean Coffee'] as $type): ?>
-        <section class="panel">
-            <div class="panel-head"><strong>Top 5 AMCOS / Warehouses</strong><span class="type-tag"><?=htmlspecialchars($type)?></span></div>
-            <div class="table-box">
-                <table>
-                    <thead><tr><th style="width:31%">AMCOS / Warehouse</th><th>Qty Sold</th><th>Value (TZS)</th><th>Qty %</th><th>Value %</th></tr></thead>
-                    <tbody>
-                    <?php if(!$amcos[$type]): ?><tr><td colspan="5" class="empty">No sales data for this season</td></tr><?php endif; ?>
-                    <?php foreach($amcos[$type] as $i=>$r): ?>
-                    <tr>
-                        <td title="<?=htmlspecialchars($r['name'])?>"><span class="rank"><?=$i+1?></span><?=htmlspecialchars($r['name'])?></td>
-                        <td><?=nf($r['qty'],2)?></td>
-                        <td><?=nf($r['val'],2)?></td>
-                        <td><?=nf(pct($r['qty'],$summary[$type]['sold']),2)?>%</td>
-                        <td><?=nf(pct($r['val'],$summary[$type]['value']),2)?>%</td>
-                    </tr>
-                    <?php endforeach ?>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-        <?php endforeach ?>
-    </div>
-</div>
+<?php foreach([
+ ['Top 5 Buyers',$buyersCombined,'Buyer'],
+ ['Top 5 AMCOS / Warehouses',$amcosCombined,'AMCOS / Warehouse']
+] as [$heading,$rows,$firstLabel]): ?>
+<section class="panel">
+ <div class="panel-head"><strong><?=$heading?></strong><span>Ranked by total quantity</span></div>
+ <div class="table-box"><table>
+  <thead><tr>
+   <th style="width:27%"><?=$firstLabel?></th>
+   <th>Dry Cherry (kg)</th><th>Clean Coffee (kg)</th>
+   <th>Total Qty (kg)</th><th>Total Value (TZS)</th><th>Qty Share</th>
+  </tr></thead>
+  <tbody>
+  <?php if(!$rows): ?><tr><td colspan="6" class="empty">No sales data for this season</td></tr><?php endif; ?>
+  <?php foreach($rows as $i=>$r): ?>
+   <tr>
+    <td title="<?=htmlspecialchars($r['name'])?>"><span class="rank"><?=$i+1?></span><?=htmlspecialchars($r['name'])?></td>
+    <td><?=nf($r['cherry_qty'],2)?></td>
+    <td><?=nf($r['clean_qty'],2)?></td>
+    <td><?=nf($r['total_qty'],2)?></td>
+    <td><?=nf($r['total_value'],2)?></td>
+    <td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?>%</td>
+   </tr>
+  <?php endforeach ?>
+  </tbody>
+  <tfoot><tr>
+   <td>Season Grand Total</td>
+   <td><?=nf($summary['Dry Cherry Coffee']['sold'],2)?></td>
+   <td><?=nf($summary['Clean Coffee']['sold'],2)?></td>
+   <td><?=nf($grandSold,2)?></td>
+   <td><?=nf($grandValue,2)?></td>
+   <td>100%</td>
+  </tr></tfoot>
+ </table></div>
+</section>
+<?php endforeach ?>
+</div></div>
 </body>
 </html>
