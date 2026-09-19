@@ -1564,64 +1564,14 @@ submenu names.
 
         <section
             id="dashboard"
-            class="section active">
+            class="section kagera-page-section active">
 
-            <div class="page-header">
-
-                <h1>
-                    Coffee Sales Dashboard
-                </h1>
-
-                <p>
-                    Overview of coffee sales and market performance
-                </p>
-
-            </div>
-
-
-            <div class="card-container">
-
-
-                <div class="card">
-
-                    <h3>
-                        Total Coffee Sold
-                    </h3>
-
-                    <div class="value">
-                        0 Kg
-                    </div>
-
-                </div>
-
-
-                <div class="card">
-
-                    <h3>
-                        Total Sales Value
-                    </h3>
-
-                    <div class="value">
-                        TZS 0
-                    </div>
-
-                </div>
-
-
-                <div class="card">
-
-                    <h3>
-                        Average Price
-                    </h3>
-
-                    <div class="value">
-                        TZS 0/Kg
-                    </div>
-
-                </div>
-
-
-            </div>
+            <iframe
+                id="dashboardFrame"
+                src="dashboard.php"
+                title="Kagera Auction Dashboard"
+                class="kagera-auction-frame">
+            </iframe>
 
         </section>
 
