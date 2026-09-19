@@ -3502,6 +3502,10 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
 .kagera-schema-note{margin-top:8px;padding-top:7px;border-top:1px solid #eee8e2;color:#766a63;font-size:9px;line-height:1.45}
 .kagera-schema-note strong{color:#4f3b30}
 
+
+.kagera-upload-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.kagera-upload-btn:disabled{opacity:.65;cursor:wait}
+
 </style>
 
 </head>
@@ -3575,16 +3579,8 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
                         name="kagera_excel"
                         accept=".xlsx,.xls,.xlsm,.xltx,.xltm,.xlsb,.ods,.csv,.tsv,.txt,.xml,.html,.htm"
                         required
+                        hidden
                     >
-
-                    <label for="kageraExcelFile" class="kagera-file-label">
-                        <span class="kagera-file-icon">📁</span>
-                        <span class="kagera-file-text">
-                            <strong>Select Excel File</strong>
-                            <small id="kageraFileName">Choose file</small>
-                        </span>
-                        <span class="kagera-browse">Browse</span>
-                    </label>
 
                     <div id="kageraExpectedColumns" class="kagera-expected-columns" aria-live="polite">
                         <div class="kagera-expected-columns-title">
@@ -3600,11 +3596,13 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
                 </div>
 
                 <button
-                    type="submit"
+                    type="button"
                     class="kagera-upload-btn"
                     id="kageraUploadButton"
+                    title="Select Excel file to upload"
                 >
-                    <span>↑</span> Upload
+                    <span>↑</span>
+                    <span id="kageraUploadButtonText">Upload Auction Results</span>
                 </button>
             </form>
 
@@ -6563,11 +6561,38 @@ function kageraShowExpectedColumns()
     panel.classList.add("show");
 }
 
-document.querySelector(".kagera-file-label")?.addEventListener("click", function(){
+document.getElementById("kageraUploadButton")?.addEventListener("click", function(){
+    // Show the selected display's expected columns, then open the file picker.
     kageraShowExpectedColumns();
+    document.getElementById("kageraExcelFile")?.click();
 });
+
 document.getElementById("kageraExcelFile")?.addEventListener("change", function(){
     kageraShowExpectedColumns();
+
+    if (!this.files || !this.files.length) return;
+
+    const button = document.getElementById("kageraUploadButton");
+    const buttonText = document.getElementById("kageraUploadButtonText");
+    const selected = String(kageraDisplayType?.value || "").toLowerCase();
+    const type = ["results","auction_results"].includes(selected) ? "results"
+        : ["catalogue","catalog","auction_catalogue"].includes(selected) ? "catalogue" : "";
+
+    if (!type) {
+        alert("Select Auction Results or Auction Catalogue before uploading.");
+        this.value = "";
+        return;
+    }
+
+    if (button) button.disabled = true;
+    if (buttonText) buttonText.textContent = "Uploading…";
+
+    // Use the existing form submit handler so all current validation,
+    // replacement confirmation and database upload logic remain unchanged.
+    const form = document.getElementById("kageraUploadForm");
+    if (form) {
+        form.requestSubmit();
+    }
 });
 document.addEventListener("click", function(event){
     const area=document.querySelector(".kagera-file-area");
