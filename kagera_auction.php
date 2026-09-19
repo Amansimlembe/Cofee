@@ -3531,6 +3531,27 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
  .kagera-settings-upload-panel .kagera-upload-btn{width:100%}
 }
 
+
+.kagera-upload-status{
+    margin-top:10px;
+    padding:10px 12px;
+    border-radius:8px;
+    border:1px solid transparent;
+    font-size:10px;
+    line-height:1.45;
+    font-weight:600;
+}
+.kagera-upload-status.show{display:flex!important;align-items:flex-start;gap:8px}
+.kagera-upload-status::before{font-size:13px;line-height:1.1;flex:0 0 auto}
+.kagera-upload-status.info{background:#f6f3ef;border-color:#ded5cc;color:#594a40}
+.kagera-upload-status.info::before{content:"ℹ"}
+.kagera-upload-status.success{background:#eef8f1;border-color:#bfddc8;color:#285c39}
+.kagera-upload-status.success::before{content:"✓"}
+.kagera-upload-status.error{background:#fff1f0;border-color:#efc5c1;color:#8c2f29}
+.kagera-upload-status.error::before{content:"!"}
+.kagera-upload-status.warning{background:#fff8e8;border-color:#ead7a4;color:#775a16}
+.kagera-upload-status.warning::before{content:"!"}
+
 </style>
 
 </head>
@@ -3666,6 +3687,13 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
                     <span>↑</span> Upload
                 </button>
             </form>
+
+    <div id="kageraUploadStatus"
+         class="kagera-upload-status"
+         role="status"
+         aria-live="polite"
+         aria-atomic="true"
+         style="display:none;"></div>
 </div>
 
 
@@ -3965,6 +3993,11 @@ if (kageraExcelFile) {
                     ? this.files[0].name
                     : "Supported formats: .xlsx, .xls, .xlsm, .xltx, .xltm, .xlsb, .ods, .csv, .tsv, .txt, .xml, .html";
 
+            if (kageraUploadStatus) {
+                kageraUploadStatus.style.display = "none";
+                kageraUploadStatus.className = "kagera-upload-status";
+                kageraUploadStatus.textContent = "";
+            }
         }
     );
 }
@@ -3976,20 +4009,19 @@ if (kageraExcelFile) {
 |--------------------------------------------------------------------------
 */
 
-function showKageraStatus(
-    message,
-    type
-) {
+function showKageraStatus(message, type = "info")
+{
+    if (!kageraUploadStatus) return;
 
-    if (!kageraUploadStatus) {
-        return;
-    }
+    const allowed = ["info", "success", "error", "warning"];
+    const statusType = allowed.includes(type) ? type : "info";
 
-    kageraUploadStatus.textContent =
-        message;
+    kageraUploadStatus.textContent = String(message || "");
+    kageraUploadStatus.className = "kagera-upload-status show " + statusType;
+    kageraUploadStatus.style.display = "flex";
 
-    kageraUploadStatus.className =
-        "kagera-upload-status " + type;
+    // Keep upload outcome visible. It is cleared only when a new upload starts,
+    // the upload panel is closed, or another file is selected.
 }
 
 
@@ -4028,9 +4060,16 @@ async function readKageraJson(response)
         !result.success
     ) {
 
+        let details = "";
+        if (result && result.data && Array.isArray(result.data.errors) && result.data.errors.length) {
+            details = " " + result.data.errors.slice(0, 5).join(" ");
+            if (result.data.errors.length > 5) {
+                details += " Additional validation errors were also found.";
+            }
+        }
+
         throw new Error(
-            result.message ||
-            "Request failed."
+            (result.message || "Request failed.") + details
         );
     }
 
@@ -4108,8 +4147,8 @@ if (kageraUploadForm) {
                 "<span>⏳</span> Checking...";
 
             showKageraStatus(
-                "Checking Lot No, Auction No. and Auction Date...",
-                "success"
+                "Checking the selected file and validating its records...",
+                "info"
             );
 
             try {
@@ -4138,8 +4177,8 @@ if (kageraUploadForm) {
 
                     if (!confirmed) {
                         showKageraStatus(
-                            "Upload cancelled. No existing records were changed.",
-                            "success"
+                            "Upload stopped. No records were saved or changed.",
+                            "warning"
                         );
                         return;
                     }
@@ -6654,6 +6693,11 @@ function kageraOpenSettingsUpload()
     }
 
     if(fileInput) fileInput.value="";
+    if(kageraUploadStatus){
+        kageraUploadStatus.style.display="none";
+        kageraUploadStatus.className="kagera-upload-status";
+        kageraUploadStatus.textContent="";
+    }
     if(menu) menu.style.display="none";
     if(panel) panel.style.display="block";
 }
