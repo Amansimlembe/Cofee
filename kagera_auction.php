@@ -2167,12 +2167,26 @@ function handle_kagera_report()
 
 try {
 
-    $kageraType = strtolower(trim((string)($_REQUEST['kagera_type'] ?? $_POST['upload_type'] ?? 'results')));
+    /*
+    | Prefer the explicit upload_type sent by the form for POST uploads.
+    | This prevents a stale/duplicate kagera_type value from overriding
+    | the current Display selection.
+    */
+    if (
+        ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' &&
+        isset($_FILES['kagera_excel'])
+    ) {
+        $kageraType = strtolower(trim((string)($_POST['upload_type'] ?? '')));
+    } else {
+        $kageraType = strtolower(trim((string)($_GET['kagera_type'] ?? $_REQUEST['kagera_type'] ?? 'results')));
+    }
 
-    if (in_array($kageraType, ['auction_results', 'auction_result', 'result'], true)) {
+    if (in_array($kageraType, ['results', 'auction_results', 'auction_result', 'result'], true)) {
         $kageraType = 'results';
-    } elseif (in_array($kageraType, ['auction_catalogue', 'catalog'], true)) {
+    } elseif (in_array($kageraType, ['catalogue', 'auction_catalogue', 'catalog'], true)) {
         $kageraType = 'catalogue';
+    } else {
+        $kageraType = '';
     }
 
     if (
@@ -3626,6 +3640,13 @@ if (kageraUploadForm) {
             event.preventDefault();
 
             const selectedUploadType = kageraSyncUploadWithDisplay();
+
+            // Keep the POST destination synchronized with the Display
+            // selection at the exact moment Upload is clicked.
+            if (kageraUploadType) {
+                kageraUploadType.value = selectedUploadType;
+            }
+
             if (!selectedUploadType) {
                 showKageraStatus("Select Auction Results or Auction Catalogue from Display before uploading.", "error");
                 return;
@@ -3646,7 +3667,7 @@ if (kageraUploadForm) {
                 const formData =
                     new FormData(kageraUploadForm);
 
-                formData.set("kagera_type", selectedUploadType);
+                formData.delete("kagera_type");
                 formData.set("upload_type", selectedUploadType);
 
                 if (confirmReplace) {
