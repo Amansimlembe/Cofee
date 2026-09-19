@@ -506,7 +506,9 @@ function handle_kagera_catalogue_upload()
         kagera_json(false, "Catalogue header row could not be identified. Required fields are Lot No., Auction No. and Auction Date.", [], 400);
     }
 
-    $headers = array_map("kagera_norm", $rows[$headerIndex]);
+    $rawHeaders = $rows[$headerIndex];
+    kagera_validate_selected_excel_columns($rawHeaders, "results");
+    $headers = array_map("kagera_norm", $rawHeaders);
 
     $col = [
         "lot_no" => kagera_find_col($headers, ["lot_no","lot_number","lot"]),
@@ -1192,8 +1194,96 @@ function kagera_parse_excel(
 |--------------------------------------------------------------------------
 */
 
+
+function kagera_validate_selected_excel_columns(array $rawHeaders, $uploadType)
+{
+    $isCatalogue = $uploadType === "catalogue";
+
+    $expected = $isCatalogue
+        ? ["lot_no","auction_no","auction_date","union","warehouse_name_amcos","warehouse_location_district","kgs","grade","grade2","certification"]
+        : ["lot_no","auction_no","auction_date","warehouse_name_amcos","warehouse_location_district","kgs","grade","grade2","price","buyer"];
+
+    $labels = $isCatalogue
+        ? ["Lot No.","Auction No.","Auction Date","Union","Warehouse name/Amcos","Warehouse Location/District","Kgs","Grade","Grade2","Certification"]
+        : ["Lot No","Auction No.","Auction Date","Warehouse Name/Amcos","Warehouse Location/District","Kgs","Grade","Grade2","Price","Buyer"];
+
+    $aliases = [
+        "lot_number"=>"lot_no","lot"=>"lot_no",
+        "auction_number"=>"auction_no","auction"=>"auction_no",
+        "date_sold"=>"auction_date","sold_date"=>"auction_date","held_on"=>"auction_date","date"=>"auction_date",
+        "union_name"=>"union",
+        "warehouse"=>"warehouse_name_amcos","warehouse_name"=>"warehouse_name_amcos","warehouse_amcos"=>"warehouse_name_amcos",
+        "warehouse_location"=>"warehouse_location_district","district"=>"warehouse_location_district","location"=>"warehouse_location_district","warehouse_loc"=>"warehouse_location_district",
+        "net_weight"=>"kgs","net_weight_kg"=>"kgs","weight_kgs"=>"kgs","kg"=>"kgs","kgs_kg"=>"kgs",
+        "grade_2"=>"grade2","grade_ii"=>"grade2",
+        "buyer_name"=>"buyer","certificate"=>"certification"
+    ];
+
+    $actualRaw=array_map(static fn($v)=>trim((string)$v),$rawHeaders);
+    while($actualRaw && end($actualRaw)==="") array_pop($actualRaw);
+
+    $actual=[];
+    foreach($actualRaw as $v){
+        $k=kagera_norm($v);
+        $actual[]=$aliases[$k] ?? $k;
+    }
+
+    $missing=[];
+    foreach($expected as $i=>$k){
+        if(!in_array($k,$actual,true)) $missing[]=$labels[$i];
+    }
+
+    $extra=[];
+    foreach($actual as $i=>$k){
+        if($k!=="" && !in_array($k,$expected,true)) $extra[]=$actualRaw[$i] ?: "Column ".($i+1);
+    }
+
+    $duplicates=[];
+    foreach(array_count_values(array_filter($actual)) as $k=>$count){
+        if($count>1 && in_array($k,$expected,true)){
+            $idx=array_search($k,$expected,true);
+            $duplicates[]=$labels[$idx];
+        }
+    }
+
+    $actualCount=count(array_filter($actualRaw,static fn($v)=>$v!==""));
+    $expectedCount=count($expected);
+
+    if($actualCount!==$expectedCount || $missing || $extra || $duplicates){
+        $message="Upload stopped. ".($isCatalogue?"Auction Catalogue":"Auction Results").
+            " requires exactly {$expectedCount} columns, but {$actualCount} were found.";
+        if($missing) $message.=" Missing column(s): ".implode(", ",array_unique($missing)).".";
+        if($extra) $message.=" Unexpected/exceeding column(s): ".implode(", ",array_unique($extra)).".";
+        if($duplicates) $message.=" Duplicate column(s): ".implode(", ",array_unique($duplicates)).".";
+        $message.=" Expected columns: ".implode(", ",$labels).".";
+
+        kagera_json(false,$message,[
+            "expected_count"=>$expectedCount,
+            "actual_count"=>$actualCount,
+            "missing_columns"=>array_values(array_unique($missing)),
+            "extra_columns"=>array_values(array_unique($extra)),
+            "duplicate_columns"=>array_values(array_unique($duplicates)),
+            "expected_columns"=>$labels
+        ],400);
+    }
+
+    foreach($expected as $i=>$k){
+        if(($actual[$i] ?? "")!==$k){
+            kagera_json(false,
+                "Upload stopped. Column ".($i+1)." should be \"".$labels[$i].
+                "\" but \"".($actualRaw[$i] ?? "")."\" was found. Please upload the correct ".
+                ($isCatalogue?"Auction Catalogue":"Auction Results")." file.",
+                ["column_number"=>$i+1,"expected_column"=>$labels[$i],"found_column"=>$actualRaw[$i] ?? ""],
+                400
+            );
+        }
+    }
+}
+
 function handle_kagera_upload()
 {
+    $uploadType = "auction_results";
+
     if (!isset($_FILES["kagera_excel"]) || !is_array($_FILES["kagera_excel"])) {
         kagera_json(false, "Please select an Excel file.", [], 400);
     }
@@ -1266,7 +1356,9 @@ function handle_kagera_upload()
         kagera_json(false, "The Excel file header row could not be identified.", [], 400);
     }
 
-    $headers = array_map("kagera_norm", $rows[$headerIndex]);
+    $rawHeaders = $rows[$headerIndex];
+    kagera_validate_selected_excel_columns($rawHeaders, "catalogue");
+    $headers = array_map("kagera_norm", $rawHeaders);
 
     /*
     |--------------------------------------------------------------------------
@@ -1489,7 +1581,8 @@ function handle_kagera_upload()
             "grade" => $grade,
             "grade2" => $grade2,
             "price" => $price,
-            "buyer" => $buyer
+            "buyer" => $buyer,
+            "value" => round(((float)$weight) * ((float)$price), 2)
         ];
     }
 
@@ -1609,7 +1702,8 @@ function handle_kagera_upload()
                 :grade,
                 :grade2,
                 :price,
-                :buyer, (:kgs * :price))
+                :buyer,
+                :value)
         ");
 
         foreach ($records as $record) {
@@ -1694,7 +1788,7 @@ function handle_kagera_fetch()
             grade,
             grade2,
             price,
-            (COALESCE(kgs, 0) * COALESCE(price, 0)) AS value,
+            COALESCE(value, COALESCE(kgs, 0) * COALESCE(price, 0)) AS value,
             buyer
         FROM public.kagera_auction_results
         ORDER BY
@@ -1787,8 +1881,7 @@ function handle_kagera_report()
         SELECT
             grade2,
             COALESCE(SUM(kgs),0) AS kilos_sold,
-            COALESCE(SUM(kgs * COALESCE(price,
-            (COALESCE(kgs, 0) * COALESCE(price, 0)) AS value,0)),0) AS total_value,
+            COALESCE(SUM(kgs * COALESCE(price, 0)), 0) AS total_value,
             MIN(CASE WHEN price > 0 AND kgs > 0 THEN price END) AS lowest_price,
             CASE
                 WHEN SUM(CASE WHEN price > 0 AND kgs > 0 THEN kgs ELSE 0 END) > 0
@@ -1843,11 +1936,10 @@ function handle_kagera_report()
         SELECT
             TRIM(CAST(grade AS TEXT)) AS grade,
             COALESCE(SUM(kgs), 0) AS kilos_sold,
-            COALESCE(SUM(kgs * COALESCE(price,
-            (COALESCE(kgs, 0) * COALESCE(price, 0)) AS value, 0)), 0) AS total_value
+            COALESCE(SUM(kgs * COALESCE(price, 0)), 0) AS total_value
         FROM public.kagera_auction_results
-        " . ($resultWhere ? 'WHERE ' . implode(' AND ', $resultWhere) : '') . "
-        AND TRIM(CAST(grade AS TEXT)) <> ''
+        WHERE " . ($resultWhere ? '(' . implode(' AND ', $resultWhere) . ') AND ' : '') . "
+              TRIM(CAST(grade AS TEXT)) <> ''
         GROUP BY TRIM(CAST(grade AS TEXT))
     ";
 
@@ -3405,9 +3497,16 @@ function kageraSyncUploadWithDisplay()
     const uploadButton = document.getElementById("kageraUploadButton");
     if (uploadButton) {
         uploadButton.disabled = !enabled;
-        uploadButton.title = enabled
-            ? (isCatalogue ? "Upload Auction Catalogue" : "Upload Auction Results")
-            : "Select Auction Results or Auction Catalogue from Display to enable upload";
+        if (isCatalogue) {
+            uploadButton.innerHTML = "<span>↑</span> Upload Catalogue";
+            uploadButton.title = "Upload Auction Catalogue";
+        } else if (isResults) {
+            uploadButton.innerHTML = "<span>↑</span> Upload Auction Results";
+            uploadButton.title = "Upload Auction Results";
+        } else {
+            uploadButton.innerHTML = "<span>↑</span> Upload";
+            uploadButton.title = "Select Auction Results or Auction Catalogue from Display to enable upload";
+        }
     }
     const fileLabel = document.querySelector('label[for="kageraExcelFile"]');
     if (fileLabel) {
@@ -3652,9 +3751,7 @@ if (kageraUploadForm) {
                 );
 
             } finally {
-                button.disabled = false;
-                button.innerHTML =
-                    "<span>↑</span> Upload Results";
+                kageraSyncUploadWithDisplay();
             }
         }
     );
