@@ -1280,6 +1280,161 @@ function kagera_validate_selected_excel_columns(array $rawHeaders, $uploadType)
     }
 }
 
+
+function kagera_crud_config($type)
+{
+    if ($type === "results") {
+        return [
+            "table" => "public.kagera_auction_results",
+            "fields" => [
+                "lot_no","auction_no","auction_date","warehouse",
+                "warehouse_location_district","kgs","grade","grade2",
+                "price","buyer"
+            ]
+        ];
+    }
+
+    if ($type === "catalogue") {
+        return [
+            "table" => "public.kagera_auction_catalogue",
+            "fields" => [
+                "lot_no","auction_no","auction_date","union_name",
+                "warehouse_name_amcos","warehouse_location_district",
+                "kgs","grade","grade2","certification"
+            ]
+        ];
+    }
+
+    throw new RuntimeException("Editing is available only for Auction Results or Auction Catalogue.");
+}
+
+function kagera_handle_update_row()
+{
+    $type = strtolower(trim((string)($_POST["kagera_type"] ?? "")));
+    $id = filter_var($_POST["id"] ?? null, FILTER_VALIDATE_INT);
+
+    if (!$id || $id < 1) {
+        kagera_json(false, "Invalid row selected for editing.", [], 422);
+    }
+
+    $config = kagera_crud_config($type);
+    $payload = json_decode((string)($_POST["row_data"] ?? ""), true);
+
+    if (!is_array($payload)) {
+        kagera_json(false, "Invalid row data.", [], 422);
+    }
+
+    $data = [];
+    foreach ($config["fields"] as $field) {
+        if (array_key_exists($field, $payload)) {
+            $data[$field] = is_string($payload[$field])
+                ? trim($payload[$field])
+                : $payload[$field];
+        }
+    }
+
+    foreach (["lot_no","auction_no","auction_date","kgs"] as $required) {
+        if (array_key_exists($required, $data) && ($data[$required] === "" || $data[$required] === null)) {
+            kagera_json(false, ucfirst(str_replace("_", " ", $required)) . " cannot be blank.", [], 422);
+        }
+    }
+
+    if ($type === "results" && array_key_exists("price", $data) && ($data["price"] === "" || $data["price"] === null)) {
+        kagera_json(false, "Price cannot be blank for Auction Results.", [], 422);
+    }
+
+    if (isset($data["auction_date"])) {
+        $data["auction_date"] = kagera_normalize_date($data["auction_date"]);
+        if (!$data["auction_date"]) {
+            kagera_json(false, "Auction Date is invalid.", [], 422);
+        }
+    }
+
+    foreach (["kgs","price"] as $numericField) {
+        if (array_key_exists($numericField, $data)) {
+            $clean = str_replace([","," "], "", (string)$data[$numericField]);
+            if (!is_numeric($clean)) {
+                kagera_json(false, ucfirst($numericField) . " must be numeric.", [], 422);
+            }
+            $data[$numericField] = (float)$clean;
+        }
+    }
+
+    if (!$data) {
+        kagera_json(false, "No editable values were supplied.", [], 422);
+    }
+
+    $sets = [];
+    $params = [":id" => $id];
+    foreach ($data as $field => $value) {
+        $sets[] = $field . " = :" . $field;
+        $params[":" . $field] = $value;
+    }
+
+    // Value is database-controlled and is recalculated whenever Kgs/Price changes.
+    if ($type === "results") {
+        $sets[] = "value = ROUND((COALESCE(" .
+            (array_key_exists("kgs", $data) ? ":kgs" : "kgs") .
+            ",0) * COALESCE(" .
+            (array_key_exists("price", $data) ? ":price" : "price") .
+            ",0))::numeric, 2)";
+    }
+
+    $db = kagera_db();
+    $sql = "UPDATE " . $config["table"] . " SET " . implode(", ", $sets) . " WHERE id = :id";
+    $stmt = $db->prepare($sql);
+
+    try {
+        $stmt->execute($params);
+    } catch (PDOException $e) {
+        if ($e->getCode() === "23505") {
+            kagera_json(false, "Update stopped because another row already has the same Lot No., Auction No. and Auction Date.", [], 409);
+        }
+        throw $e;
+    }
+
+    if ($stmt->rowCount() < 1) {
+        kagera_json(false, "The selected row was not found or no value changed.", [], 404);
+    }
+
+    kagera_json(true, "Row updated successfully.");
+}
+
+function kagera_handle_delete_row()
+{
+    $type = strtolower(trim((string)($_POST["kagera_type"] ?? "")));
+    $id = filter_var($_POST["id"] ?? null, FILTER_VALIDATE_INT);
+
+    if (!$id || $id < 1) {
+        kagera_json(false, "Invalid row selected for deletion.", [], 422);
+    }
+
+    $config = kagera_crud_config($type);
+    $stmt = kagera_db()->prepare("DELETE FROM " . $config["table"] . " WHERE id = :id");
+    $stmt->execute([":id" => $id]);
+
+    if ($stmt->rowCount() < 1) {
+        kagera_json(false, "The selected row was not found.", [], 404);
+    }
+
+    kagera_json(true, "Row deleted permanently from the database.");
+}
+
+function kagera_handle_delete_all()
+{
+    $type = strtolower(trim((string)($_POST["kagera_type"] ?? "")));
+    $confirmation = trim((string)($_POST["confirmation"] ?? ""));
+
+    if ($confirmation !== "DELETE ALL") {
+        kagera_json(false, 'Type "DELETE ALL" to confirm permanent deletion.', [], 422);
+    }
+
+    $config = kagera_crud_config($type);
+    $count = (int)kagera_db()->exec("DELETE FROM " . $config["table"]);
+
+    kagera_json(true, number_format($count) . " row(s) permanently deleted.", ["deleted" => $count]);
+}
+
 function handle_kagera_upload()
 {
     $uploadType = "auction_results";
@@ -2206,6 +2361,17 @@ try {
         $kageraType = 'catalogue';
     } else {
         $kageraType = '';
+    }
+
+    $postAction = strtolower(trim((string)($_POST["action"] ?? "")));
+    if (($_SERVER["REQUEST_METHOD"] ?? "GET") === "POST" && $postAction === "update_row") {
+        kagera_handle_update_row();
+    }
+    if (($_SERVER["REQUEST_METHOD"] ?? "GET") === "POST" && $postAction === "delete_row") {
+        kagera_handle_delete_row();
+    }
+    if (($_SERVER["REQUEST_METHOD"] ?? "GET") === "POST" && $postAction === "delete_all") {
+        kagera_handle_delete_all();
     }
 
     if (
@@ -3212,6 +3378,19 @@ body.sidebar-collapsed .kagera-main {
     font-weight: 600;
     opacity: .75;
 }
+
+.kagera-settings-wrap{position:relative;display:inline-flex;align-items:center}
+.kagera-settings-btn{width:38px;height:38px;border:1px solid #d8d1c7;border-radius:9px;background:#fff;color:#49372a;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.kagera-settings-btn:hover{background:#f6f2ed}
+.kagera-settings-menu{position:absolute;right:0;top:44px;z-index:80;min-width:210px;padding:7px;background:#fff;border:1px solid #ded7cf;border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.14)}
+.kagera-settings-menu button{display:block;width:100%;border:0;background:transparent;text-align:left;padding:10px 11px;border-radius:7px;cursor:pointer;color:#342820;font-weight:600}
+.kagera-settings-menu button:hover{background:#f5f1ec}
+.kagera-settings-menu button.danger{color:#9b2c2c}
+.kagera-row-actions{white-space:nowrap}
+.kagera-row-actions button{border:1px solid #d8d1c7;background:#fff;border-radius:6px;padding:5px 8px;margin:0 2px;cursor:pointer}
+.kagera-row-actions .delete{color:#9b2c2c}
+.kagera-edit-input{width:100%;min-width:80px;padding:6px 7px;border:1px solid #cfc7bd;border-radius:5px;font:inherit}
+
 </style>
 
 </head>
@@ -3316,6 +3495,19 @@ body.sidebar-collapsed .kagera-main {
         >
             <span>↻</span> Refresh
         </button>
+<div class="kagera-settings-wrap" id="kageraSettingsWrap">
+    <button type="button"
+            class="kagera-settings-btn"
+            id="kageraSettingsBtn"
+            aria-label="Data settings"
+            title="Data settings">⚙</button>
+
+    <div class="kagera-settings-menu" id="kageraSettingsMenu" style="display:none;">
+        <button type="button" id="kageraEditModeBtn">✎ Edit selected display</button>
+        <button type="button" id="kageraDeleteAllBtn" class="danger">⌫ Delete all data</button>
+    </div>
+</div>
+
 
         
 <div class="kagera-export-wrap" id="kageraHighLowExportWrap" style="display:none;">
@@ -3345,7 +3537,7 @@ body.sidebar-collapsed .kagera-main {
 <thead><tr>
 <th>Lot No</th><th>Auction No.</th><th>Auction Date</th><th>Warehouse Name/Amcos</th>
 <th>Warehouse Location/District</th><th>Kgs</th><th>Grade</th>
-<th>Grade2</th><th>Price</th><th>Value</th><th>Buyer</th>
+<th>Grade2</th><th>Price</th><th>Value</th><th>Buyer</th><th class="kagera-actions-head">Actions</th>
 </tr></thead>
 <tbody id="kageraResultsBody">
 <tr><td colspan="11" class="kagera-empty-state">No Kagera Auction results loaded.</td></tr>
@@ -3356,7 +3548,7 @@ body.sidebar-collapsed .kagera-main {
 <thead><tr>
 <th>Lot No.</th><th>Auction No.</th><th>Auction Date</th><th>Union</th>
 <th>Warehouse name/Amcos</th><th>Warehouse Location/District</th>
-<th>Kgs</th><th>Grade</th><th>Grade2</th><th>Certification</th>
+<th>Kgs</th><th>Grade</th><th>Grade2</th><th>Certification</th><th class="kagera-actions-head">Actions</th>
 </tr></thead>
 <tbody id="kageraCatalogueBody">
 <tr><td colspan="10" class="kagera-empty-state">No Kagera Catalogue loaded.</td></tr>
@@ -3496,6 +3688,21 @@ body.sidebar-collapsed .kagera-main {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <script>
+
+function kageraFormatNumber(value, maxDecimals = 4)
+{
+    if (value === null || value === undefined || value === "") return "";
+
+    const number = Number(String(value).replace(/,/g, ""));
+    if (!Number.isFinite(number)) return escapeKageraHtml(value);
+
+    return number.toLocaleString("en-US", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: maxDecimals
+    });
+}
+
+
 
 const kageraExcelFile =
     document.getElementById("kageraExcelFile");
@@ -4216,8 +4423,9 @@ function kageraRenderResults(rows)
                     "</td>" +
 
                     "<td>" +
-                    escapeKageraHtml(
-                        row.kgs ?? ""
+                    kageraFormatNumber(
+                        row.kgs ?? "",
+                        4
                     ) +
                     "</td>" +
 
@@ -4234,14 +4442,16 @@ function kageraRenderResults(rows)
                     "</td>" +
 
                     "<td>" +
-                    escapeKageraHtml(
-                        row.price ?? ""
+                    kageraFormatNumber(
+                        row.price ?? "",
+                        4
                     ) +
                     "</td>" +
 
                     "<td>" +
-                    escapeKageraHtml(
-                        row.value ?? ""
+                    kageraFormatNumber(
+                        row.value ?? "",
+                        2
                     ) +
                     "</td>" +
 
@@ -5983,6 +6193,193 @@ document.addEventListener(
     "DOMContentLoaded",
     loadKageraResults
 );
+
+
+let kageraEditMode = false;
+
+function kageraCurrentEditableType()
+{
+    const v = String(kageraDisplayType ? kageraDisplayType.value : "").toLowerCase();
+    return v === "results" || v === "catalogue" ? v : "";
+}
+
+async function kageraPostAction(data)
+{
+    const body = new FormData();
+    Object.entries(data).forEach(([key, value]) => body.set(key, value));
+
+    const response = await fetch("kagera_auction.php", {
+        method: "POST",
+        body
+    });
+
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+        throw new Error(json.message || "Database operation failed.");
+    }
+    return json;
+}
+
+function kageraToggleSettingsMenu()
+{
+    const menu = document.getElementById("kageraSettingsMenu");
+    if (!menu) return;
+    menu.style.display = menu.style.display === "block" ? "none" : "block";
+}
+
+document.getElementById("kageraSettingsBtn")?.addEventListener("click", function(event){
+    event.stopPropagation();
+    kageraToggleSettingsMenu();
+});
+
+document.addEventListener("click", function(event){
+    const wrap = document.getElementById("kageraSettingsWrap");
+    const menu = document.getElementById("kageraSettingsMenu");
+    if (wrap && menu && !wrap.contains(event.target)) menu.style.display = "none";
+});
+
+document.getElementById("kageraEditModeBtn")?.addEventListener("click", function(){
+    const type = kageraCurrentEditableType();
+    if (!type) {
+        alert("Editing is available only when Auction Results or Auction Catalogue is selected.");
+        return;
+    }
+    kageraEditMode = !kageraEditMode;
+    this.textContent = kageraEditMode ? "✓ Finish editing" : "✎ Edit selected display";
+    document.getElementById("kageraSettingsMenu").style.display = "none";
+    loadKageraResults({force:true});
+});
+
+document.getElementById("kageraDeleteAllBtn")?.addEventListener("click", async function(){
+    const type = kageraCurrentEditableType();
+    if (!type) {
+        alert("Delete All is available only for Auction Results or Auction Catalogue.");
+        return;
+    }
+
+    const label = type === "results" ? "Auction Results" : "Auction Catalogue";
+    const confirmation = prompt(
+        "This will permanently delete ALL " + label +
+        " records from the database. Type DELETE ALL to continue."
+    );
+
+    if (confirmation !== "DELETE ALL") return;
+
+    try {
+        const result = await kageraPostAction({
+            action: "delete_all",
+            kagera_type: type,
+            confirmation: confirmation
+        });
+        alert(result.message);
+        loadKageraResults({force:true});
+    } catch (error) {
+        alert(error.message);
+    }
+});
+
+async function kageraDeleteRow(id)
+{
+    const type = kageraCurrentEditableType();
+    if (!type || !id) return;
+
+    if (!confirm("Permanently delete this row from the database?")) return;
+
+    try {
+        const result = await kageraPostAction({
+            action: "delete_row",
+            kagera_type: type,
+            id: String(id)
+        });
+        alert(result.message);
+        loadKageraResults({force:true});
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+function kageraBeginRowEdit(button)
+{
+    const tr = button.closest("tr");
+    if (!tr) return;
+
+    const id = tr.dataset.rowId;
+    const type = kageraCurrentEditableType();
+    const fields = type === "results"
+        ? ["lot_no","auction_no","auction_date","warehouse","warehouse_location_district","kgs","grade","grade2","price","value","buyer"]
+        : ["lot_no","auction_no","auction_date","union_name","warehouse_name_amcos","warehouse_location_district","kgs","grade","grade2","certification"];
+
+    [...tr.querySelectorAll("td[data-field]")].forEach(td => {
+        const field = td.dataset.field;
+        if (!fields.includes(field) || field === "value") return;
+        const original = td.dataset.raw ?? td.textContent.trim();
+        td.innerHTML = '<input class="kagera-edit-input" data-edit-field="' +
+            field + '" value="' + escapeKageraHtml(original) + '">';
+    });
+
+    button.textContent = "Save";
+    button.onclick = () => kageraSaveRowEdit(tr, id);
+}
+
+async function kageraSaveRowEdit(tr, id)
+{
+    const type = kageraCurrentEditableType();
+    const rowData = {};
+
+    tr.querySelectorAll("[data-edit-field]").forEach(input => {
+        rowData[input.dataset.editField] = input.value;
+    });
+
+    try {
+        const result = await kageraPostAction({
+            action: "update_row",
+            kagera_type: type,
+            id: String(id),
+            row_data: JSON.stringify(rowData)
+        });
+        alert(result.message);
+        loadKageraResults({force:true});
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+
+
+function kageraTagEditableCells()
+{
+    const type = kageraCurrentEditableType();
+    const body = type === "catalogue"
+        ? document.getElementById("kageraCatalogueBody")
+        : document.getElementById("kageraResultsBody");
+
+    if (!body) return;
+
+    const fields = type === "results"
+        ? ["lot_no","auction_no","auction_date","warehouse","warehouse_location_district","kgs","grade","grade2","price","value","buyer"]
+        : ["lot_no","auction_no","auction_date","union_name","warehouse_name_amcos","warehouse_location_district","kgs","grade","grade2","certification"];
+
+    body.querySelectorAll("tr[data-row-id]").forEach(tr => {
+        const cells = tr.querySelectorAll("td");
+        fields.forEach((field, index) => {
+            if (!cells[index]) return;
+            cells[index].dataset.field = field;
+            // Store unformatted value from current dataset where possible.
+            const rowId = String(tr.dataset.rowId || "");
+            const source = type === "results"
+                ? (window.kageraData || []).find(r => String(r.id) === rowId)
+                : (kageraCatalogueData || []).find(r => String(r.id) === rowId);
+            if (source) cells[index].dataset.raw = source[field] ?? "";
+        });
+    });
+}
+
+
+const kageraEditObserver = new MutationObserver(() => kageraTagEditableCells());
+["kageraResultsBody","kageraCatalogueBody"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) kageraEditObserver.observe(el, {childList:true});
+});
 
 </script>
 
