@@ -656,7 +656,7 @@ function handle_kagera_catalogue_fetch()
     $db=kagera_db();
 
     $stmt=$db->query("
-        SELECT lot_no,auction_no,auction_date,union_name,warehouse_name_amcos,warehouse_location_district,kgs,grade,grade2,certification
+        SELECT id,lot_no,auction_no,auction_date,union_name,warehouse_name_amcos,warehouse_location_district,kgs,grade,grade2,certification
         FROM public.kagera_auction_catalogue
         ORDER BY
             CASE WHEN auction_no ~ '^[0-9]+([.][0-9]+)?$' THEN auction_no::NUMERIC ELSE NULL END DESC NULLS LAST,
@@ -1946,6 +1946,7 @@ function handle_kagera_fetch()
 
     $stmt = $db->query("
         SELECT
+            id,
             lot_no,
             auction_no,
             auction_date,
@@ -6369,10 +6370,16 @@ function kageraHandleRowActionClick(event)
     event.stopPropagation();
 
     const action = String(button.dataset.action || "").toLowerCase();
-    const rowId = String(button.dataset.rowId || button.closest("tr")?.dataset.rowId || "").trim();
+    const tr = button.closest("tr");
+    const rowId = String(
+        button.dataset.rowId ||
+        (tr ? tr.dataset.rowId : "") ||
+        ""
+    ).trim();
 
-    if (!rowId) {
-        alert("This row could not be identified in the database. Refresh the table and try again.");
+    if (!rowId || rowId === "undefined" || rowId === "null") {
+        alert("The database ID for this row was not returned. Refreshing the table now.");
+        loadKageraResults({force:true});
         return;
     }
 
