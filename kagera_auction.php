@@ -507,7 +507,7 @@ function handle_kagera_catalogue_upload()
     }
 
     $rawHeaders = $rows[$headerIndex];
-    kagera_validate_selected_excel_columns($rawHeaders, "results");
+    kagera_validate_selected_excel_columns($rawHeaders, "catalogue");
     $headers = array_map("kagera_norm", $rawHeaders);
 
     $col = [
@@ -1357,7 +1357,7 @@ function handle_kagera_upload()
     }
 
     $rawHeaders = $rows[$headerIndex];
-    kagera_validate_selected_excel_columns($rawHeaders, "catalogue");
+    kagera_validate_selected_excel_columns($rawHeaders, "results");
     $headers = array_map("kagera_norm", $rawHeaders);
 
     /*
