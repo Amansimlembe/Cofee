@@ -258,6 +258,35 @@ table{min-width:680px}
   .trend-head span{display:none}
 }
 
+
+/* Compact ranking tables */
+.analytics{gap:5px}
+.panel-head{padding:0 7px!important}
+.table-box{overflow-x:hidden!important}
+table{width:100%!important;min-width:0!important;table-layout:fixed!important}
+th,td{padding:2px 3px!important}
+thead th{font-size:7.5px!important;line-height:1.08!important;white-space:normal!important}
+tbody td,tfoot td{font-size:7.8px!important;line-height:1.05!important}
+th:nth-child(1),td:nth-child(1){width:30%;text-align:left}
+th:nth-child(2),td:nth-child(2){width:13%}
+th:nth-child(3),td:nth-child(3){width:12%}
+th:nth-child(4),td:nth-child(4){width:13%}
+th:nth-child(5),td:nth-child(5){width:22%}
+th:nth-child(6),td:nth-child(6){width:10%}
+.rank{width:13px!important;height:13px!important;font-size:6.5px!important;margin-right:2px!important}
+tfoot td{font-weight:700!important}
+@media(max-width:900px){
+  .table-box{overflow-x:auto!important}
+  table{min-width:590px!important}
+}
+@media(max-width:560px){
+  table{min-width:570px!important}
+}
+
+/* Keep X-axis auction labels clearly visible */
+.trend-wrap{padding:3px 8px 16px!important}
+#auctionTrendChart{display:block}
+
 </style>
 </head>
 <body>
@@ -316,8 +345,8 @@ table{min-width:680px}
  <div class="table-box"><table>
   <thead><tr>
    <th style="width:27%"><?=$firstLabel?></th>
-   <th>Dry Cherry (kg)</th><th>Clean Coffee (kg)</th>
-   <th>Total Qty (kg)</th><th>Total Value (TZS)</th><th>Qty Share</th>
+   <th>Dry Cherry<br>(kg)</th><th>Clean<br>(kg)</th>
+   <th>Total<br>(kg)</th><th>Value<br>(TZS)</th><th>Share<br>(%)</th>
   </tr></thead>
   <tbody>
   <?php if(!$rows): ?><tr><td colspan="6" class="empty">No sales data for this season</td></tr><?php endif; ?>
@@ -372,14 +401,14 @@ if (ctx && window.Chart) {
    ]
   },
   options:{
-   responsive:true,maintainAspectRatio:false,
+   responsive:true,maintainAspectRatio:false,layout:{padding:{top:0,right:3,bottom:10,left:3}},
    interaction:{mode:'index',intersect:false},
    plugins:{
     legend:{position:'top',labels:{boxWidth:9,boxHeight:9,font:{size:8},padding:8}},
     tooltip:{callbacks:{label:c=>c.dataset.label+': '+(Number(c.raw)||0).toLocaleString(undefined,{maximumFractionDigits:2})}}
    },
    scales:{
-    x:{grid:{display:false},ticks:{font:{size:8},maxRotation:0,autoSkip:false}},
+    x:{grid:{display:false},ticks:{font:{size:8},maxRotation:0,minRotation:0,autoSkip:false,padding:5},title:{display:true,text:'Auction No.',font:{size:8},padding:{top:3,bottom:0}}},
     yQty:{position:'left',beginAtZero:true,title:{display:true,text:'Quantity sold (kg)',font:{size:8}},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}},
     yPrice:{position:'right',beginAtZero:false,title:{display:true,text:'Avg. price (TZS/kg)',font:{size:8}},grid:{drawOnChartArea:false},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}}
    }
