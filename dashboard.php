@@ -98,6 +98,33 @@ $buyersCombined=top5_with_other(combined_rank_rows($db,$from,$to,'buyer'),'buyer
 
 $amcosCombined=top5_with_other(combined_rank_rows($db,$from,$to,'warehouse'),'AMCOS / warehouses');
 
+
+/*
+|--------------------------------------------------------------------------
+| AUTHORITATIVE SEASON GRAND TOTALS
+|--------------------------------------------------------------------------
+| Recalculate directly from Results so each footer column is independent
+| and cannot accidentally repeat the Clean Coffee value.
+|--------------------------------------------------------------------------
+*/
+$grandCase=coffee_case_sql();
+$grandSql="SELECT
+    SUM(CASE WHEN $grandCase='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) AS dry_sold,
+    SUM(CASE WHEN $grandCase='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) AS clean_sold,
+    SUM(CASE WHEN $grandCase IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END) AS total_sold,
+    SUM(CASE WHEN $grandCase IS NOT NULL THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END) AS total_value
+  FROM public.kagera_auction_results
+  WHERE auction_date BETWEEN :f AND :t
+    AND $grandCase IS NOT NULL";
+$grandStmt=$db->prepare($grandSql);
+$grandStmt->execute(['f'=>$from,'t'=>$to]);
+$grand=$grandStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+$grandDrySold=(float)($grand['dry_sold'] ?? 0);
+$grandCleanSold=(float)($grand['clean_sold'] ?? 0);
+$grandSold=(float)($grand['total_sold'] ?? 0);
+$grandValue=(float)($grand['total_value'] ?? 0);
+
 /*
 |--------------------------------------------------------------------------
 | AUCTION TREND — DRY CHERRY VS CLEAN
@@ -194,6 +221,43 @@ thead th{height:20px!important;padding:2px 4px!important}
 tbody td{height:20px;padding:2px 4px!important}
 tfoot td{height:21px;padding:2px 4px!important;position:relative;z-index:2}
 
+
+/* Responsive dashboard */
+.panel{min-width:0}
+.table-box{width:100%;min-width:0;overflow-x:auto!important;overflow-y:hidden!important}
+table{min-width:680px}
+@media (max-width:1200px){
+  .dashboard{height:auto;min-height:100vh;overflow:visible;grid-template-rows:auto auto auto minmax(240px,38vh)}
+  html,body{height:auto;min-height:100%;overflow:auto}
+  .kpis{grid-template-columns:90px 68px 1fr 1fr}
+  .analytics{grid-template-columns:1fr 1fr}
+  .trend-wrap{min-height:240px}
+}
+@media (max-width:900px){
+  .dashboard{padding:6px;display:block}
+  .topbar,.kpis,.analytics,.trend-panel{margin-bottom:6px}
+  .topbar{align-items:flex-start;flex-wrap:wrap}
+  .title{display:block}
+  .title h1{font-size:14px}
+  .kpis{display:grid;grid-template-columns:1fr 1fr}
+  .metric-group{grid-column:1/-1}
+  .analytics{display:grid;grid-template-columns:1fr}
+  .panel{margin-bottom:6px}
+  .trend-panel{height:330px}
+  .trend-wrap{min-height:290px}
+}
+@media (max-width:560px){
+  .kpis{grid-template-columns:1fr 1fr}
+  .metric-group{grid-template-columns:1fr 1fr 1fr}
+  .metric{padding:4px}
+  .metric strong{font-size:10px}
+  .season{width:100%;justify-content:space-between}
+  .season select{flex:1;max-width:180px}
+  table{min-width:640px}
+  .trend-panel{height:300px}
+  .trend-head span{display:none}
+}
+
 </style>
 </head>
 <body>
@@ -273,8 +337,8 @@ tfoot td{height:21px;padding:2px 4px!important;position:relative;z-index:2}
   </tbody>
   <tfoot><tr>
    <td>Season Grand Total</td>
-   <td><?=nf($summary['Dry Cherry Coffee']['sold'],2)?></td>
-   <td><?=nf($summary['Clean Coffee']['sold'],2)?></td>
+   <td><?=nf($grandDrySold,2)?></td>
+   <td><?=nf($grandCleanSold,2)?></td>
    <td><?=nf($grandSold,2)?></td>
    <td><?=nf($grandValue,2)?></td>
    <td>100%</td>
