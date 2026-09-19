@@ -4389,8 +4389,8 @@ function kageraRenderResults(rows)
     body.innerHTML = sortedRows.map(function(row) {
         const actions = kageraEditMode
             ? '<td class="kagera-row-actions">' +
-              '<button type="button" class="kagera-action-icon edit" onclick="kageraBeginRowEdit(this)" title="Edit row" aria-label="Edit row">✎</button>' +
-              '<button type="button" class="kagera-action-icon delete" onclick="kageraDeleteRow(' + Number(row.id) + ')" title="Delete row" aria-label="Delete row">⌫</button>' +
+              '<button type="button" class="kagera-action-icon edit" data-action="edit" data-row-id="' + escapeKageraHtml(row.id ?? "") + '" title="Edit row" aria-label="Edit row">✎</button>' +
+              '<button type="button" class="kagera-action-icon delete" data-action="delete" data-row-id="' + escapeKageraHtml(row.id ?? "") + '" title="Delete row" aria-label="Delete row">⌫</button>' +
               '</td>'
             : '<td class="kagera-row-actions"></td>';
 
@@ -4449,8 +4449,8 @@ function kageraRenderCatalogue(rows)
     body.innerHTML=sorted.map(function(row){
         const actions = kageraEditMode
             ? '<td class="kagera-row-actions">' +
-              '<button type="button" class="kagera-action-icon edit" onclick="kageraBeginRowEdit(this)" title="Edit row" aria-label="Edit row">✎</button>' +
-              '<button type="button" class="kagera-action-icon delete" onclick="kageraDeleteRow(' + Number(row.id) + ')" title="Delete row" aria-label="Delete row">⌫</button>' +
+              '<button type="button" class="kagera-action-icon edit" data-action="edit" data-row-id="' + escapeKageraHtml(row.id ?? "") + '" title="Edit row" aria-label="Edit row">✎</button>' +
+              '<button type="button" class="kagera-action-icon delete" data-action="delete" data-row-id="' + escapeKageraHtml(row.id ?? "") + '" title="Delete row" aria-label="Delete row">⌫</button>' +
               '</td>'
             : '<td class="kagera-row-actions"></td>';
 
@@ -6280,7 +6280,8 @@ function kageraBeginRowEdit(button)
     button.innerHTML = "✓";
     button.title = "Save changes";
     button.setAttribute("aria-label","Save changes");
-    button.onclick = function(){ kageraSaveRowEdit(tr,id); };
+    button.dataset.action = "save";
+    button.dataset.rowId = id;
 
     const del = tr.querySelector(".kagera-action-icon.delete");
     if (del) del.disabled = true;
@@ -6331,7 +6332,7 @@ function kageraTagEditableCells()
             // Store unformatted value from current dataset where possible.
             const rowId = String(tr.dataset.rowId || "");
             const source = type === "results"
-                ? (window.kageraData || []).find(r => String(r.id) === rowId)
+                ? (kageraAllResults || []).find(r => String(r.id) === rowId)
                 : (kageraCatalogueData || []).find(r => String(r.id) === rowId);
             if (source) cells[index].dataset.raw = source[field] ?? "";
         });
@@ -6354,6 +6355,45 @@ if (kageraDisplayType) {
         if (editButton) editButton.textContent = "✎ Edit selected display";
     });
 }
+
+
+function kageraHandleRowActionClick(event)
+{
+    const button = event.target.closest(".kagera-action-icon");
+    if (!button) return;
+
+    const tableBody = button.closest("#kageraResultsBody, #kageraCatalogueBody");
+    if (!tableBody) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const action = String(button.dataset.action || "").toLowerCase();
+    const rowId = String(button.dataset.rowId || button.closest("tr")?.dataset.rowId || "").trim();
+
+    if (!rowId) {
+        alert("This row could not be identified in the database. Refresh the table and try again.");
+        return;
+    }
+
+    if (action === "edit") {
+        kageraBeginRowEdit(button);
+        return;
+    }
+
+    if (action === "save") {
+        const tr = button.closest("tr");
+        if (tr) kageraSaveRowEdit(tr, rowId);
+        return;
+    }
+
+    if (action === "delete") {
+        kageraDeleteRow(rowId);
+    }
+}
+
+document.getElementById("kageraResultsBody")?.addEventListener("click", kageraHandleRowActionClick);
+document.getElementById("kageraCatalogueBody")?.addEventListener("click", kageraHandleRowActionClick);
 
 </script>
 
