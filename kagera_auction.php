@@ -1324,6 +1324,7 @@ function kagera_handle_update_row()
         kagera_json(false, "Invalid row data.", [], 422);
     }
 
+    // Only accept whitelisted database columns for the selected display.
     $data = [];
     foreach ($config["fields"] as $field) {
         if (array_key_exists($field, $payload)) {
@@ -1333,71 +1334,152 @@ function kagera_handle_update_row()
         }
     }
 
-    foreach (["lot_no","auction_no","auction_date","kgs"] as $required) {
-        if (array_key_exists($required, $data) && ($data[$required] === "" || $data[$required] === null)) {
-            kagera_json(false, ucfirst(str_replace("_", " ", $required)) . " cannot be blank.", [], 422);
+    // These fields must always remain populated.
+    foreach (["lot_no", "auction_no", "auction_date", "kgs"] as $required) {
+        if (
+            !array_key_exists($required, $data) ||
+            $data[$required] === "" ||
+            $data[$required] === null
+        ) {
+            kagera_json(
+                false,
+                ucfirst(str_replace("_", " ", $required)) . " cannot be blank.",
+                ["field" => $required],
+                422
+            );
         }
     }
 
-    if ($type === "results" && array_key_exists("price", $data) && ($data["price"] === "" || $data["price"] === null)) {
-        kagera_json(false, "Price cannot be blank for Auction Results.", [], 422);
+    if (
+        $type === "results" &&
+        (
+            !array_key_exists("price", $data) ||
+            $data["price"] === "" ||
+            $data["price"] === null
+        )
+    ) {
+        kagera_json(false, "Price cannot be blank for Auction Results.", ["field" => "price"], 422);
     }
 
-    if (isset($data["auction_date"])) {
-        $data["auction_date"] = kagera_normalize_date($data["auction_date"]);
-        if (!$data["auction_date"]) {
-            kagera_json(false, "Auction Date is invalid.", [], 422);
+    // Normalize edited date back to the database DATE format.
+    $data["auction_date"] = kagera_normalize_date($data["auction_date"]);
+    if (!$data["auction_date"]) {
+        kagera_json(false, "Auction Date is invalid.", ["field" => "auction_date"], 422);
+    }
+
+    // Normalize numeric input. Commas entered by the user are accepted.
+    foreach (["kgs", "price"] as $numericField) {
+        if (!array_key_exists($numericField, $data)) {
+            continue;
         }
-    }
 
-    foreach (["kgs","price"] as $numericField) {
-        if (array_key_exists($numericField, $data)) {
-            $clean = str_replace([","," "], "", (string)$data[$numericField]);
-            if (!is_numeric($clean)) {
-                kagera_json(false, ucfirst($numericField) . " must be numeric.", [], 422);
-            }
-            $data[$numericField] = (float)$clean;
+        $clean = str_replace([",", " "], "", (string)$data[$numericField]);
+
+        if ($clean === "" || !is_numeric($clean)) {
+            kagera_json(
+                false,
+                ucfirst($numericField) . " must be numeric.",
+                ["field" => $numericField],
+                422
+            );
         }
+
+        $data[$numericField] = (float)$clean;
     }
 
-    if (!$data) {
-        kagera_json(false, "No editable values were supplied.", [], 422);
+    if ((float)$data["kgs"] <= 0) {
+        kagera_json(false, "Kgs must be greater than zero.", ["field" => "kgs"], 422);
+    }
+
+    if ($type === "results" && (float)$data["price"] < 0) {
+        kagera_json(false, "Price cannot be negative.", ["field" => "price"], 422);
+    }
+
+    /*
+     * IMPORTANT:
+     * Do not reuse :kgs and :price placeholders inside the Value expression.
+     * PostgreSQL/PDO can reject repeated named placeholders. Calculate Value
+     * in PHP and bind it once as its own parameter.
+     */
+    if ($type === "results") {
+        $data["value"] = round(
+            ((float)$data["kgs"]) * ((float)$data["price"]),
+            2
+        );
     }
 
     $sets = [];
-    $params = [":id" => $id];
+    $params = [":id" => (int)$id];
+
     foreach ($data as $field => $value) {
-        $sets[] = $field . " = :" . $field;
-        $params[":" . $field] = $value;
+        // Value is intentionally allowed here only because it was generated
+        // internally above, never accepted directly from the browser.
+        if ($field === "value" && $type !== "results") {
+            continue;
+        }
+
+        $placeholder = ":upd_" . $field;
+        $sets[] = $field . " = " . $placeholder;
+        $params[$placeholder] = $value;
     }
 
-    // Value is database-controlled and is recalculated whenever Kgs/Price changes.
-    if ($type === "results") {
-        $sets[] = "value = ROUND((COALESCE(" .
-            (array_key_exists("kgs", $data) ? ":kgs" : "kgs") .
-            ",0) * COALESCE(" .
-            (array_key_exists("price", $data) ? ":price" : "price") .
-            ",0))::numeric, 2)";
+    if (!$sets) {
+        kagera_json(false, "No editable values were supplied.", [], 422);
     }
 
     $db = kagera_db();
-    $sql = "UPDATE " . $config["table"] . " SET " . implode(", ", $sets) . " WHERE id = :id";
+
+    // RETURNING id is more reliable than rowCount() for confirming PostgreSQL UPDATE.
+    $sql =
+        "UPDATE " . $config["table"] .
+        " SET " . implode(", ", $sets) .
+        " WHERE id = :id RETURNING id";
+
     $stmt = $db->prepare($sql);
 
     try {
         $stmt->execute($params);
+        $updatedId = $stmt->fetchColumn();
     } catch (PDOException $e) {
         if ($e->getCode() === "23505") {
-            kagera_json(false, "Update stopped because another row already has the same Lot No., Auction No. and Auction Date.", [], 409);
+            kagera_json(
+                false,
+                "Update stopped because another row already has the same Lot No., Auction No. and Auction Date.",
+                [],
+                409
+            );
         }
-        throw $e;
+
+        error_log(
+            "Kagera row update database error [type={$type}, id={$id}]: " .
+            $e->getMessage()
+        );
+
+        kagera_json(
+            false,
+            "The edited row could not be saved. Database error: " . $e->getMessage(),
+            [],
+            500
+        );
     }
 
-    if ($stmt->rowCount() < 1) {
-        kagera_json(false, "The selected row was not found or no value changed.", [], 404);
+    if (!$updatedId) {
+        kagera_json(
+            false,
+            "The selected database row no longer exists. Refresh the table and try again.",
+            [],
+            404
+        );
     }
 
-    kagera_json(true, "Row updated successfully.");
+    kagera_json(
+        true,
+        "Row updated successfully.",
+        [
+            "id" => (int)$updatedId,
+            "value" => $type === "results" ? $data["value"] : null
+        ]
+    );
 }
 
 function kagera_handle_delete_row()
@@ -6306,7 +6388,18 @@ async function kageraSaveRowEdit(tr, id)
         alert(result.message);
         loadKageraResults({force:true});
     } catch (error) {
-        alert(error.message);
+        alert("Save failed: " + error.message);
+
+        const saveButton = tr.querySelector(".kagera-action-icon.save");
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.innerHTML = "✓";
+        }
+
+        const deleteButton = tr.querySelector(".kagera-action-icon.delete");
+        if (deleteButton) {
+            deleteButton.disabled = false;
+        }
     }
 }
 
