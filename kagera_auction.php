@@ -3489,7 +3489,7 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
 .kagera-action-icon:disabled{opacity:.45;cursor:not-allowed}
 
 
-.kagera-expected-columns{display:none;position:absolute;right:0;top:calc(100% + 7px);z-index:120;width:min(570px,90vw);padding:11px 12px;border:1px solid #ded6cd;border-radius:9px;background:#fff;box-shadow:0 12px 30px rgba(62,39,35,.14)}
+.kagera-expected-columns{display:none;position:relative;right:auto;top:auto;z-index:1;width:100%;padding:11px 12px;border:1px solid #ded6cd;border-radius:9px;background:#fff;box-shadow:0 12px 30px rgba(62,39,35,.14)}
 .kagera-file-area{position:relative}
 .kagera-expected-columns.show{display:block}
 .kagera-expected-columns-title{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
@@ -3501,6 +3501,35 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
 .kagera-column-chip .n{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 3px;border-radius:50%;background:#ede5dd;color:#604a3b;font-size:8px}
 .kagera-schema-note{margin-top:8px;padding-top:7px;border-top:1px solid #eee8e2;color:#766a63;font-size:9px;line-height:1.45}
 .kagera-schema-note strong{color:#4f3b30}
+
+
+.kagera-settings-upload-panel{
+    position:absolute;
+    right:0;
+    top:calc(100% + 8px);
+    z-index:150;
+    width:min(610px,92vw);
+    padding:13px;
+    border:1px solid #ddd4cb;
+    border-radius:11px;
+    background:#fff;
+    box-shadow:0 16px 38px rgba(45,31,24,.16);
+}
+.kagera-results-actions{position:relative}
+.kagera-settings-upload-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid #eee8e2}
+.kagera-settings-upload-head strong{display:block;color:#3e2723;font-size:12px}
+.kagera-settings-upload-head small{display:block;margin-top:3px;color:#81766f;font-size:9px}
+.kagera-upload-panel-close{width:28px;height:28px;border:0;border-radius:7px;background:#f5f1ed;color:#66554a;font-size:18px;line-height:1;cursor:pointer}
+.kagera-upload-panel-close:hover{background:#ece5de}
+.kagera-settings-upload-panel .kagera-header-upload-form{display:flex;align-items:flex-start;gap:8px}
+.kagera-settings-upload-panel .kagera-file-area{flex:1 1 auto;min-width:0}
+.kagera-settings-upload-panel .kagera-upload-btn{flex:0 0 auto}
+@media(max-width:720px){
+ .kagera-settings-upload-panel{right:-4px;width:min(94vw,610px)}
+ .kagera-settings-upload-panel .kagera-header-upload-form{flex-wrap:wrap}
+ .kagera-settings-upload-panel .kagera-file-area{flex:1 1 100%}
+ .kagera-settings-upload-panel .kagera-upload-btn{width:100%}
+}
 
 </style>
 
@@ -3557,8 +3586,38 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
 
         </div>
 
-        <div class="kagera-upload-compact">
-                <form
+        
+
+        <button
+            type="button"
+            class="kagera-refresh-btn"
+            onclick="loadKageraResults({force:true})"
+        >
+            <span>↻</span> Refresh
+        </button>
+<div class="kagera-settings-wrap" id="kageraSettingsWrap">
+    <button type="button"
+            class="kagera-settings-btn"
+            id="kageraSettingsBtn"
+            aria-label="Data settings"
+            title="Data settings">⚙</button>
+
+    <div class="kagera-settings-menu" id="kageraSettingsMenu" style="display:none;">
+        <button type="button" id="kageraSettingsUploadBtn">↑ Upload data</button>
+        <button type="button" id="kageraEditModeBtn">✎ Edit selected display</button>
+        <button type="button" id="kageraDeleteAllBtn" class="danger">⌫ Delete all data</button>
+    </div>
+</div>
+
+<div class="kagera-settings-upload-panel" id="kageraSettingsUploadPanel" style="display:none;">
+    <div class="kagera-settings-upload-head">
+        <div>
+            <strong id="kageraSettingsUploadTitle">Upload Auction Results</strong>
+            <small id="kageraSettingsUploadHint">Select the required Excel file.</small>
+        </div>
+        <button type="button" class="kagera-upload-panel-close" id="kageraUploadPanelClose" aria-label="Close upload panel">×</button>
+    </div>
+<form
                 id="kageraUploadForm"
                 action="kagera_auction.php"
                 method="POST"
@@ -3607,29 +3666,8 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
                     <span>↑</span> Upload
                 </button>
             </form>
-
-            <div id="kageraUploadStatus" class="kagera-upload-status"></div>
-        </div>
-
-        <button
-            type="button"
-            class="kagera-refresh-btn"
-            onclick="loadKageraResults({force:true})"
-        >
-            <span>↻</span> Refresh
-        </button>
-<div class="kagera-settings-wrap" id="kageraSettingsWrap">
-    <button type="button"
-            class="kagera-settings-btn"
-            id="kageraSettingsBtn"
-            aria-label="Data settings"
-            title="Data settings">⚙</button>
-
-    <div class="kagera-settings-menu" id="kageraSettingsMenu" style="display:none;">
-        <button type="button" id="kageraEditModeBtn">✎ Edit selected display</button>
-        <button type="button" id="kageraDeleteAllBtn" class="danger">⌫ Delete all data</button>
-    </div>
 </div>
+
 
 
         
@@ -6574,6 +6612,75 @@ document.addEventListener("click", function(event){
     const panel=document.getElementById("kageraExpectedColumns");
     if(area&&panel&&!area.contains(event.target)) panel.classList.remove("show");
 });
+
+
+function kageraSelectedUploadType()
+{
+    const selected=String(kageraDisplayType?.value||"").toLowerCase();
+    if(["results","auction_results"].includes(selected)) return "results";
+    if(["catalogue","catalog","auction_catalogue"].includes(selected)) return "catalogue";
+    return "";
+}
+
+function kageraOpenSettingsUpload()
+{
+    const type=kageraSelectedUploadType();
+    if(!type){
+        alert("Select Auction Results or Auction Catalogue from Display before uploading.");
+        return;
+    }
+
+    const panel=document.getElementById("kageraSettingsUploadPanel");
+    const menu=document.getElementById("kageraSettingsMenu");
+    const title=document.getElementById("kageraSettingsUploadTitle");
+    const hint=document.getElementById("kageraSettingsUploadHint");
+    const uploadType=document.getElementById("kageraUploadType");
+    const uploadButton=document.getElementById("kageraUploadButton");
+    const fileName=document.getElementById("kageraFileName");
+    const fileInput=document.getElementById("kageraExcelFile");
+
+    if(uploadType) uploadType.value=type;
+
+    if(type==="results"){
+        if(title) title.textContent="Upload Auction Results";
+        if(hint) hint.textContent="Select the 10-column Auction Results Excel file.";
+        if(uploadButton) uploadButton.innerHTML="<span>↑</span> Upload Results";
+        if(fileName) fileName.textContent="Select Auction Results file";
+    }else{
+        if(title) title.textContent="Upload Auction Catalogue";
+        if(hint) hint.textContent="Select the 10-column Auction Catalogue Excel file.";
+        if(uploadButton) uploadButton.innerHTML="<span>↑</span> Upload Catalogue";
+        if(fileName) fileName.textContent="Select Auction Catalogue file";
+    }
+
+    if(fileInput) fileInput.value="";
+    if(menu) menu.style.display="none";
+    if(panel) panel.style.display="block";
+}
+
+document.getElementById("kageraSettingsUploadBtn")?.addEventListener("click", function(event){
+    event.preventDefault();
+    event.stopPropagation();
+    kageraOpenSettingsUpload();
+});
+
+document.getElementById("kageraUploadPanelClose")?.addEventListener("click", function(){
+    const panel=document.getElementById("kageraSettingsUploadPanel");
+    const expected=document.getElementById("kageraExpectedColumns");
+    if(panel) panel.style.display="none";
+    if(expected) expected.classList.remove("show");
+});
+
+// Close upload panel when the selected Display changes so an upload can never
+// accidentally continue against the previous destination.
+if(kageraDisplayType){
+    kageraDisplayType.addEventListener("change",function(){
+        const panel=document.getElementById("kageraSettingsUploadPanel");
+        const expected=document.getElementById("kageraExpectedColumns");
+        if(panel) panel.style.display="none";
+        if(expected) expected.classList.remove("show");
+    });
+}
 
 </script>
 
