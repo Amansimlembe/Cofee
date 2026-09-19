@@ -95,7 +95,39 @@ function top5_with_other($rows,$entityLabel){
     return $top;
 }
 $buyersCombined=top5_with_other(combined_rank_rows($db,$from,$to,'buyer'),'buyers');
+
 $amcosCombined=top5_with_other(combined_rank_rows($db,$from,$to,'warehouse'),'AMCOS / warehouses');
+
+/*
+|--------------------------------------------------------------------------
+| AUCTION TREND
+|--------------------------------------------------------------------------
+| Quantity sold and weighted average price by auction. Only Results records
+| classified as Dry Cherry or Clean Coffee are included, matching the KPI logic.
+|--------------------------------------------------------------------------
+*/
+$case=coffee_case_sql();
+$trendSql="SELECT
+    auction_no,
+    MIN(auction_date) AS auction_date,
+    SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END) AS qty_sold,
+    CASE
+      WHEN SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END) > 0
+      THEN SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END)
+           / SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END)
+      ELSE 0
+    END AS avg_price
+  FROM public.kagera_auction_results
+  WHERE auction_date BETWEEN :f AND :t
+    AND $case IS NOT NULL
+  GROUP BY auction_no
+  ORDER BY
+    CASE WHEN auction_no ~ '^[0-9]+$' THEN auction_no::integer ELSE NULL END ASC NULLS LAST,
+    auction_no ASC";
+$trendStmt=$db->prepare($trendSql);
+$trendStmt->execute(['f'=>$from,'t'=>$to]);
+$auctionTrend=$trendStmt->fetchAll(PDO::FETCH_ASSOC);
+
 
 ?>
 <!doctype html>
@@ -107,17 +139,17 @@ $amcosCombined=top5_with_other(combined_rank_rows($db,$from,$to,'warehouse'),'AM
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f6f3f1;color:#352720;font-family:Arial,sans-serif}
-.dashboard{height:100vh;padding:10px 12px;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:8px}
+.dashboard{height:100vh;padding:7px 10px;display:grid;grid-template-rows:auto auto minmax(0,.82fr) minmax(150px,1.18fr);gap:6px}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .title{display:flex;align-items:baseline;gap:9px;min-width:0}
 .title h1{font-size:16px;margin:0;color:#3f2b24;white-space:nowrap}
 .title span{font-size:10px;color:#8a7a72;white-space:nowrap}
 .season{display:flex;align-items:center;gap:6px}
 .season label{font-size:10px;font-weight:700;color:#6b554b}
-.season select{height:29px;padding:0 27px 0 9px;border:1px solid #d7ccc7;border-radius:7px;background:#fff;color:#4b3830;font-size:11px;font-weight:700}
+.season select{height:22px;padding:0 27px 0 9px;border:1px solid #d7ccc7;border-radius:7px;background:#fff;color:#4b3830;font-size:11px;font-weight:700}
 
 .kpis{display:grid;grid-template-columns:115px 90px repeat(6,minmax(105px,1fr));gap:6px}
-.kpi{min-width:0;background:#fff;border:1px solid #e7ddd8;border-radius:8px;padding:7px 9px;box-shadow:0 1px 5px rgba(62,39,35,.035)}
+.kpi{min-width:0;background:#fff;border:1px solid #e7ddd8;border-radius:8px;padding:5px 7px;box-shadow:0 1px 5px rgba(62,39,35,.035)}
 .kpi .label{display:block;font-size:8px;text-transform:uppercase;letter-spacing:.35px;color:#8a7971;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi strong{display:block;font-size:13px;color:#3f2b24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi .sub{font-size:8px;color:#9a8b84;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -133,7 +165,7 @@ table{width:100%;height:100%;border-collapse:collapse;table-layout:fixed}
 thead th{height:24px;background:#f5f0ed;color:#6a5147;font-size:8px;font-weight:700;border-bottom:1px solid #e7ddd8}
 th,td{padding:3px 6px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 th:first-child,td:first-child{text-align:left}
-tbody td{font-size:9px;border-bottom:1px solid #f0e9e5;color:#493931}
+tbody td{font-size:8px;border-bottom:1px solid #f0e9e5;color:#493931}
 tbody tr:last-child td{border-bottom:0}
 tbody td:first-child{font-weight:600}
 .empty{text-align:center!important;color:#a2958e!important} tfoot td{font-size:9px;font-weight:700;background:#f7f3f0;border-top:1px solid #dfd5cf;color:#3f2b24}
@@ -143,6 +175,13 @@ tbody td:first-child{font-weight:600}
  .kpis{grid-template-columns:repeat(4,1fr)}
  .title span{display:none}
 }
+
+.trend-panel{min-height:0;background:#fff;border:1px solid #e7ddd8;border-radius:9px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 7px rgba(62,39,35,.04)}
+.trend-head{height:28px;flex:0 0 28px;padding:0 10px;display:flex;align-items:center;justify-content:space-between;background:#4b342c;color:#fff}
+.trend-head strong{font-size:10px}.trend-head span{font-size:8px;color:#dfd2cc}
+.trend-wrap{position:relative;min-height:0;flex:1;padding:4px 8px 3px}
+#auctionTrendChart{width:100%!important;height:100%!important}
+
 </style>
 </head>
 <body>
@@ -213,6 +252,78 @@ tbody td:first-child{font-weight:600}
  </table></div>
 </section>
 <?php endforeach ?>
-</div></div>
+</div>
+
+<section class="trend-panel">
+ <div class="trend-head">
+  <strong>Auction Performance Trend</strong>
+  <span>Quantity sold (kg) and weighted average price (TZS/kg) by auction</span>
+ </div>
+ <div class="trend-wrap"><canvas id="auctionTrendChart"></canvas></div>
+</section>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+const auctionTrend = <?=json_encode($auctionTrend, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>;
+const ctx = document.getElementById('auctionTrendChart');
+if (ctx && window.Chart) {
+  new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels:auctionTrend.map(r=>'Auction '+r.auction_no),
+      datasets:[
+        {
+          type:'bar',
+          label:'Quantity Sold (kg)',
+          data:auctionTrend.map(r=>Number(r.qty_sold)||0),
+          yAxisID:'yQty',
+          borderWidth:0,
+          maxBarThickness:26
+        },
+        {
+          type:'line',
+          label:'Average Price (TZS/kg)',
+          data:auctionTrend.map(r=>Number(r.avg_price)||0),
+          yAxisID:'yPrice',
+          borderWidth:2,
+          pointRadius:2,
+          pointHoverRadius:4,
+          tension:.25
+        }
+      ]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{position:'top',labels:{boxWidth:10,boxHeight:10,font:{size:9}}},
+        tooltip:{callbacks:{
+          label:(c)=>{
+            const v=Number(c.raw)||0;
+            return c.dataset.label+': '+v.toLocaleString(undefined,{maximumFractionDigits:2});
+          }
+        }}
+      },
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:8},maxRotation:0,autoSkip:true}},
+        yQty:{
+          position:'left',
+          beginAtZero:true,
+          title:{display:true,text:'Quantity sold (kg)',font:{size:8}},
+          ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}
+        },
+        yPrice:{
+          position:'right',
+          beginAtZero:false,
+          title:{display:true,text:'Avg. price (TZS/kg)',font:{size:8}},
+          grid:{drawOnChartArea:false},
+          ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}
+        }
+      }
+    }
+  });
+}
+</script>
 </body>
 </html>
