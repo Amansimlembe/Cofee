@@ -112,8 +112,52 @@ if(isset($_GET['action'])){
            if(!$bounds) direct_json(false,'Invalid Sale Season selected.',[],400);
            $w[]='invoice_date BETWEEN :sf AND :st'; $p['sf']=$bounds[0]; $p['st']=$bounds[1];
        }
-       $sql="SELECT *, CASE WHEN invoice_date IS NULL THEN NULL WHEN EXTRACT(MONTH FROM invoice_date)>=7 THEN EXTRACT(YEAR FROM invoice_date)::int::text||'/'||(EXTRACT(YEAR FROM invoice_date)::int+1)::text ELSE (EXTRACT(YEAR FROM invoice_date)::int-1)::text||'/'||EXTRACT(YEAR FROM invoice_date)::int::text END sale_season FROM public.direct_sales WHERE ".implode(' AND ',$w)." ORDER BY invoice_date DESC NULLS LAST,invoice_number DESC,id DESC";
-       $st=direct_db()->prepare($sql); $st->execute($p); direct_json(true,'',['rows'=>$st->fetchAll()]);
+       $saleSeasonExpr="CASE WHEN d.invoice_date IS NULL THEN NULL WHEN EXTRACT(MONTH FROM d.invoice_date)>=7 THEN EXTRACT(YEAR FROM d.invoice_date)::int::text||'/'||(EXTRACT(YEAR FROM d.invoice_date)::int+1)::text ELSE (EXTRACT(YEAR FROM d.invoice_date)::int-1)::text||'/'||EXTRACT(YEAR FROM d.invoice_date)::int::text END";
+
+       if($cat==='Local Sale'){
+           /*
+            * Local Sale Balance is season-specific.
+            * For each LS invoice, subtract ALL Direct Export net kg whose
+            * Source Invoice Number matches that LS Invoice Number, but only
+            * when both records fall inside the selected Sale Season.
+            *
+            * The correlated SUM also correctly handles one LS invoice later
+            * being exported through several DE rows.
+            */
+           $balanceSeasonSql='';
+           $balanceParams=[];
+           if($season!==''){
+               $bounds=direct_sale_season_bounds($season);
+               $balanceSeasonSql=' AND de.invoice_date BETWEEN :de_sf AND :de_st';
+               $balanceParams=['de_sf'=>$bounds[0],'de_st'=>$bounds[1]];
+           }
+
+           $sql="SELECT d.*, $saleSeasonExpr AS sale_season,
+               GREATEST(
+                   COALESCE(d.net_kg,0) -
+                   COALESCE((
+                       SELECT SUM(COALESCE(de.net_kg,0))
+                       FROM public.direct_sales de
+                       WHERE de.sale_category='Direct Export'
+                         AND NULLIF(BTRIM(de.source_invoice_number),'') IS NOT NULL
+                         AND UPPER(BTRIM(de.source_invoice_number))=UPPER(BTRIM(d.invoice_number))
+                         $balanceSeasonSql
+                   ),0),
+                   0
+               ) AS local_sale_balance_kg
+               FROM public.direct_sales d
+               WHERE ".str_replace('sale_category=:c','d.sale_category=:c',implode(' AND ',$w))."
+               ORDER BY d.invoice_date DESC NULLS LAST,d.invoice_number DESC,d.id DESC";
+           $st=direct_db()->prepare($sql);
+           $st->execute(array_merge($p,$balanceParams));
+       }else{
+           $sql="SELECT d.*, $saleSeasonExpr AS sale_season
+               FROM public.direct_sales d
+               WHERE ".str_replace('sale_category=:c','d.sale_category=:c',implode(' AND ',$w))."
+               ORDER BY d.invoice_date DESC NULLS LAST,d.invoice_number DESC,d.id DESC";
+           $st=direct_db()->prepare($sql); $st->execute($p);
+       }
+       direct_json(true,'',['rows'=>$st->fetchAll()]);
    }
    if($a==='summary'){
        $w=['sale_category=:c']; $p=['c'=>$cat];
@@ -212,7 +256,7 @@ const category=<?=json_encode($category)?>;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=(v,d=4)=>v===null||v===''?'':Number(v).toLocaleString(undefined,{maximumFractionDigits:d});
-const cols=[['sale_season','Sale Season'],['sale_category','Sale Category'],['invoice_number','Invoice Number'],['source_invoice_number','Source Invoice Number'],['invoice_date','Invoice Date'],['contract_number','Contract Number'],['grade_name','Grade Name'],['coffee_type','Coffee Type'],['net_kg','Net Kg'],['price_usd_50kg','Price (USD/50kgs)'],['exchange_rate','Exchange Rate'],['warehouse_name','Warehouse Name'],['warehouse_location','Warehouse Location'],['region','Region'],['supplier_seller','Supplier/Seller'],['buyer','Buyer']];
+const cols=[['sale_season','Sale Season'],['sale_category','Sale Category'],['invoice_number','Invoice Number'],['source_invoice_number','Source Invoice Number'],['invoice_date','Invoice Date'],['contract_number','Contract Number'],['grade_name','Grade Name'],['coffee_type','Coffee Type'],['net_kg','Net Kg'],...(category==='Local Sale'?[['local_sale_balance_kg','Local Sale Balance (kg)']]:[]),['price_usd_50kg','Price (USD/50kgs)'],['exchange_rate','Exchange Rate'],['warehouse_name','Warehouse Name'],['warehouse_location','Warehouse Location'],['region','Region'],['supplier_seller','Supplier/Seller'],['buyer','Buyer']];
 
 async function api(url,opt){let r=await fetch(url,opt),j=await r.json();if(!r.ok||!j.success)throw Error(j.message||'Request failed');return j}
 
@@ -227,7 +271,7 @@ async function loadRows(){
   $('status').textContent='Loading…';
   let d=await api('Direct_sales.php?action=rows&category='+encodeURIComponent(category)+'&season='+encodeURIComponent($('season').value));
   let h='<thead><tr>'+cols.map(c=>`<th>${c[1]}</th>`).join('')+'</tr></thead><tbody>';
-  h+=d.rows.map(r=>'<tr>'+cols.map(c=>`<td class="${['net_kg','price_usd_50kg','exchange_rate'].includes(c[0])?'num':'text'}">${esc(['net_kg','price_usd_50kg','exchange_rate'].includes(c[0])?num(r[c[0]]):r[c[0]])}</td>`).join('')+'</tr>').join('');
+  h+=d.rows.map(r=>'<tr>'+cols.map(c=>`<td class="${['net_kg','local_sale_balance_kg','price_usd_50kg','exchange_rate'].includes(c[0])?'num':'text'}">${esc(['net_kg','local_sale_balance_kg','price_usd_50kg','exchange_rate'].includes(c[0])?num(r[c[0]]):r[c[0]])}</td>`).join('')+'</tr>').join('');
   $('table').innerHTML=h+'</tbody>';
   $('status').textContent=d.rows.length.toLocaleString()+' '+category+' rows';
  }catch(e){$('status').textContent=e.message}
