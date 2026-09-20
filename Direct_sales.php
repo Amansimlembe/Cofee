@@ -278,6 +278,9 @@ $category=direct_category($_GET['category']??'Direct Export'); if(!in_array($cat
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title><?=htmlspecialchars($category)?> - Direct Sales</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f7f5f4;color:#3e2723}.app{padding:10px}
 .toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;padding:9px 11px;border:1px solid #e3dedc;border-radius:9px}
@@ -301,6 +304,11 @@ th:first-child,td:first-child{text-align:left}td.text{text-align:left}.num{font-
 .summary-note{font-size:11px;font-weight:400;color:#795548;margin-left:5px}
 @media(max-width:900px){.summary{grid-template-columns:1fr}.summary-card{overflow:auto}.summary-card table{min-width:620px}}
 @media(max-width:700px){.toolbar{align-items:flex-start;flex-direction:column}.controls{width:100%}.tablewrap{height:calc(100vh - 155px)}.title{font-size:16px}}
+
+.export-wrap{position:relative}.export-btn{min-width:38px;font-size:16px;padding:0 9px}.export-menu{display:none;position:absolute;right:0;top:38px;z-index:30;min-width:145px;background:#fff;border:1px solid #d5cecb;border-radius:7px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:5px}.export-menu.show{display:block}.export-menu button{display:block;width:100%;border:0;text-align:left;background:#fff;height:32px}.export-menu button:hover{background:#f4f0ee}
+@media(max-width:1100px){.app{padding:7px}.toolbar{gap:7px}.controls{gap:5px}.tablewrap{height:calc(100vh - 100px)}th,td{padding:6px;font-size:11px}.summary-card th,.summary-card td{padding:5px 6px}}
+@media(max-width:760px){.toolbar{position:relative;align-items:stretch}.controls{display:grid;grid-template-columns:1fr 1fr;gap:6px}.controls select,.controls button,.controls input{width:100%;min-width:0}.upload{grid-column:1/-1;width:100%}.upload input{flex:1}.export-wrap{position:static}.export-menu{right:8px;top:auto;margin-top:3px}.tablewrap{height:calc(100vh - 190px);border-radius:6px}.summary{gap:7px}.summary-card{max-width:100%}.summary-card table{min-width:560px}.summary-card th,.summary-card td{font-size:10.5px;padding:5px}.summary-head{font-size:12px}}
+@media(max-width:480px){.app{padding:5px}.controls{grid-template-columns:1fr}.upload{grid-column:auto;display:grid!important;grid-template-columns:1fr auto}.title{font-size:15px}.toolbar{padding:7px}.status{margin:5px 2px}.tablewrap{height:calc(100vh - 250px)}.summary-card table{min-width:520px}.summary-note{display:block;margin:2px 0 0}.export-menu{left:7px;right:7px;min-width:0}}
 </style></head>
 <body><div class="app">
 <div class="toolbar">
@@ -312,6 +320,14 @@ th:first-child,td:first-child{text-align:left}td.text{text-align:left}.num{font-
      <option value="summary">Sale Summary</option>
    </select>
    <button onclick="refreshCurrent()">↻ Refresh</button>
+   <div class="export-wrap">
+     <button type="button" class="export-btn" id="exportBtn" title="Export current display" onclick="toggleExportMenu(event)">⇩</button>
+     <div class="export-menu" id="exportMenu">
+       <button type="button" onclick="exportCurrent('pdf')">PDF</button>
+       <button type="button" onclick="exportCurrent('excel')">Excel</button>
+       <button type="button" onclick="exportCurrent('word')">Word</button>
+     </div>
+   </div>
    <form class="upload" id="uploadForm"><input type="file" name="direct_excel" accept=".xlsx" required><button>↑ Upload Direct Sales</button></form>
  </div>
 </div>
@@ -395,5 +411,89 @@ $('uploadForm').addEventListener('submit',async e=>{
   $('status').textContent=d.message;await loadFilters();await refreshCurrent();e.target.reset();
  }catch(x){$('status').textContent=x.message}
 });
+
+function toggleExportMenu(e){
+ e.stopPropagation();
+ $('exportMenu').classList.toggle('show');
+}
+document.addEventListener('click',()=>$('exportMenu')?.classList.remove('show'));
+
+function exportFileName(ext){
+ const mode=$('display').value==='summary'?'Sale_Summary':'All_Sales';
+ const season=$('season').value||'All_Seasons';
+ return (category+'_'+mode+'_'+season).replace(/[^\w.-]+/g,'_')+'.'+ext;
+}
+function currentExportNode(){
+ return $('display').value==='summary' ? $('summary') : $('tablewrap');
+}
+function exportTitle(){
+ return `${category} — ${$('display').value==='summary'?'Sale Summary':'All Sales'} — ${$('season').value||'All Sale Seasons'}`;
+}
+function exportWord(){
+ const node=currentExportNode().cloneNode(true);
+ node.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.height='auto';el.style.overflow='visible'});
+ const html=`<!doctype html><html><head><meta charset="utf-8"><style>
+ body{font-family:Arial,sans-serif;font-size:10pt}h2{margin-bottom:10px;color:#3e2723}
+ table{width:100%;border-collapse:collapse;margin-bottom:16px}th,td{border:1px solid #555;padding:5px;text-align:right}
+ th:first-child,td:first-child{text-align:left}th{font-weight:bold}tfoot td{font-weight:bold;border-top:2px solid #333}
+ .summary{display:block}.summary-card{margin-bottom:15px}.summary-head{font-weight:bold;margin:7px 0}
+ </style></head><body><h2>${esc(exportTitle())}</h2>${node.innerHTML}</body></html>`;
+ const blob=new Blob(['\ufeff',html],{type:'application/msword'});
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=exportFileName('doc');a.click();URL.revokeObjectURL(a.href);
+}
+function exportExcel(){
+ if(typeof XLSX==='undefined'){alert('Excel export library is not available.');return}
+ const wb=XLSX.utils.book_new();
+ if($('display').value==='summary'){
+   [['Coffee Type',$('coffeeSummary').querySelector('table')],['Region',$('regionSummary').querySelector('table')]].forEach(([name,table])=>{
+     if(table){const ws=XLSX.utils.table_to_sheet(table,{raw:true});XLSX.utils.book_append_sheet(wb,ws,name);}
+   });
+ }else{
+   const table=$('table');
+   if(table){const ws=XLSX.utils.table_to_sheet(table,{raw:true});XLSX.utils.book_append_sheet(wb,ws,'All Sales');}
+ }
+ XLSX.writeFile(wb,exportFileName('xlsx'));
+}
+async function exportPdf(){
+ if(!window.jspdf||typeof html2canvas==='undefined'){alert('PDF export library is not available.');return}
+ $('exportMenu').classList.remove('show');
+ const source=currentExportNode();
+ const clone=source.cloneNode(true);
+ clone.style.display='block';clone.style.position='fixed';clone.style.left='-100000px';clone.style.top='0';
+ clone.style.width=$('display').value==='summary'?'1100px':'1800px';clone.style.height='auto';clone.style.maxHeight='none';clone.style.overflow='visible';
+ clone.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.height='auto';el.style.overflow='visible'});
+ document.body.appendChild(clone);
+ try{
+   const canvas=await html2canvas(clone,{scale:1.5,backgroundColor:'#ffffff',useCORS:true});
+   const {jsPDF}=window.jspdf;
+   const landscape=canvas.width>canvas.height;
+   const pdf=new jsPDF({orientation:landscape?'landscape':'portrait',unit:'mm',format:'a4'});
+   const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=7;
+   const iw=pw-margin*2,ih=canvas.height*iw/canvas.width;
+   const pageH=ph-margin*2;
+   if(ih<=pageH){
+     pdf.addImage(canvas.toDataURL('image/jpeg',.94),'JPEG',margin,margin,iw,ih);
+   }else{
+     const pxPage=Math.floor(canvas.width*pageH/iw);
+     let y=0,page=0;
+     while(y<canvas.height){
+       const h=Math.min(pxPage,canvas.height-y),slice=document.createElement('canvas');
+       slice.width=canvas.width;slice.height=h;
+       slice.getContext('2d').drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);
+       if(page++)pdf.addPage(undefined,landscape?'landscape':'portrait');
+       pdf.addImage(slice.toDataURL('image/jpeg',.94),'JPEG',margin,margin,iw,h*iw/canvas.width);
+       y+=h;
+     }
+   }
+   pdf.save(exportFileName('pdf'));
+ }finally{clone.remove()}
+}
+function exportCurrent(type){
+ $('exportMenu').classList.remove('show');
+ if(type==='excel')exportExcel();
+ else if(type==='word')exportWord();
+ else exportPdf();
+}
+
 (async()=>{await loadFilters();await refreshCurrent()})();
 </script></body></html>
