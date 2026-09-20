@@ -810,14 +810,14 @@ submenu names.
    KAGERA AUCTION PAGE
 ========================================================= */
 
-.kagera-page-section, .clean-page-section {
+.kagera-page-section, .clean-page-section, .direct-page-section {
     width: 100%;
     min-height: calc(100vh - 130px);
     padding: 0;
     overflow: hidden;
 }
 
-.kagera-auction-frame, .clean-auction-frame {
+.kagera-auction-frame, .clean-auction-frame, .direct-sales-frame {
     display: block;
     width: 100%;
     min-height: calc(100vh - 130px);
@@ -831,11 +831,11 @@ submenu names.
 @media (max-width: 700px) {
 
 
-    .kagera-page-section, .clean-page-section {
+    .kagera-page-section, .clean-page-section, .direct-page-section {
         min-height: calc(100vh - 110px);
     }
 
-    .kagera-auction-frame, .clean-auction-frame {
+    .kagera-auction-frame, .clean-auction-frame, .direct-sales-frame {
         min-height: calc(100vh - 110px);
         height: calc(100vh - 110px);
     }
@@ -1248,8 +1248,8 @@ submenu names.
 .user-name { font-size: 11px; }
 .logout { font-size: 10px; }
 .content { padding: 8px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; }
-.kagera-page-section, .clean-page-section { min-height: calc(100dvh - var(--shell-topbar) - 16px); height: calc(100dvh - var(--shell-topbar) - 16px); }
-.kagera-auction-frame, .clean-auction-frame { min-height: 100%; height: 100%; width: 100%; }
+.kagera-page-section, .clean-page-section, .direct-page-section { min-height: calc(100dvh - var(--shell-topbar) - 16px); height: calc(100dvh - var(--shell-topbar) - 16px); }
+.kagera-auction-frame, .clean-auction-frame, .direct-sales-frame { min-height: 100%; height: 100%; width: 100%; }
 
 @media (max-width: 1100px) {
     :root { --shell-sidebar: 190px; }
@@ -1272,7 +1272,7 @@ submenu names.
     .topbar { padding: 0 10px; }
     .topbar-right { display: none; }
     .content { padding: 4px; }
-    .kagera-page-section, .clean-page-section { min-height: calc(100dvh - var(--shell-topbar) - 8px); height: calc(100dvh - var(--shell-topbar) - 8px); }
+    .kagera-page-section, .clean-page-section, .direct-page-section { min-height: calc(100dvh - var(--shell-topbar) - 8px); height: calc(100dvh - var(--shell-topbar) - 8px); }
 }
 
 @media (max-width: 600px) {
@@ -1289,7 +1289,7 @@ submenu names.
     .topbar-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .topbar-subtitle { display: none; }
     .content { padding: 2px; }
-    .kagera-page-section, .clean-page-section { min-height: calc(100dvh - var(--shell-topbar) - 4px); height: calc(100dvh - var(--shell-topbar) - 4px); }
+    .kagera-page-section, .clean-page-section, .direct-page-section { min-height: calc(100dvh - var(--shell-topbar) - 4px); height: calc(100dvh - var(--shell-topbar) - 4px); }
 }
 
 @media (max-width: 400px) {
@@ -1494,19 +1494,19 @@ submenu names.
             <ul class="submenu">
 
                 <li>
-                    <a onclick="showSection('direct-export', this)">
+                    <a onclick="openDirectSales('Direct Export', this)">
                         Direct Export (DE)
                     </a>
                 </li>
 
                 <li>
-                    <a onclick="showSection('local-sale', this)">
+                    <a onclick="openDirectSales('Local Sale', this)">
                         Local Sale (LS)
                     </a>
                 </li>
 
                 <li>
-                    <a onclick="showSection('local-roast', this)">
+                    <a onclick="openDirectSales('Local Roast', this)">
                         Local Roast (LR)
                     </a>
                 </li>
@@ -1518,21 +1518,236 @@ submenu names.
 
             <div class="collapsed-tooltip">
 
-                <a onclick="showSection('direct-export', this)">
+                <a onclick="openDirectSales('Direct Export', this)">
                     Direct Export (DE)
                 </a>
 
-                <a onclick="showSection('local-sale', this)">
+                <a onclick="openDirectSales('Local Sale', this)">
                     Local Sale (LS)
                 </a>
 
-                <a onclick="showSection('local-roast', this)">
+                <a onclick="openDirectSales('Local Roast', this)">
                     Local Roast (LR)
                 </a>
 
             </div>
 
         </li>
+
+
+        <!-- FARM GATE -->
+
+        <li class="menu-item">
+
+            <div
+                class="menu-link"
+                onclick="showSection('farm-gate', this)">
+
+                <div class="menu-left">
+
+                    <span class="menu-icon">
+                        🌱
+                    </span>
+
+                    <span class="menu-text">
+                        Farm Gate Contract
+                    </span>
+
+                </div>
+
+            </div>
+
+        </li>
+
+
+        <!-- COFFEE LICENSES -->
+
+        <li class="menu-item">
+
+            <div
+                class="menu-link"
+                onclick="showSection('coffee-licenses', this)">
+
+                <div class="menu-left">
+
+                    <span class="menu-icon">
+                        📋
+                    </span>
+
+                    <span class="menu-text">
+                        Coffee Licenses
+                    </span>
+
+                </div>
+
+            </div>
+
+        </li>
+
+
+    </ul>
+
+</aside>
+
+
+<!-- =========================================================
+     MAIN
+========================================================= -->
+
+<main class="main">
+
+
+    <!-- TOP BAR -->
+
+    <div class="topbar">
+
+
+        <div class="topbar-left">
+
+            <div class="topbar-icon">
+                ☕
+            </div>
+
+
+            <div>
+
+                <div
+                    class="topbar-title"
+                    id="topbarTitle">
+
+                    Coffee Sales Data Analysis
+
+                </div>
+
+
+                <div class="topbar-subtitle">
+                    Tanzania Coffee Market
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="topbar-right" id="topbarRight">
+
+            <div class="market-label">
+                Tanzania Coffee Market
+            </div>
+
+
+            <div class="user-info">
+
+                <div class="user-avatar">
+
+                    <?= strtoupper(
+                        substr($_SESSION["username"], 0, 1)
+                    ) ?>
+
+                </div>
+
+
+                <div>
+
+                    <div class="user-name">
+                        <?= htmlspecialchars(
+                            $_SESSION["username"]
+                        ) ?>
+                    </div>
+
+
+                    <a
+                        href="login.php?logout=1"
+                        class="logout">
+
+                        Logout
+
+                    </a>
+
+                </div>
+
+            </div>
+
+            <button type="button" class="mobile-account-button" id="mobileAccountButton"
+                    aria-label="Open account menu" aria-expanded="false"
+                    onclick="toggleMobileAccountMenu(event)">
+                <?= strtoupper(substr($_SESSION["username"], 0, 1)) ?>
+            </button>
+
+            <div class="mobile-account-menu" id="mobileAccountMenu">
+                <div class="mobile-account-market">Tanzania Coffee Market</div>
+                <div class="mobile-account-user">
+                    <span class="mobile-account-avatar"><?= strtoupper(substr($_SESSION["username"], 0, 1)) ?></span>
+                    <span class="mobile-account-name"><?= htmlspecialchars($_SESSION["username"]) ?></span>
+                </div>
+                <a href="login.php?logout=1" class="mobile-logout">Logout</a>
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- CONTENT -->
+
+    <div class="content">
+
+
+        <!-- DASHBOARD -->
+
+        <section
+            id="dashboard"
+            class="section kagera-page-section active">
+
+            <iframe
+                id="dashboardFrame"
+                src="dashboard.php"
+                title="Kagera Auction Dashboard"
+                class="kagera-auction-frame">
+            </iframe>
+
+        </section>
+
+
+        <!-- KAGERA AUCTION -->
+
+        <section
+            id="kagera-auction"
+            class="section kagera-page-section">
+
+            <iframe
+                id="kageraAuctionFrame"
+                src="about:blank"
+                title="Kagera Auction"
+                class="kagera-auction-frame">
+            </iframe>
+
+        </section>
+
+        <!-- CLEAN AUCTION -->
+
+        <section
+            id="clean-auction"
+            class="section clean-page-section">
+
+            <iframe
+                id="cleanAuctionFrame"
+                src="about:blank"
+                title="Clean Auction"
+                class="clean-auction-frame">
+            </iframe>
+
+        </section>
+
+        
+       
+
+
+
+        <!-- DIRECT SALES DATABASE VIEW -->
+        <section id="direct-sales" class="section direct-page-section">
+            <iframe id="directSalesFrame" src="about:blank" title="Direct Sales" class="direct-sales-frame"></iframe>
+        </section>
 
 
         <!-- FARM GATE -->
@@ -2135,6 +2350,32 @@ function openKageraAuction(clickedElement) {
     if (topbarTitle) {
         topbarTitle.textContent = "Kagera Auction";
     }
+}
+
+/* =========================================================
+   DIRECT SALES NAVIGATION
+========================================================= */
+function openDirectSales(category, clickedElement) {
+    document.querySelectorAll(".section").forEach(function(section) {
+        section.classList.remove("active");
+    });
+    const section = document.getElementById("direct-sales");
+    if (section) section.classList.add("active");
+
+    const frame = document.getElementById("directSalesFrame");
+    if (frame) {
+        const target = "Direct_sales.php?category=" + encodeURIComponent(category);
+        if (frame.getAttribute("src") !== target) frame.src = target;
+    }
+
+    document.querySelectorAll(".menu-link, .submenu a").forEach(function(link) {
+        link.classList.remove("active");
+    });
+    if (clickedElement) clickedElement.classList.add("active");
+
+    const labels = {"Direct Export":"Direct Export (DE)","Local Sale":"Local Sale (LS)","Local Roast":"Local Roast (LR)"};
+    const topbarTitle = document.getElementById("topbarTitle");
+    if (topbarTitle) topbarTitle.textContent = labels[category] || category;
 }
 
 /* =========================================================
