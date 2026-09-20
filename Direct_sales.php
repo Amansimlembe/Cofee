@@ -5,13 +5,63 @@ require_once __DIR__.'/Direct_database.php';
 direct_ensure_table();
 
 function direct_rows_from_xlsx(string $file): array {
-    $zip=new ZipArchive(); if($zip->open($file)!==true) throw new RuntimeException('Unable to open Excel workbook.');
-    $shared=[]; $sx=$zip->getFromName('xl/sharedStrings.xml');
-    if($sx!==false){ $xml=simplexml_load_string($sx); foreach($xml->si as $si){ $parts=[]; foreach($si->xpath('.//t') as $t)$parts[]=(string)$t; $shared[]=implode('',$parts); } }
-    $sheet=$zip->getFromName('xl/worksheets/sheet1.xml'); if($sheet===false) throw new RuntimeException('First worksheet was not found.');
-    $xml=simplexml_load_string($sheet); $rows=[];
-    foreach($xml->sheetData->row as $r){ $vals=[]; foreach($r->c as $c){ $ref=(string)$c['r']; preg_match('/^[A-Z]+/',$ref,$m); $col=$m[0]??''; $type=(string)$c['t']; $v=(string)$c->v; $vals[$col]=($type==='s'&&isset($shared[(int)$v]))?$shared[(int)$v]:$v; } $rows[]=$vals; }
-    $zip->close(); return $rows;
+    $zip = new ZipArchive();
+    if ($zip->open($file) !== true) throw new RuntimeException('Unable to open Excel workbook.');
+
+    $shared = [];
+    $sx = $zip->getFromName('xl/sharedStrings.xml');
+    if ($sx !== false) {
+        $dom = new DOMDocument();
+        if (!@$dom->loadXML($sx)) {
+            $zip->close();
+            throw new RuntimeException('The Excel shared strings could not be read.');
+        }
+        $xp = new DOMXPath($dom);
+        foreach ($xp->query('//*[local-name()="si"]') as $si) {
+            $parts = [];
+            foreach ($xp->query('.//*[local-name()="t"]', $si) as $t) $parts[] = $t->textContent;
+            $shared[] = implode('', $parts);
+        }
+    }
+
+    $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
+    if ($sheet === false) {
+        $zip->close();
+        throw new RuntimeException('First worksheet was not found.');
+    }
+
+    $dom = new DOMDocument();
+    if (!@$dom->loadXML($sheet)) {
+        $zip->close();
+        throw new RuntimeException('The first Excel worksheet could not be read.');
+    }
+
+    $xp = new DOMXPath($dom);
+    $rows = [];
+    foreach ($xp->query('//*[local-name()="sheetData"]/*[local-name()="row"]') as $row) {
+        $vals = [];
+        foreach ($xp->query('./*[local-name()="c"]', $row) as $cell) {
+            $ref = $cell->getAttribute('r');
+            preg_match('/^[A-Z]+/', $ref, $m);
+            $col = $m[0] ?? '';
+            if ($col === '') continue;
+
+            $type = $cell->getAttribute('t');
+            if ($type === 'inlineStr') {
+                $parts = [];
+                foreach ($xp->query('.//*[local-name()="t"]', $cell) as $t) $parts[] = $t->textContent;
+                $value = implode('', $parts);
+            } else {
+                $vn = $xp->query('./*[local-name()="v"]', $cell)->item(0);
+                $raw = $vn ? $vn->textContent : '';
+                $value = ($type === 's') ? ($shared[(int)$raw] ?? '') : $raw;
+            }
+            $vals[$col] = $value;
+        }
+        $rows[] = $vals;
+    }
+    $zip->close();
+    return $rows;
 }
 function direct_upload(): void {
     if(empty($_FILES['direct_excel']['tmp_name'])) direct_json(false,'Select the Direct Sales Excel file.',[],400);
@@ -19,8 +69,17 @@ function direct_upload(): void {
     if($ext!=='xlsx') direct_json(false,'Please upload the Direct Sales workbook as .xlsx.',[],400);
     $rows=direct_rows_from_xlsx($_FILES['direct_excel']['tmp_name']); if(!$rows) direct_json(false,'Workbook is empty.',[],400);
     $expected=['Crop Season','Sale Category','Invoice Number','Source Invoice Number','Invoice date','Contract Number','Grade Name','Cofee Type','Net Kg','Price (usd/50kgs)','Exchange Rate','Warehouse Name','Warehouse Location','Region','Supplier/Seller','Buyer'];
-    $cols=range('A','P'); $head=[]; foreach($cols as $i=>$c)$head[]=trim((string)($rows[0][$c]??''));
-    foreach($expected as $i=>$name){ if(strcasecmp(trim($head[$i]??''),$name)!==0) direct_json(false,'Column '.($i+1).' must be "'.$name.'". Found "'.($head[$i]??'').'".',[],400); }
+    $cols=range('A','P'); $head=[];
+    foreach($cols as $c) $head[]=trim((string)($rows[0][$c]??''));
+
+    $normHeader=static function($v): string {
+        return strtolower(preg_replace('/\\s+/u',' ',trim((string)$v)));
+    };
+    foreach($expected as $i=>$name){
+        if($normHeader($head[$i]??'')!==$normHeader($name)){
+            direct_json(false,'Upload stopped. Column '.($i+1).' must be "'.$name.'". Found "'.($head[$i]??'').'".',['expected_columns'=>$expected,'found_columns'=>$head],400);
+        }
+    }
     $db=direct_db(); $sql="INSERT INTO public.direct_sales(crop_season,sale_category,invoice_number,source_invoice_number,invoice_date,contract_number,grade_name,coffee_type,net_kg,price_usd_50kg,exchange_rate,warehouse_name,warehouse_location,region,supplier_seller,buyer) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"; $st=$db->prepare($sql); $count=0;
     $db->beginTransaction(); try { foreach(array_slice($rows,1) as $r){ $v=array_map(fn($c)=>trim((string)($r[$c]??'')),$cols); if(!array_filter($v,fn($x)=>$x!==''))continue; if($v[1]==='')continue; $st->execute([$v[0],direct_category($v[1]),$v[2]?:null,$v[3]?:null,direct_date($v[4]),$v[5]?:null,$v[6]?:null,$v[7]?:null,direct_num($v[8]),direct_num($v[9]),direct_num($v[10]),$v[11]?:null,$v[12]?:null,$v[13]?:null,$v[14]?:null,$v[15]?:null]); $count++; } $db->commit(); } catch(Throwable $e){$db->rollBack();throw $e;}
     direct_json(true,$count.' Direct Sales rows uploaded successfully.',['inserted'=>$count]);
