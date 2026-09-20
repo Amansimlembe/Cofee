@@ -249,16 +249,46 @@ function clean_upload(): void {
 
 function clean_filters(): array {
     ensure_clean_table(); $db=clean_db();
-    $seasons=$db->query("SELECT DISTINCT crop_season FROM public.clean_auction_results WHERE crop_season IS NOT NULL AND BTRIM(crop_season)<>'' ORDER BY crop_season DESC")->fetchAll(PDO::FETCH_COLUMN);
-    $latest=$db->query("SELECT auction_no,auction_date,crop_season FROM public.clean_auction_results ORDER BY auction_date DESC,
-        CASE WHEN auction_no ~ '^[0-9]+$' THEN auction_no::integer ELSE NULL END DESC NULLS LAST, id DESC LIMIT 1")->fetch();
+
+    /* Sale Season is derived ONLY from Auction Date:
+       01 July YYYY through 30 June YYYY+1 = YYYY/YYYY+1. */
+    $seasonExpr = "(CASE
+        WHEN EXTRACT(MONTH FROM auction_date) >= 7
+        THEN EXTRACT(YEAR FROM auction_date)::int
+        ELSE (EXTRACT(YEAR FROM auction_date)::int - 1)
+    END)";
+
+    $seasons = $db->query("
+        SELECT DISTINCT
+            ($seasonExpr)::text || '/' || (($seasonExpr) + 1)::text AS sale_season
+        FROM public.clean_auction_results
+        WHERE auction_date IS NOT NULL
+        ORDER BY sale_season DESC
+    ")->fetchAll(PDO::FETCH_COLUMN);
+
+    $latest = $db->query("
+        SELECT auction_no, auction_date,
+               ($seasonExpr)::text || '/' || (($seasonExpr) + 1)::text AS sale_season
+        FROM public.clean_auction_results
+        WHERE auction_date IS NOT NULL
+        ORDER BY auction_date DESC,
+          CASE WHEN auction_no ~ '^[0-9]+$' THEN auction_no::integer ELSE NULL END DESC NULLS LAST,
+          id DESC
+        LIMIT 1
+    ")->fetch();
+
     clean_json(true,'',['seasons'=>$seasons,'latest'=>$latest?:null]);
 }
 function clean_fetch(): void {
     ensure_clean_table(); $db=clean_db();
     $season=trim($_GET['season']??'');$auction=trim($_GET['auction_no']??'');
     $where=[];$p=[];
-    if($season!==''){$where[]='crop_season=:season';$p['season']=$season;}
+    if($season!==''){
+        [$from,$to]=clean_sale_season_range($season);
+        $where[]='auction_date BETWEEN :season_from AND :season_to';
+        $p['season_from']=$from;
+        $p['season_to']=$to;
+    }
     if($auction!==''){$where[]='auction_no=:auction';$p['auction']=$auction;}
     $sql="SELECT id,lot_no,auction_no,TO_CHAR(auction_date,'DD/MM/YYYY') auction_date,seller,crop_season,grade,grade2,
                  n_kgs,warehouse,district,region,price_per_50kg,status,buyer
@@ -271,12 +301,37 @@ function clean_fetch(): void {
     $s=$db->prepare($sql);$s->execute($p);
     clean_json(true,'',['rows'=>$s->fetchAll()]);
 }
+function clean_sale_season_range(string $season): array {
+    if (!preg_match('/^(\d{4})\/(\d{4})$/', $season, $m) || (int)$m[2] !== (int)$m[1] + 1) {
+        throw new InvalidArgumentException('Invalid Sale Season.');
+    }
+    $start = $m[1] . '-07-01';
+    $end   = $m[2] . '-06-30';
+    return [$start, $end];
+}
+
 function clean_auctions(): void {
-    ensure_clean_table();$db=clean_db();$season=trim($_GET['season']??'');
-    $s=$db->prepare("SELECT DISTINCT auction_no,MAX(auction_date) d FROM public.clean_auction_results
-                    WHERE (:season='' OR crop_season=:season)
-                    GROUP BY auction_no ORDER BY MAX(auction_date) DESC");
-    $s->execute(['season'=>$season]);
+    ensure_clean_table(); $db=clean_db();
+    $season=trim($_GET['season']??'');
+
+    $where='';
+    $params=[];
+    if ($season !== '') {
+        [$from,$to]=clean_sale_season_range($season);
+        $where='WHERE auction_date BETWEEN :from AND :to';
+        $params=['from'=>$from,'to'=>$to];
+    }
+
+    $s=$db->prepare("
+        SELECT auction_no, MAX(auction_date) AS d
+        FROM public.clean_auction_results
+        $where
+        GROUP BY auction_no
+        ORDER BY MAX(auction_date) DESC,
+          CASE WHEN auction_no ~ '^[0-9]+$' THEN auction_no::integer ELSE NULL END DESC NULLS LAST,
+          auction_no DESC
+    ");
+    $s->execute($params);
     clean_json(true,'',['auctions'=>$s->fetchAll()]);
 }
 function clean_report(): void {
@@ -284,7 +339,12 @@ function clean_report(): void {
     $season=trim($_GET['season']??'');$auction=trim($_GET['auction_no']??'');
     if($auction==='') clean_json(false,'Select an Auction No. to view High & Low.',[],400);
     $where="auction_no=:a";$p=['a'=>$auction];
-    if($season!==''){$where.=" AND crop_season=:s";$p['s']=$season;}
+    if($season!==''){
+        [$from,$to]=clean_sale_season_range($season);
+        $where.=" AND auction_date BETWEEN :season_from AND :season_to";
+        $p['season_from']=$from;
+        $p['season_to']=$to;
+    }
 
     $s=$db->prepare("SELECT MAX(auction_date) auction_date,
       SUM(n_kgs) offered_kgs,
@@ -383,7 +443,7 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
  </div>
  <div>
   <div class="filters">
-   <select id="season"><option value="">Select Season</option></select>
+   <select id="season" title="Sale Season: 1 July to 30 June"><option value="">Select Sale Season</option></select>
    <select id="auction"><option value="">Select Auction</option></select>
    <button onclick="refreshAll()">↻ Refresh</button>
    <div class="uploadbox" id="uploadbox">
@@ -416,8 +476,8 @@ function showUpload(){$('uploadbox').classList.toggle('open');$('settingsMenu').
 function toggleEdit(){editMode=!editMode;$('card').classList.toggle('editmode',editMode);$('settingsMenu').classList.remove('open');renderTable()}
 async function loadFilters(){
  let d=await api('clean_auction.php?action=filters');
- $('season').innerHTML='<option value="">Select Season</option>'+d.seasons.map(s=>`<option>${esc(s)}</option>`).join('');
- if(d.latest){$('season').value=d.latest.crop_season||'';await loadAuctions();$('auction').value=d.latest.auction_no||''}
+ $('season').innerHTML='<option value="">Select Sale Season</option>'+d.seasons.map(s=>`<option>${esc(s)}</option>`).join('');
+ if(d.latest){$('season').value=d.latest.sale_season||'';await loadAuctions();$('auction').value=d.latest.auction_no||''}
 }
 async function loadAuctions(){
  let s=encodeURIComponent($('season').value);let d=await api('clean_auction.php?action=auctions&season='+s);
