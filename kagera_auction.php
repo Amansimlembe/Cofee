@@ -3182,6 +3182,55 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
  .kagera-high-low-report{padding:5px}.kagera-high-low-table{min-width:520px}
 }
 
+
+
+/* =========================================================
+   REPORT CONSISTENCY — MATCH CLEAN AUCTION
+   Plain white cells, black inner grid, thick outer perimeter.
+   ========================================================= */
+.kagera-high-low-table,
+#kageraSalesSummaryTable {
+    width:100% !important;
+    border-collapse:collapse !important;
+    border:3px solid #000 !important;
+    background:#fff !important;
+    color:#000 !important;
+}
+.kagera-high-low-table th,
+.kagera-high-low-table td,
+#kageraSalesSummaryTable th,
+#kageraSalesSummaryTable td {
+    border:1px solid #000 !important;
+    background:#fff !important;
+    color:#000 !important;
+}
+.kagera-high-low-table thead th,
+#kageraSalesSummaryTable thead th {
+    background:#fff !important;
+    color:#000 !important;
+    font-weight:800;
+}
+.kagera-high-low-table tr:first-child > *,
+#kageraSalesSummaryTable tr:first-child > * { border-top-width:3px !important; }
+.kagera-high-low-table tr:last-child > *,
+#kageraSalesSummaryTable tr:last-child > * { border-bottom-width:3px !important; }
+.kagera-high-low-table tr > *:first-child,
+#kageraSalesSummaryTable tr > *:first-child { border-left-width:3px !important; }
+.kagera-high-low-table tr > *:last-child,
+#kageraSalesSummaryTable tr > *:last-child { border-right-width:3px !important; }
+.kagera-high-low-total-row td,
+#kageraSalesSummaryTable .kagera-high-low-total-row td {
+    font-weight:800 !important;
+    border-top:2px solid #000 !important;
+}
+#kageraSalesSummaryTable {
+    min-width:760px;
+    table-layout:fixed;
+    font-size:9px;
+}
+#kageraSalesSummaryTable th,
+#kageraSalesSummaryTable td { padding:4px 5px; }
+
 </style>
 
 </head>
@@ -3333,8 +3382,8 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
     <button type="button"
             class="kagera-export-btn"
             id="kageraHighLowExportBtn"
-            aria-label="Export High &amp; Low"
-            title="Export High &amp; Low">
+            aria-label="Export selected report"
+            title="Export selected report">
         <span class="kagera-export-icon" aria-hidden="true">⇩</span>
         <span>Export</span>
     </button>
@@ -4661,15 +4710,18 @@ function kageraCloseHighLowExportMenu()
     if (menu) menu.style.display = "none";
 }
 
-function kageraHighLowFileBase()
+function kageraCurrentReportMode()
 {
-    const auction = String(
-        document.getElementById("kageraAuctionFilter")?.value || ""
-    ).trim() || "Selected_Auction";
-    const season = String(
-        document.getElementById("kageraSeasonFilter")?.value || ""
-    ).trim().replace(/[^A-Za-z0-9_-]+/g, "_") || "Season";
-    return "Kagera_High_and_Low_Auction_" + auction + "_" + season;
+    return String(kageraDisplayType?.value || "").trim();
+}
+
+function kageraReportFileBase()
+{
+    const auction = String(document.getElementById("kageraAuctionFilter")?.value || "").trim() || "Selected_Auction";
+    const season = String(document.getElementById("kageraSeasonFilter")?.value || "").trim()
+        .replace(/[^A-Za-z0-9_-]+/g, "_") || "Season";
+    const mode = kageraCurrentReportMode() === "sales_summary" ? "Sales_Summary" : "High_and_Low";
+    return "Kagera_" + mode + "_Auction_" + auction + "_" + season;
 }
 
 function kageraDownloadBlob(blob, filename)
@@ -4681,519 +4733,180 @@ function kageraDownloadBlob(blob, filename)
     document.body.appendChild(link);
     link.click();
     link.remove();
-    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 800);
 }
 
-
-function kageraGetHighLowExportData()
+function kageraExportSourceClone()
 {
-    const report = document.getElementById("kageraHighLowReport");
+    const mode = kageraCurrentReportMode();
+    const auction = String(document.getElementById("kageraAuctionFilter")?.value || "").trim();
+    if (!auction) throw new Error("Select an Auction No. before exporting the report.");
 
-    if (!report) {
-        throw new Error("The High & Low report is not available for export.");
+    const wrapper = document.createElement("div");
+    wrapper.className = "kagera-export-sheet";
+    wrapper.style.background = "#fff";
+    wrapper.style.color = "#000";
+    wrapper.style.fontFamily = "Arial, sans-serif";
+
+    if (mode === "high_low") {
+        const source = document.getElementById("kageraHighLowReport");
+        if (!source || source.style.display === "none") throw new Error("High & Low report is not ready yet.");
+        wrapper.appendChild(source.cloneNode(true));
+    } else if (mode === "sales_summary") {
+        const table = document.getElementById("kageraSalesSummaryTable");
+        if (!table || table.style.display === "none") throw new Error("Sales Summary is not ready yet.");
+        const heading = document.createElement("div");
+        heading.innerHTML = '<div style="text-align:center;font-weight:800;font-size:13px;margin-bottom:3px">KAGERA COFFEE EXCHANGE</div>' +
+            '<div style="text-align:center;font-weight:700;font-size:11px;margin-bottom:8px">SALES SUMMARY FOR AUCTION NO. ' +
+            String(auction).replace(/[&<>"']/g, function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c];}) + '</div>';
+        wrapper.appendChild(heading);
+        wrapper.appendChild(table.cloneNode(true));
+    } else {
+        throw new Error("Select High & Low or Sales Summary before exporting.");
     }
 
-    const salesRows = Array.from(
-        document.querySelectorAll("#kageraHighLowSalesBody tr")
-    ).map(function(tr) {
-        return Array.from(tr.cells).map(function(td) {
-            return String(td.textContent || "").trim();
-        });
-    }).filter(function(row) {
-        return row.length > 0;
+    wrapper.querySelectorAll("table").forEach(function(table){
+        table.style.width = "100%";
+        table.style.borderCollapse = "collapse";
+        table.style.border = "3px solid #000";
+        table.style.background = "#fff";
+        table.style.color = "#000";
     });
-
-    const priceRows = Array.from(
-        document.querySelectorAll("#kageraHighLowPricesBody tr")
-    ).map(function(tr) {
-        return Array.from(tr.cells).map(function(td) {
-            return String(td.textContent || "").trim();
-        });
-    }).filter(function(row) {
-        return row.length > 0;
+    wrapper.querySelectorAll("th,td").forEach(function(cell){
+        cell.style.border = "1px solid #000";
+        cell.style.background = "#fff";
+        cell.style.color = "#000";
     });
+    wrapper.querySelectorAll("table tr:first-child > *").forEach(function(cell){cell.style.borderTop = "3px solid #000";});
+    wrapper.querySelectorAll("table tr:last-child > *").forEach(function(cell){cell.style.borderBottom = "3px solid #000";});
+    wrapper.querySelectorAll("table tr > *:first-child").forEach(function(cell){cell.style.borderLeft = "3px solid #000";});
+    wrapper.querySelectorAll("table tr > *:last-child").forEach(function(cell){cell.style.borderRight = "3px solid #000";});
+    wrapper.querySelectorAll(".kagera-high-low-total-row td").forEach(function(cell){
+        cell.style.fontWeight = "800";
+        cell.style.borderTop = "2px solid #000";
+    });
+    return wrapper;
+}
 
-    if (!salesRows.length && !priceRows.length) {
-        throw new Error("The High & Low report has no populated data to export.");
-    }
+function kageraExportDocumentHtml()
+{
+    const wrapper = kageraExportSourceClone();
+    return '<!doctype html><html><head><meta charset="utf-8"><style>' +
+        '@page{margin:12mm}body{font-family:Arial,sans-serif;color:#000;background:#fff}' +
+        'table{border-collapse:collapse;width:100%;border:3px solid #000;background:#fff}' +
+        'th,td{border:1px solid #000;padding:5px;text-align:center;background:#fff;color:#000}' +
+        'tr:first-child>*{border-top:3px solid #000}tr:last-child>*{border-bottom:3px solid #000}' +
+        'tr>*:first-child{border-left:3px solid #000}tr>*:last-child{border-right:3px solid #000}' +
+        '.kagera-high-low-total-row td{font-weight:bold;border-top:2px solid #000}' +
+        '.kagera-hl-title,.kagera-hl-subtitle,.kagera-hl-held{text-align:center;font-weight:bold}' +
+        '.kagera-hl-percentage{text-align:right;font-weight:bold;margin-top:5px}' +
+        '</style></head><body>' + wrapper.innerHTML + '</body></html>';
+}
 
-    return {
-        title: "KAGERA COFFEE EXCHANGE",
-        subtitle: String(
-            document.getElementById("kageraHLSubtitle")?.textContent || ""
-        ).trim(),
-        heldOn: String(
-            document.getElementById("kageraHLHeldOn")?.textContent || ""
-        ).trim(),
-        salesRows: salesRows,
-        priceRows: priceRows,
-        percentageDry: String(
-            document.getElementById("kageraHLPercentageDry")?.textContent || ""
-        ).trim(),
-        percentageClean: String(
-            document.getElementById("kageraHLPercentageClean")?.textContent || ""
-        ).trim()
-    };
+function kageraExportReportExcel()
+{
+    const html = kageraExportDocumentHtml();
+    kageraDownloadBlob(new Blob(['\ufeff', html], {type:'application/vnd.ms-excel;charset=utf-8'}), kageraReportFileBase() + '.xls');
+}
+
+function kageraExportReportWord()
+{
+    const html = kageraExportDocumentHtml();
+    kageraDownloadBlob(new Blob(['\ufeff', html], {type:'application/msword;charset=utf-8'}), kageraReportFileBase() + '.doc');
 }
 
 function kageraLoadScriptOnce(src)
 {
-    return new Promise(function(resolve, reject) {
-        const existing = document.querySelector(
-            'script[data-kagera-export-src="' + src + '"]'
-        );
-
+    return new Promise(function(resolve, reject){
+        const existing = document.querySelector('script[data-kagera-export-src="' + src + '"]');
         if (existing) {
-            if (existing.dataset.loaded === "1") {
-                resolve();
-                return;
-            }
-
-            existing.addEventListener("load", function() {
-                resolve();
-            }, {once:true});
-
-            existing.addEventListener("error", function() {
-                reject(new Error("Unable to load export library."));
-            }, {once:true});
-
+            if (existing.dataset.loaded === "1") return resolve();
+            existing.addEventListener("load", resolve, {once:true});
+            existing.addEventListener("error", function(){reject(new Error("Unable to load export library."));}, {once:true});
             return;
         }
-
         const script = document.createElement("script");
         script.src = src;
         script.async = true;
         script.dataset.kageraExportSrc = src;
-
-        script.onload = function() {
-            script.dataset.loaded = "1";
-            resolve();
-        };
-
-        script.onerror = function() {
-            reject(new Error("Unable to load the export library. Check your internet connection and try again."));
-        };
-
+        script.onload = function(){script.dataset.loaded="1";resolve();};
+        script.onerror = function(){reject(new Error("Unable to load export library. Check the internet connection and try again."));};
         document.head.appendChild(script);
     });
 }
 
 async function kageraEnsurePdfLibrary()
 {
-    if (window.jspdf && window.jspdf.jsPDF &&
-        window.jspdf.jsPDF.API &&
-        typeof window.jspdf.jsPDF.API.autoTable === "function") {
-        return true;
+    if (!window.html2canvas) {
+        await kageraLoadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
     }
-
-    await kageraLoadScriptOnce(
-        "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
-    );
-
     if (!(window.jspdf && window.jspdf.jsPDF)) {
-        throw new Error("PDF library could not be loaded.");
+        await kageraLoadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
     }
-
-    await kageraLoadScriptOnce(
-        "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"
-    );
-
-    if (typeof window.jspdf.jsPDF.API.autoTable !== "function") {
-        throw new Error("PDF table export library could not be loaded.");
+    if (!window.html2canvas || !(window.jspdf && window.jspdf.jsPDF)) {
+        throw new Error("PDF exporter did not load. Refresh the page and try again.");
     }
-
-    return true;
 }
 
-function kageraExportHighLowExcel()
+async function kageraExportReportPdf()
 {
-    let data;
+    await kageraEnsurePdfLibrary();
+    const source = kageraExportSourceClone();
+    const mode = kageraCurrentReportMode();
+    const button = document.getElementById("kageraHighLowExportBtn");
+    const original = button ? button.innerHTML : "";
+    if (button) { button.disabled = true; button.textContent = "Preparing PDF…"; }
+
+    source.style.width = mode === "sales_summary" ? "1050px" : "780px";
+    source.style.maxWidth = source.style.width;
+    source.style.padding = "10px";
+    const stage = document.createElement("div");
+    stage.style.position = "fixed";
+    stage.style.left = "-12000px";
+    stage.style.top = "0";
+    stage.style.width = mode === "sales_summary" ? "1070px" : "800px";
+    stage.style.background = "#fff";
+    stage.appendChild(source);
+    document.body.appendChild(stage);
 
     try {
-        data = kageraGetHighLowExportData();
-    } catch (error) {
-        alert(error.message);
-        return;
-    }
-
-    /*
-     * Prefer XLSX for a genuine .xlsx file. If the CDN library is unavailable,
-     * use a native Excel-compatible .xls workbook so the download still works.
-     */
-    if (window.XLSX) {
-        try {
-            const wb = XLSX.utils.book_new();
-
-            const rows = [
-                [data.title],
-                [data.subtitle],
-                [data.heldOn],
-                [],
-                ["GRADE", "KILOS OFFERED", "KILOS SOLD", "TOTAL VALUE (TZS)"],
-                ...data.salesRows,
-                [],
-                ["PRICES", "LOWEST PRICE PER KG", "AVERAGE PRICE PER KG", "HIGHEST PRICE PER KG"],
-                ...data.priceRows,
-                [],
-                [data.percentageDry],
-                [data.percentageClean]
-            ];
-
-            const ws = XLSX.utils.aoa_to_sheet(rows);
-
-            ws["!cols"] = [
-                {wch: 30},
-                {wch: 20},
-                {wch: 20},
-                {wch: 25}
-            ];
-
-            XLSX.utils.book_append_sheet(wb, ws, "High & Low");
-            XLSX.writeFile(
-                wb,
-                kageraHighLowFileBase() + ".xlsx"
-            );
-            return;
-        } catch (error) {
-            console.error("XLSX export failed:", error);
-        }
-    }
-
-    /*
-     * Reliable browser-native fallback. Excel opens this as a workbook even
-     * when SheetJS is unavailable.
-     */
-    const escapeXml = function(value) {
-        return String(value ?? "")
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;");
-    };
-
-    const allRows = [
-        [data.title],
-        [data.subtitle],
-        [data.heldOn],
-        [],
-        ["GRADE", "KILOS OFFERED", "KILOS SOLD", "TOTAL VALUE (TZS)"],
-        ...data.salesRows,
-        [],
-        ["PRICES", "LOWEST PRICE PER KG", "AVERAGE PRICE PER KG", "HIGHEST PRICE PER KG"],
-        ...data.priceRows,
-        [],
-        [data.percentageDry],
-        [data.percentageClean]
-    ];
-
-    const tableRows = allRows.map(function(row) {
-        if (!row.length) {
-            return "<tr><td>&nbsp;</td></tr>";
-        }
-
-        return "<tr>" + row.map(function(cell) {
-            return "<td>" + escapeXml(cell) + "</td>";
-        }).join("") + "</tr>";
-    }).join("");
-
-    const html =
-        "<html><head><meta charset='utf-8'>" +
-        "<style>" +
-        "table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:11pt}" +
-        "td{border:1px solid #333;padding:6px 8px}" +
-        "tr:nth-child(5) td,tr:nth-child(" + (6 + data.salesRows.length + 1) + ") td{font-weight:bold}" +
-        "</style></head><body>" +
-        "<table>" + tableRows + "</table>" +
-        "</body></html>";
-
-    kageraDownloadBlob(
-        new Blob([html], {
-            type: "application/vnd.ms-excel;charset=utf-8"
-        }),
-        kageraHighLowFileBase() + ".xls"
-    );
-}
-
-function kageraExportHighLowWord()
-{
-    let data;
-
-    try {
-        data = kageraGetHighLowExportData();
-    } catch (error) {
-        alert(error.message);
-        return;
-    }
-
-    const makeRow = function(row, header) {
-        const tag = header ? "th" : "td";
-        return "<tr>" + row.map(function(cell) {
-            return "<" + tag + ">" +
-                String(cell ?? "")
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;") +
-                "</" + tag + ">";
-        }).join("") + "</tr>";
-    };
-
-    const salesTable =
-        "<table>" +
-        makeRow(
-            ["GRADE", "KILOS OFFERED", "KILOS SOLD", "TOTAL VALUE (TZS)"],
-            true
-        ) +
-        data.salesRows.map(function(row) {
-            return makeRow(row, false);
-        }).join("") +
-        "</table>";
-
-    const pricesTable =
-        "<table>" +
-        makeRow(
-            ["PRICES", "LOWEST PRICE PER KG", "AVERAGE PRICE PER KG", "HIGHEST PRICE PER KG"],
-            true
-        ) +
-        data.priceRows.map(function(row) {
-            return makeRow(row, false);
-        }).join("") +
-        "</table>";
-
-    const html =
-        "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
-        "<title>Kagera High &amp; Low Report</title>" +
-        "<style>" +
-        "body{font-family:Arial,sans-serif;font-size:10pt;color:#222}" +
-        "h1{text-align:center;font-size:16pt;margin:0 0 8px}" +
-        "h2{text-align:center;font-size:12pt;margin:0 0 5px}" +
-        "p{text-align:center;font-size:10pt;margin:0 0 12px}" +
-        "table{width:100%;border-collapse:collapse;margin-bottom:14px}" +
-        "th,td{border:1px solid #333;padding:6px;text-align:center}" +
-        "th{font-weight:bold;background:#eee}" +
-        "td:first-child,th:first-child{text-align:left}" +
-        "</style></head><body>" +
-        "<h1>" + data.title + "</h1>" +
-        "<h2>" + data.subtitle + "</h2>" +
-        "<p>" + data.heldOn + "</p>" +
-        salesTable +
-        pricesTable +
-        "<p>" + data.percentageDry + "</p>" +
-        "<p>" + data.percentageClean + "</p>" +
-        "</body></html>";
-
-    kageraDownloadBlob(
-        new Blob([html], {
-            type: "application/msword;charset=utf-8"
-        }),
-        kageraHighLowFileBase() + ".doc"
-    );
-}
-
-async function kageraExportHighLowPdf()
-{
-    let data;
-
-    try {
-        data = kageraGetHighLowExportData();
-        await kageraEnsurePdfLibrary();
-    } catch (error) {
-        console.error("Kagera PDF export:", error);
-        alert(error.message);
-        return;
-    }
-
-    try {
+        const canvas = await window.html2canvas(source, {scale:2.2, backgroundColor:'#ffffff', useCORS:true, logging:false});
         const JsPDF = window.jspdf.jsPDF;
-        const doc = new JsPDF({
-            orientation: "landscape",
-            unit: "mm",
-            format: "a4"
-        });
-
-        // Professional coffee-inspired palette: coffee brown, roasted brown,
-        // cream paper tones and a subtle coffee-gold accent.
-        const coffeeDark = [78, 52, 46];
-        const coffeeBrown = [109, 76, 65];
-        const coffeeMedium = [141, 110, 99];
-        const coffeeCream = [248, 244, 238];
-        const coffeeLight = [255, 251, 245];
-        const coffeeGold = [184, 134, 75];
-        const white = [255, 255, 255];
-
-        // Page background.
-        doc.setFillColor(...coffeeLight);
-        doc.rect(0, 0, 297, 210, "F");
-
-        // Report title.
-        doc.setTextColor(...coffeeDark);
-        doc.setFontSize(15);
-        doc.setFont(undefined, "bold");
-        doc.text(
-            data.title,
-            148.5,
-            13,
-            {align:"center"}
-        );
-
-        doc.setFontSize(11);
-        doc.setTextColor(...coffeeBrown);
-        doc.text(
-            data.subtitle,
-            148.5,
-            20,
-            {align:"center"}
-        );
-
-        doc.setFontSize(9);
-        doc.setTextColor(...coffeeMedium);
-        doc.setFont(undefined, "normal");
-        doc.text(
-            data.heldOn,
-            148.5,
-            26,
-            {align:"center"}
-        );
-
-        doc.autoTable({
-            startY: 31,
-            head: [[
-                "GRADE",
-                "KILOS OFFERED",
-                "KILOS SOLD",
-                "TOTAL VALUE (TZS)"
-            ]],
-            body: data.salesRows,
-            theme: "grid",
-            styles: {
-                fontSize: 8,
-                cellPadding: 2.2,
-                halign: "center",
-                textColor: coffeeDark,
-                fillColor: coffeeLight,
-                lineColor: coffeeMedium,
-                lineWidth: 0.25
-            },
-            alternateRowStyles: {
-                fillColor: coffeeCream
-            },
-            headStyles: {
-                fillColor: coffeeDark,
-                textColor: white,
-                fontStyle: "bold",
-                lineColor: coffeeDark,
-                lineWidth: 0.35
-            },
-            didParseCell: function(hook) {
-                // Highlight the Total row as the report total.
-                if (hook.section === "body" &&
-                    hook.row && hook.row.raw &&
-                    String(hook.row.raw[0] || "").trim().toLowerCase() === "total") {
-                    hook.cell.styles.fillColor = coffeeBrown;
-                    hook.cell.styles.textColor = white;
-                    hook.cell.styles.fontStyle = "bold";
-                }
-            },
-            columnStyles: {
-                0: {halign:"left"}
-            }
-        });
-
-        doc.autoTable({
-            startY: doc.lastAutoTable.finalY + 7,
-            head: [[
-                "PRICES",
-                "LOWEST PRICE PER KG",
-                "AVERAGE PRICE PER KG",
-                "HIGHEST PRICE PER KG"
-            ]],
-            body: data.priceRows,
-            theme: "grid",
-            styles: {
-                fontSize: 8,
-                cellPadding: 2.2,
-                halign: "center",
-                textColor: coffeeDark,
-                fillColor: coffeeLight,
-                lineColor: coffeeMedium,
-                lineWidth: 0.25
-            },
-            alternateRowStyles: {
-                fillColor: coffeeCream
-            },
-            headStyles: {
-                fillColor: coffeeDark,
-                textColor: white,
-                fontStyle: "bold",
-                lineColor: coffeeDark,
-                lineWidth: 0.35
-            },
-            didParseCell: function(hook) {
-                // Highlight the Total row as the report total.
-                if (hook.section === "body" &&
-                    hook.row && hook.row.raw &&
-                    String(hook.row.raw[0] || "").trim().toLowerCase() === "total") {
-                    hook.cell.styles.fillColor = coffeeBrown;
-                    hook.cell.styles.textColor = white;
-                    hook.cell.styles.fontStyle = "bold";
-                }
-            },
-            columnStyles: {
-                0: {halign:"left"}
-            }
-        });
-
-        // Percentage notes use the coffee-gold accent for visual hierarchy.
-        doc.setFontSize(8);
-        doc.setFont(undefined, "bold");
-        doc.setTextColor(...coffeeBrown);
-
-        doc.text(
-            data.percentageDry,
-            282,
-            doc.lastAutoTable.finalY + 8,
-            {align:"right"}
-        );
-
-        doc.text(
-            data.percentageClean,
-            282,
-            doc.lastAutoTable.finalY + 13,
-            {align:"right"}
-        );
-
-        // Subtle coffee-gold footer accent.
-        doc.setDrawColor(...coffeeGold);
-        doc.setLineWidth(0.6);
-        doc.line(15, 198, 282, 198);
-
-        doc.save(
-            kageraHighLowFileBase() + ".pdf"
-        );
-
-    } catch (error) {
-        console.error("Kagera PDF generation failed:", error);
-        alert(
-            "The High & Low PDF could not be generated. " +
-            "Please try again. If the problem continues, refresh the page."
-        );
+        const orientation = mode === "sales_summary" ? "landscape" : "portrait";
+        const pdf = new JsPDF({orientation:orientation, unit:'mm', format:'a4', compress:true});
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const margin = 8;
+        const usableW = pageW - margin * 2;
+        const pxPerMm = canvas.width / usableW;
+        const pagePx = Math.floor((pageH - margin * 2) * pxPerMm);
+        let y = 0, page = 0;
+        while (y < canvas.height) {
+            const sliceH = Math.min(pagePx, canvas.height - y);
+            const part = document.createElement('canvas');
+            part.width = canvas.width; part.height = sliceH;
+            part.getContext('2d').drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+            if (page > 0) pdf.addPage();
+            pdf.addImage(part.toDataURL('image/jpeg',0.96), 'JPEG', margin, margin, usableW, sliceH / pxPerMm, undefined, 'FAST');
+            y += sliceH; page++;
+        }
+        pdf.save(kageraReportFileBase() + '.pdf');
+    } finally {
+        stage.remove();
+        if (button) { button.disabled = false; button.innerHTML = original; }
     }
 }
 
 async function kageraExportHighLow(format)
 {
     try {
-        if (format === "pdf") {
-            await kageraExportHighLowPdf();
-        } else if (format === "excel") {
-            kageraExportHighLowExcel();
-        } else if (format === "word") {
-            kageraExportHighLowWord();
-        } else {
-            throw new Error("Unsupported export format.");
-        }
+        if (format === "pdf") await kageraExportReportPdf();
+        else if (format === "excel") kageraExportReportExcel();
+        else if (format === "word") kageraExportReportWord();
+        else throw new Error("Unsupported export format.");
     } catch (error) {
-        console.error("Kagera High & Low export:", error);
-        alert(error.message || "Unable to export the High & Low report.");
+        console.error("Kagera report export:", error);
+        alert(error.message || "Unable to export the selected report.");
     } finally {
         kageraCloseHighLowExportMenu();
     }
@@ -5203,45 +4916,22 @@ function kageraSetupHighLowExport()
 {
     const btn = document.getElementById("kageraHighLowExportBtn");
     const menu = document.getElementById("kageraHighLowExportMenu");
-
-    if (!btn || !menu || btn.dataset.bound === "1") {
-        return;
-    }
-
+    if (!btn || !menu || btn.dataset.bound === "1") return;
     btn.dataset.bound = "1";
-
-    btn.addEventListener("click", function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        const visible =
-            window.getComputedStyle(menu).display !== "none";
-
-        menu.style.display = visible ? "none" : "block";
+    btn.addEventListener("click", function(event){
+        event.preventDefault(); event.stopPropagation();
+        menu.style.display = window.getComputedStyle(menu).display !== "none" ? "none" : "block";
     });
-
-    menu.querySelectorAll("button[data-kagera-export]").forEach(function(item) {
-        item.addEventListener("click", async function(event) {
-            event.preventDefault();
-            event.stopPropagation();
-
-            const format = this.getAttribute("data-kagera-export");
-
-            if (!format) {
-                return;
-            }
-
-            await kageraExportHighLow(format);
+    menu.querySelectorAll("button[data-kagera-export]").forEach(function(item){
+        item.addEventListener("click", async function(event){
+            event.preventDefault(); event.stopPropagation();
+            await kageraExportHighLow(this.getAttribute("data-kagera-export"));
         });
     });
-
-    document.addEventListener("click", function(event) {
-        if (!event.target.closest("#kageraHighLowExportWrap")) {
-            kageraCloseHighLowExportMenu();
-        }
+    document.addEventListener("click", function(event){
+        if (!event.target.closest("#kageraHighLowExportWrap")) kageraCloseHighLowExportMenu();
     });
 }
-
 
 function kageraIsHighLowReport(value)
 {
@@ -5299,11 +4989,15 @@ async function kageraShowReport()
         selectedReport === "high_low" ||
         selectedReport === "sales_summary";
 
-    kageraSetHighLowExportVisible(kageraIsHighLowReport(selectedReport));
+    kageraSetHighLowExportVisible(isReportView);
 
-    if (selectedReport !== "high_low") {
-        kageraCloseHighLowExportMenu();
+    const exportButton = document.getElementById("kageraHighLowExportBtn");
+    if (exportButton) {
+        const reportName = selectedReport === "sales_summary" ? "Sales Summary" : "High & Low";
+        exportButton.setAttribute("title", "Export " + reportName);
+        exportButton.setAttribute("aria-label", "Export " + reportName);
     }
+    if (!isReportView) kageraCloseHighLowExportMenu();
 
     if (!isReportView) {
         kageraSetHighLowExportVisible(false);
