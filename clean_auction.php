@@ -418,6 +418,76 @@ function clean_report(): void {
 
     clean_json(true,'',['report'=>$r]);
 }
+
+function clean_sale_summary(): void {
+    ensure_clean_table(); $db=clean_db();
+    $season=trim($_GET['season']??''); $auction=trim($_GET['auction_no']??'');
+    if($auction==='') clean_json(false,'Select an Auction No. to view Sale Summary.',[],400);
+
+    $where="auction_no=:a"; $p=['a'=>$auction]; $from=null; $to=null;
+    if($season!==''){
+        [$from,$to]=clean_sale_season_range($season);
+        $where.=" AND auction_date BETWEEN :sf AND :st";
+        $p['sf']=$from; $p['st']=$to;
+    }
+
+    $sold="UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
+    $valid="($sold AND price_per_50kg IS NOT NULL AND price_per_50kg>0)";
+    $gn="UPPER(REGEXP_REPLACE(BTRIM(COALESCE(grade,'')), '[^A-Za-z0-9]+', '', 'g'))";
+    $g2="UPPER(REGEXP_REPLACE(BTRIM(COALESCE(grade2,'')), '[^A-Za-z0-9]+', '', 'g'))";
+
+    $ds=$db->prepare("SELECT MAX(auction_date) FROM public.clean_auction_results WHERE $where");
+    $ds->execute($p); $held=$ds->fetchColumn();
+
+    $previous=null;
+    if($held){
+        $sql="SELECT auction_no,MAX(auction_date) d FROM public.clean_auction_results WHERE auction_date<:held";
+        $pp=['held'=>$held];
+        if($from&&$to){$sql.=" AND auction_date BETWEEN :pf AND :pt";$pp['pf']=$from;$pp['pt']=$to;}
+        $sql.=" GROUP BY auction_no ORDER BY MAX(auction_date) DESC LIMIT 1";
+        $q=$db->prepare($sql);$q->execute($pp);$previous=$q->fetch();
+    }
+
+    $defs=[
+      ['AAA','grade','AAA'],['AA','grade','AA'],['A','grade','A'],['AB','grade','AB'],
+      ['B','grade','B'],['PB','grade','PB'],['C','grade','C'],['Lower Grades','grade2','LOWERGRADES']
+    ];
+    $rows=[];
+    foreach($defs as [$label,$mode,$value]){
+        $cond=($mode==='grade2'?$g2:$gn)."=:g";
+        $rp=$p; $rp['g']=$value;
+        $sql="SELECT COALESCE(SUM(n_kgs),0) offered,
+          COALESCE(SUM(CASE WHEN $sold THEN n_kgs ELSE 0 END),0) sold,
+          MIN(CASE WHEN $valid THEN price_per_50kg END) low,
+          CASE WHEN SUM(CASE WHEN $valid THEN n_kgs ELSE 0 END)>0
+            THEN SUM(CASE WHEN $valid THEN n_kgs*price_per_50kg ELSE 0 END)/
+                 SUM(CASE WHEN $valid THEN n_kgs ELSE 0 END) ELSE NULL END avg,
+          MAX(CASE WHEN $valid THEN price_per_50kg END) high
+          FROM public.clean_auction_results WHERE $where AND $cond";
+        $q=$db->prepare($sql);$q->execute($rp);$r=$q->fetch();
+
+        $prev=null;
+        if($previous){
+            $pw="auction_no=:pa";$pr=['pa'=>$previous['auction_no'],'g'=>$value];
+            if($from&&$to){$pw.=" AND auction_date BETWEEN :pf AND :pt";$pr['pf']=$from;$pr['pt']=$to;}
+            $sql2="SELECT CASE WHEN SUM(CASE WHEN $valid THEN n_kgs ELSE 0 END)>0
+              THEN SUM(CASE WHEN $valid THEN n_kgs*price_per_50kg ELSE 0 END)/
+                   SUM(CASE WHEN $valid THEN n_kgs ELSE 0 END) ELSE NULL END
+              FROM public.clean_auction_results WHERE $pw AND $cond";
+            $q2=$db->prepare($sql2);$q2->execute($pr);$prev=$q2->fetchColumn();
+        }
+        $rows[]=['grade'=>$label,'offered'=>(float)$r['offered'],'sold'=>(float)$r['sold'],
+          'low'=>$r['low']===null?null:(float)$r['low'],'avg'=>$r['avg']===null?null:(float)$r['avg'],
+          'high'=>$r['high']===null?null:(float)$r['high'],
+          'prev_avg'=>($prev===false||$prev===null)?null:(float)$prev];
+    }
+    $off=array_sum(array_column($rows,'offered'));$soldTotal=array_sum(array_column($rows,'sold'));
+    $weighted=0;foreach($rows as $r){if($r['avg']!==null)$weighted+=$r['sold']*$r['avg'];}
+    clean_json(true,'',['summary'=>['auction_no'=>$auction,'held_on'=>$held,
+      'previous_auction'=>$previous['auction_no']??null,'rows'=>$rows,
+      'total'=>['offered'=>$off,'sold'=>$soldTotal,'avg'=>$soldTotal>0?$weighted/$soldTotal:null]]]);
+}
+
 function clean_update(): void {
     ensure_clean_table();$db=clean_db();
     $in=json_decode(file_get_contents('php://input'),true)?:[];
@@ -449,6 +519,7 @@ try {
     if($action==='auctions')clean_auctions();
     if($action==='fetch')clean_fetch();
     if($action==='report')clean_report();
+    if($action==='sale_summary')clean_sale_summary();
     if($action==='update' && ($_SERVER['REQUEST_METHOD']??'')==='POST')clean_update();
     if($action==='delete' && ($_SERVER['REQUEST_METHOD']??'')==='POST')clean_delete();
     if($action==='delete_all' && ($_SERVER['REQUEST_METHOD']??'')==='POST'){
@@ -487,6 +558,17 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
 .actions{display:none}.editmode .actions{display:table-cell}.rowbtn{height:23px;padding:0 5px;font-size:9px}
 .report{padding:12px;display:none}.report.show{display:block}.report h2{margin:0 0 3px;font-size:15px}.report-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:10px}
 .metric{border:1px solid #e5dbd6;border-radius:7px;padding:8px;background:#faf8f7}.metric span{font-size:8px;color:#8b7d77;text-transform:uppercase}.metric strong{display:block;margin-top:3px;font-size:12px}
+.summaryreport{display:none;padding:8px;overflow:auto;flex:1}
+.summaryreport.show{display:block}
+.summary-sheet{width:min(100%,1040px);margin:0 auto;background:#fff;color:#000}
+.summary-title{text-align:center;font-weight:800;font-size:12px;padding:5px}
+.summary-table{width:100%;min-width:850px;border-collapse:collapse;table-layout:fixed;border:3px solid #000;background:#fff;font-size:9px}
+.summary-table th,.summary-table td{border:1px solid #000;padding:4px 5px;text-align:right;background:#fff!important;color:#000!important}
+.summary-table th{text-align:center;font-weight:800;position:sticky;top:0;z-index:2}
+.summary-table td:first-child{text-align:left;font-weight:700}
+.summary-table tr:first-child>*{border-top-width:3px}.summary-table tr:last-child>*{border-bottom-width:3px}
+.summary-table tr>*:first-child{border-left-width:3px}.summary-table tr>*:last-child{border-right-width:3px}
+.summary-table .total td{font-weight:800;border-top:2px solid #000}
 @media(max-width:900px){.app{height:auto;min-height:100vh;overflow:visible}body{overflow:auto}.toolbar{align-items:flex-start}.controls{width:100%}.filters{width:100%}.card{min-height:65vh}.report-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.app{padding:5px}.title{font-size:13px}select,button,input{height:28px;font-size:10px}.controls>*{flex:1 1 auto}.uploadbox.open{width:100%;flex-wrap:wrap}.report-grid{grid-template-columns:repeat(2,1fr)}}
 
@@ -577,13 +659,15 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
     .hl-percent td{padding-right:4px}
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div class="app">
  <div class="toolbar">
   <div><span class="title">Clean Auction</span> <span class="muted">Results stored in PostgreSQL</span></div>
   <div class="controls">
-   <select id="display"><option value="report">High & Low</option><option value="results">Auction Results</option></select>
+   <select id="display"><option value="report">High & Low</option><option value="summary">Sale Summary</option><option value="results">Auction Results</option></select>
    <div class="exportwrap" id="exportWrap">
     <button type="button" id="exportButton" onclick="toggleExportMenu(event)">⇩ Export</button>
     <div class="exportmenu" id="exportMenu">
@@ -613,6 +697,7 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
  </div>
  <div class="card" id="card">
   <div class="report" id="report"></div>
+  <div class="summaryreport" id="summaryreport"></div>
   <div class="tablewrap" id="tablewrap"><table id="table"></table></div>
  </div>
 </div>
@@ -688,26 +773,98 @@ function exportHighLowWord(){
  downloadBlob(new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),highLowExportName('doc'));
  message('High & Low Word export prepared successfully.');
 }
-function exportHighLowPdf(){
- const body=exportTableMarkup();
- const w=window.open('','_blank','width=900,height=700');
- if(!w) throw new Error('The PDF print window was blocked. Allow pop-ups and try again.');
- w.document.open();
- w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Clean Auction High & Low</title>
- <style>
- @page{size:A4 portrait;margin:12mm}
- body{font-family:Arial,sans-serif;margin:0;color:#000;background:#fff}
- .highlow{width:100%;margin:auto}.hl-title{text-align:center;font-size:15px;font-weight:800}.hl-sub{text-align:center;font-size:12px;font-weight:700;margin-bottom:4px}
- table{border-collapse:collapse;width:100%;table-layout:fixed;border:3px solid #000!important}
- th,td{border:1px solid #000!important;padding:5px;text-align:center;vertical-align:middle;background:#fff!important;color:#000!important;font-size:10px}
- tr:first-child>*{border-top-width:3px!important}tr:last-child>*{border-bottom-width:3px!important}
- tr>*:first-child{border-left-width:3px!important}tr>*:last-child{border-right-width:3px!important}
- </style></head><body>${body}
- <script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script>
- </body></html>`);
- w.document.close();
- message('PDF print view opened. Choose “Save as PDF” in the print dialog.');
+async function exportHighLowPdf(){
+ const report=$('report');
+ if(!report || !$('auction').value) throw new Error('Select an Auction No. before exporting High & Low.');
+ const source=report.querySelector('.highlow');
+ if(!source) throw new Error('High & Low report is not ready yet.');
+ if(!window.html2canvas || !window.jspdf || !window.jspdf.jsPDF){
+   throw new Error('PDF exporter did not load. Check the internet connection and refresh the page.');
+ }
+
+ const button=$('exportButton');
+ const originalText=button ? button.textContent : '';
+ if(button){button.disabled=true;button.textContent='Preparing PDF…';}
+
+ /* Clone the report so PDF rendering never changes the visible page. */
+ const clone=source.cloneNode(true);
+ clone.style.width='760px';
+ clone.style.maxWidth='760px';
+ clone.style.margin='0';
+ clone.style.padding='10px';
+ clone.style.background='#fff';
+ clone.style.color='#000';
+
+ clone.querySelectorAll('table').forEach(table=>{
+   table.style.width='100%';
+   table.style.borderCollapse='collapse';
+   table.style.border='3px solid #000';
+   table.style.background='#fff';
+ });
+ clone.querySelectorAll('th,td').forEach(cell=>{
+   cell.style.border='1px solid #000';
+   cell.style.background='#fff';
+   cell.style.color='#000';
+ });
+ clone.querySelectorAll('table tr:first-child > *').forEach(cell=>cell.style.borderTop='3px solid #000');
+ clone.querySelectorAll('table tr:last-child > *').forEach(cell=>cell.style.borderBottom='3px solid #000');
+ clone.querySelectorAll('table tr > *:first-child').forEach(cell=>cell.style.borderLeft='3px solid #000');
+ clone.querySelectorAll('table tr > *:last-child').forEach(cell=>cell.style.borderRight='3px solid #000');
+
+ const stage=document.createElement('div');
+ stage.style.position='fixed';
+ stage.style.left='-10000px';
+ stage.style.top='0';
+ stage.style.width='780px';
+ stage.style.background='#fff';
+ stage.appendChild(clone);
+ document.body.appendChild(stage);
+
+ try{
+   const canvas=await html2canvas(clone,{
+     scale:2.5,
+     backgroundColor:'#ffffff',
+     useCORS:true,
+     logging:false
+   });
+
+   const {jsPDF}=window.jspdf;
+   const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+   const pageW=pdf.internal.pageSize.getWidth();
+   const pageH=pdf.internal.pageSize.getHeight();
+   const margin=10;
+   const usableW=pageW-(margin*2);
+   const imgH=canvas.height*usableW/canvas.width;
+
+   if(imgH <= pageH-(margin*2)){
+     pdf.addImage(canvas.toDataURL('image/jpeg',0.96),'JPEG',margin,margin,usableW,imgH,undefined,'FAST');
+   }else{
+     /* Split unusually tall reports cleanly across A4 pages. */
+     const pxPerMm=canvas.width/usableW;
+     const pagePx=Math.floor((pageH-(margin*2))*pxPerMm);
+     let y=0, page=0;
+     while(y<canvas.height){
+       const sliceH=Math.min(pagePx,canvas.height-y);
+       const part=document.createElement('canvas');
+       part.width=canvas.width;
+       part.height=sliceH;
+       part.getContext('2d').drawImage(canvas,0,y,canvas.width,sliceH,0,0,canvas.width,sliceH);
+       if(page>0)pdf.addPage();
+       const partHmm=sliceH/pxPerMm;
+       pdf.addImage(part.toDataURL('image/jpeg',0.96),'JPEG',margin,margin,usableW,partHmm,undefined,'FAST');
+       y+=sliceH;page++;
+     }
+   }
+
+   /* jsPDF.save() creates and downloads an actual application/pdf file. */
+   pdf.save(highLowExportName('pdf'));
+   message('High & Low PDF downloaded successfully.');
+ }finally{
+   stage.remove();
+   if(button){button.disabled=false;button.textContent=originalText;}
+ }
 }
+
 function syncExportVisibility(){
  const wrap=$('exportWrap');
  if(wrap)wrap.style.display=$('display').value==='report'?'block':'none';
@@ -738,8 +895,30 @@ function renderTable(){
  $('table').innerHTML=h+'</tbody>';
 }
 async function loadReport(){
- $('report').classList.toggle('show',$('display').value==='report');$('tablewrap').style.display=$('display').value==='results'?'block':'none';
- if($('display').value!=='report')return;
+ const mode=$('display').value;
+ $('report').classList.toggle('show',mode==='report');
+ $('summaryreport').classList.toggle('show',mode==='summary');
+ $('tablewrap').style.display=mode==='results'?'block':'none';
+
+ if(mode==='summary'){
+   if(!$('auction').value){$('summaryreport').innerHTML='<div class="muted">Select an auction to view Sale Summary.</div>';return}
+   let d=await api('clean_auction.php?action=sale_summary&season='+encodeURIComponent($('season').value)+'&auction_no='+encodeURIComponent($('auction').value));
+   let s=d.summary, pv=v=>(v===null||v===undefined)?'-':num(v,2);
+   const held=s.held_on?new Date(s.held_on+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}):'-';
+   let body=s.rows.map(r=>`<tr><td>${esc(r.grade)}</td><td>${num(r.offered)}</td><td>${num(r.sold)}</td>
+      <td>${pv(r.low)}</td><td>${pv(r.avg)}</td><td>${pv(r.high)}</td><td>${pv(r.prev_avg)}</td></tr>`).join('');
+   $('summaryreport').innerHTML=`<div class="summary-sheet">
+    <div class="summary-title">Sale summary for Auction No. ${esc(s.auction_no)}, Held on: ${esc(held)}</div>
+    <table class="summary-table"><thead><tr>
+      <th>Grade</th><th>Kgs Offered</th><th>Kgs Sold</th><th>Low USD/50kgs</th>
+      <th>Average USD/50kg</th><th>High USD/50kg</th><th>Prev. Average Price USD/50kg</th>
+    </tr></thead><tbody>${body}
+      <tr class="total"><td>TOTAL</td><td>${num(s.total.offered)}</td><td>${num(s.total.sold)}</td>
+      <td></td><td>${pv(s.total.avg)}</td><td></td><td>-</td></tr>
+    </tbody></table></div>`;
+   return;
+ }
+ if(mode!=='report')return;
  if(!$('auction').value){$('report').innerHTML='<div class="muted">Select an auction to view High & Low.</div>';return}
  let d=await api('clean_auction.php?action=report&season='+encodeURIComponent($('season').value)+'&auction_no='+encodeURIComponent($('auction').value));
  let r=d.report;
@@ -752,8 +931,7 @@ async function loadReport(){
    <div class="hl-title">TANZANIA COFFEE EXCHANGE</div>
    <div class="hl-title">AUCTION RESULTS SALE NO TCB/M/${esc($('auction').value)}</div>
    <div class="hl-sub">Held On ${esc(held)}</div>
-   <table class="hl-table">
-    <colgroup><col><col><col></colgroup>
+   <table class="hl-table"><colgroup><col><col><col></colgroup>
     <tr class="hl-section"><td colspan="3">Price USD/50KGS</td></tr>
     <tr><th>KGS OFFERED</th><th>KGS SOLD</th><th>TOTAL VALUE (USD)</th></tr>
     <tr class="hl-values"><td>${num(r.offered_kgs)}</td><td>${num(r.sold_kgs)}</td><td class="hl-money">${num(r.total_value)}</td></tr>
@@ -767,8 +945,7 @@ async function loadReport(){
     <tr><th>LOWEST PRICE</th><th>AVERAGE PRICE</th><th>HIGHEST PRICE</th></tr>
     <tr class="hl-values"><td>${num(low.low_price)}</td><td>${num(low.avg_price)}</td><td>${num(low.high_price)}</td></tr>
     <tr class="hl-percent"><td colspan="3">PERCENTAGE SOLD = ${num(r.percentage_sold)}%</td></tr>
-   </table>
- </div>`;
+   </table></div>`;
 }
 async function refreshAll(){syncExportVisibility();try{await loadRows();await loadReport()}catch(e){message(e.message,false)}}
 async function upload(confirmReplace){
