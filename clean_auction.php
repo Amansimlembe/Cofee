@@ -473,7 +473,12 @@ body{overflow:hidden}.app{height:100vh;padding:8px;display:grid;grid-template-ro
 .controls{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 select,button,input{height:30px;border:1px solid #d9cfca;border-radius:6px;background:#fff;padding:0 9px;font-size:11px;color:#4b342c}
 button{cursor:pointer;font-weight:700}.primary{background:#5d4037;color:#fff;border-color:#5d4037}
-.danger{color:#9a2f28}.settings{position:relative}.menu{display:none;position:absolute;right:0;top:34px;background:#fff;border:1px solid #ddd2cd;border-radius:7px;padding:6px;min-width:175px;z-index:20;box-shadow:0 8px 22px #0002}.menu.open{display:block}.menu button{width:100%;text-align:left;border:0}
+.danger{color:#9a2f28}.exportwrap{position:relative}
+.exportmenu{display:none;position:absolute;right:0;top:34px;background:#fff;border:1px solid #ddd2cd;border-radius:7px;padding:5px;min-width:110px;z-index:30;box-shadow:0 8px 22px #0002}
+.exportmenu.open{display:block}
+.exportmenu button{display:block;width:100%;text-align:left;border:0;background:#fff}
+.exportmenu button:hover{background:#f5f1ef}
+.settings{position:relative}.menu{display:none;position:absolute;right:0;top:34px;background:#fff;border:1px solid #ddd2cd;border-radius:7px;padding:6px;min-width:175px;z-index:20;box-shadow:0 8px 22px #0002}.menu.open{display:block}.menu button{width:100%;text-align:left;border:0}
 .uploadbox{display:none;align-items:center;gap:5px}.uploadbox.open{display:flex}.msg{font-size:10px;padding:5px 8px;border-radius:5px;display:none}.msg.ok{display:block;background:#eaf5ec;color:#276536}.msg.err{display:block;background:#faecea;color:#8a3029}
 .card{min-height:0;background:#fff;border:1px solid #e6ddd9;border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
 .tablewrap{min-height:0;overflow:auto;flex:1}table{border-collapse:collapse;width:100%;min-width:1250px;font-size:9px}
@@ -579,6 +584,14 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
   <div><span class="title">Clean Auction</span> <span class="muted">Results stored in PostgreSQL</span></div>
   <div class="controls">
    <select id="display"><option value="report">High & Low</option><option value="results">Auction Results</option></select>
+   <div class="exportwrap" id="exportWrap">
+    <button type="button" id="exportButton" onclick="toggleExportMenu(event)">⇩ Export</button>
+    <div class="exportmenu" id="exportMenu">
+      <button type="button" onclick="exportHighLow('pdf')">PDF</button>
+      <button type="button" onclick="exportHighLow('excel')">Excel</button>
+      <button type="button" onclick="exportHighLow('word')">Word</button>
+    </div>
+   </div>
    <div class="settings"><button onclick="toggleSettings()">⚙ Settings</button><div class="menu" id="settingsMenu">
     <button onclick="showUpload()">↑ Upload Results</button>
     <button onclick="toggleEdit()">✎ Edit selected display</button>
@@ -616,6 +629,90 @@ function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&l
 function num(v,d=2){let n=Number(v);if(!Number.isFinite(n))return '-';return n.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:d})}
 function message(text,ok=true){let m=$('msg');m.className='msg '+(ok?'ok':'err');m.textContent=text;setTimeout(()=>{m.className='msg'},6500)}
 async function api(url,opt){let r=await fetch(url,opt);let j=await r.json();if(!r.ok||j.success===false)throw new Error(j.message||'Request failed');return j.data}
+
+function toggleExportMenu(event){
+ if(event)event.stopPropagation();
+ $('exportMenu').classList.toggle('open');
+ $('settingsMenu').classList.remove('open');
+}
+function highLowExportName(ext){
+ const auction=$('auction').value||'Auction';
+ const season=($('season').value||'Season').replace('/','-');
+ return `Clean_Auction_High_Low_${season}_Auction_${auction}.${ext}`;
+}
+function downloadBlob(blob,name){
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);
+ a.download=name;
+ document.body.appendChild(a);
+ a.click();
+ setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
+function exportTableMarkup(){
+ const report=$('report');
+ if(!report || !$('auction').value) throw new Error('Select an Auction No. before exporting High & Low.');
+ const highlow=report.querySelector('.highlow');
+ if(!highlow) throw new Error('High & Low report is not ready yet.');
+ return highlow.outerHTML;
+}
+function exportHighLow(type){
+ $('exportMenu').classList.remove('open');
+ if($('display').value!=='report'){message('High & Low must be selected before exporting.',false);return}
+ try{
+   if(type==='excel') return exportHighLowExcel();
+   if(type==='word') return exportHighLowWord();
+   if(type==='pdf') return exportHighLowPdf();
+ }catch(e){message(e.message,false)}
+}
+function exportHighLowExcel(){
+ const body=exportTableMarkup();
+ const html=`<!doctype html><html><head><meta charset="utf-8">
+ <style>
+ body{font-family:Arial,sans-serif}.highlow{width:760px;margin:auto}.hl-title,.hl-sub{text-align:center;font-weight:bold}
+ table{border-collapse:collapse;width:100%;border:3px solid #000}th,td{border:1px solid #000;padding:5px;text-align:center;background:#fff;color:#000}
+ tr:first-child>*{border-top:3px solid #000}tr:last-child>*{border-bottom:3px solid #000}
+ tr>*:first-child{border-left:3px solid #000}tr>*:last-child{border-right:3px solid #000}
+ </style></head><body>${body}</body></html>`;
+ downloadBlob(new Blob(['\ufeff',html],{type:'application/vnd.ms-excel;charset=utf-8'}),highLowExportName('xls'));
+ message('High & Low Excel export prepared successfully.');
+}
+function exportHighLowWord(){
+ const body=exportTableMarkup();
+ const html=`<!doctype html><html><head><meta charset="utf-8">
+ <style>
+ @page{size:A4 portrait;margin:16mm}body{font-family:Arial,sans-serif}.highlow{width:100%}.hl-title,.hl-sub{text-align:center;font-weight:bold}
+ table{border-collapse:collapse;width:100%;border:3px solid #000}th,td{border:1px solid #000;padding:5px;text-align:center;background:#fff;color:#000}
+ tr:first-child>*{border-top:3px solid #000}tr:last-child>*{border-bottom:3px solid #000}
+ tr>*:first-child{border-left:3px solid #000}tr>*:last-child{border-right:3px solid #000}
+ </style></head><body>${body}</body></html>`;
+ downloadBlob(new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),highLowExportName('doc'));
+ message('High & Low Word export prepared successfully.');
+}
+function exportHighLowPdf(){
+ const body=exportTableMarkup();
+ const w=window.open('','_blank','width=900,height=700');
+ if(!w) throw new Error('The PDF print window was blocked. Allow pop-ups and try again.');
+ w.document.open();
+ w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Clean Auction High & Low</title>
+ <style>
+ @page{size:A4 portrait;margin:12mm}
+ body{font-family:Arial,sans-serif;margin:0;color:#000;background:#fff}
+ .highlow{width:100%;margin:auto}.hl-title{text-align:center;font-size:15px;font-weight:800}.hl-sub{text-align:center;font-size:12px;font-weight:700;margin-bottom:4px}
+ table{border-collapse:collapse;width:100%;table-layout:fixed;border:3px solid #000!important}
+ th,td{border:1px solid #000!important;padding:5px;text-align:center;vertical-align:middle;background:#fff!important;color:#000!important;font-size:10px}
+ tr:first-child>*{border-top-width:3px!important}tr:last-child>*{border-bottom-width:3px!important}
+ tr>*:first-child{border-left-width:3px!important}tr>*:last-child{border-right-width:3px!important}
+ </style></head><body>${body}
+ <script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script>
+ </body></html>`);
+ w.document.close();
+ message('PDF print view opened. Choose “Save as PDF” in the print dialog.');
+}
+function syncExportVisibility(){
+ const wrap=$('exportWrap');
+ if(wrap)wrap.style.display=$('display').value==='report'?'block':'none';
+}
+
 function toggleSettings(){$('settingsMenu').classList.toggle('open')}
 function showUpload(){$('uploadbox').classList.toggle('open');$('settingsMenu').classList.remove('open')}
 function toggleEdit(){editMode=!editMode;$('card').classList.toggle('editmode',editMode);$('settingsMenu').classList.remove('open');renderTable()}
@@ -673,7 +770,7 @@ async function loadReport(){
    </table>
  </div>`;
 }
-async function refreshAll(){try{await loadRows();await loadReport()}catch(e){message(e.message,false)}}
+async function refreshAll(){syncExportVisibility();try{await loadRows();await loadReport()}catch(e){message(e.message,false)}}
 async function upload(confirmReplace){
  let f=$('file').files[0];if(!f){message('Select the Clean Auction Results Excel file first.',false);return}
  let fd=new FormData();fd.append('clean_excel',f);if(confirmReplace)fd.append('confirm_replace','1');
@@ -706,7 +803,10 @@ async function editRow(id){
 $('season').addEventListener('change',async()=>{await loadAuctions();$('auction').value='';await refreshAll()});
 $('auction').addEventListener('change',refreshAll);
 $('display').addEventListener('change',refreshAll);
-document.addEventListener('click',e=>{if(!e.target.closest('.settings'))$('settingsMenu').classList.remove('open')});
+document.addEventListener('click',e=>{
+ if(!e.target.closest('.settings'))$('settingsMenu').classList.remove('open');
+ if(!e.target.closest('.exportwrap'))$('exportMenu').classList.remove('open');
+});
 (async()=>{try{await loadFilters();await refreshAll()}catch(e){message(e.message,false)}})();
 </script>
 </body></html>
