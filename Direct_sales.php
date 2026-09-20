@@ -160,38 +160,109 @@ if(isset($_GET['action'])){
        direct_json(true,'',['rows'=>$st->fetchAll()]);
    }
    if($a==='summary'){
-       $w=['sale_category=:c']; $p=['c'=>$cat];
+       $w=['d.sale_category=:c']; $p=['c'=>$cat];
+       $bounds=null;
        if($season!==''){
            $bounds=direct_sale_season_bounds($season);
            if(!$bounds) direct_json(false,'Invalid Sale Season selected.',[],400);
-           $w[]='invoice_date BETWEEN :sf AND :st'; $p['sf']=$bounds[0]; $p['st']=$bounds[1];
+           $w[]='d.invoice_date BETWEEN :sf AND :st';
+           $p['sf']=$bounds[0]; $p['st']=$bounds[1];
        }
        $where=implode(' AND ',$w);
 
-       /* Value follows the requested Direct Sales formula:
-          (Price USD/50kg / 50) × Net Weight kg. */
-       $valueExpr="COALESCE(net_kg,0) * COALESCE(price_usd_50kg,0) / 50.0";
+       /*
+        * Normal categories summarize Net Kg.
+        * Local Sale summarizes the ACTUAL remaining LS quantity:
+        * LS Balance = LS Net Kg - all season-matched Direct Export Net Kg
+        * whose Source Invoice Number equals the LS Invoice Number.
+        */
+       if($cat==='Local Sale'){
+           $deSeasonSql='';
+           $deParams=[];
+           if($bounds){
+               $deSeasonSql=' AND de.invoice_date BETWEEN :de_sf AND :de_st';
+               $deParams=['de_sf'=>$bounds[0],'de_st'=>$bounds[1]];
+           }
 
-       $sqlCoffee="SELECT COALESCE(NULLIF(BTRIM(coffee_type),''),'Unspecified') label,
-           COALESCE(SUM(net_kg),0) net_kg,
+           $balanceExpr="GREATEST(
+               COALESCE(d.net_kg,0) -
+               COALESCE((
+                   SELECT SUM(COALESCE(de.net_kg,0))
+                   FROM public.direct_sales de
+                   WHERE de.sale_category='Direct Export'
+                     AND NULLIF(BTRIM(de.source_invoice_number),'') IS NOT NULL
+                     AND UPPER(BTRIM(de.source_invoice_number))=UPPER(BTRIM(d.invoice_number))
+                     $deSeasonSql
+               ),0),
+               0
+           )";
+
+           /* Value uses the remaining LS balance, not the original LS Net Kg. */
+           $valueExpr="($balanceExpr) * COALESCE(d.price_usd_50kg,0) / 50.0";
+
+           $sqlCoffee="SELECT COALESCE(NULLIF(BTRIM(d.coffee_type),''),'Unspecified') label,
+               COALESCE(SUM(d.net_kg),0) net_kg,
+               COALESCE(SUM($balanceExpr),0) ls_balance_kg,
+               COALESCE(SUM($valueExpr),0) value_usd
+               FROM public.direct_sales d WHERE $where
+               GROUP BY 1 ORDER BY ls_balance_kg DESC,label";
+           $st=direct_db()->prepare($sqlCoffee);
+           $st->execute(array_merge($p,$deParams));
+           $coffee=$st->fetchAll();
+
+           $sqlRegion="SELECT COALESCE(NULLIF(BTRIM(d.region),''),'Unspecified') label,
+               COALESCE(SUM(d.net_kg),0) net_kg,
+               COALESCE(SUM($balanceExpr),0) ls_balance_kg,
+               COALESCE(SUM($valueExpr),0) value_usd
+               FROM public.direct_sales d WHERE $where
+               GROUP BY 1 ORDER BY ls_balance_kg DESC,label";
+           $st=direct_db()->prepare($sqlRegion);
+           $st->execute(array_merge($p,$deParams));
+           $regions=$st->fetchAll();
+
+           $sqlTotal="SELECT COALESCE(SUM(d.net_kg),0) net_kg,
+               COALESCE(SUM($balanceExpr),0) ls_balance_kg,
+               COALESCE(SUM($valueExpr),0) value_usd
+               FROM public.direct_sales d WHERE $where";
+           $st=direct_db()->prepare($sqlTotal);
+           $st->execute(array_merge($p,$deParams));
+           $total=$st->fetch();
+
+           direct_json(true,'',[
+              'is_local_sale'=>true,
+              'coffee_type'=>$coffee,
+              'regions'=>$regions,
+              'total'=>[
+                 'net_kg'=>(float)($total['net_kg']??0),
+                 'ls_balance_kg'=>(float)($total['ls_balance_kg']??0),
+                 'value_usd'=>(float)($total['value_usd']??0)
+              ]
+           ]);
+       }
+
+       $valueExpr="COALESCE(d.net_kg,0) * COALESCE(d.price_usd_50kg,0) / 50.0";
+
+       $sqlCoffee="SELECT COALESCE(NULLIF(BTRIM(d.coffee_type),''),'Unspecified') label,
+           COALESCE(SUM(d.net_kg),0) net_kg,
            COALESCE(SUM($valueExpr),0) value_usd
-           FROM public.direct_sales WHERE $where
+           FROM public.direct_sales d WHERE $where
            GROUP BY 1 ORDER BY net_kg DESC,label";
        $st=direct_db()->prepare($sqlCoffee); $st->execute($p); $coffee=$st->fetchAll();
 
-       $sqlRegion="SELECT COALESCE(NULLIF(BTRIM(region),''),'Unspecified') label,
-           COALESCE(SUM(net_kg),0) net_kg,
+       $sqlRegion="SELECT COALESCE(NULLIF(BTRIM(d.region),''),'Unspecified') label,
+           COALESCE(SUM(d.net_kg),0) net_kg,
            COALESCE(SUM($valueExpr),0) value_usd
-           FROM public.direct_sales WHERE $where
+           FROM public.direct_sales d WHERE $where
            GROUP BY 1 ORDER BY net_kg DESC,label";
        $st=direct_db()->prepare($sqlRegion); $st->execute($p); $regions=$st->fetchAll();
 
-       $sqlTotal="SELECT COALESCE(SUM(net_kg),0) net_kg,
+       $sqlTotal="SELECT COALESCE(SUM(d.net_kg),0) net_kg,
            COALESCE(SUM($valueExpr),0) value_usd
-           FROM public.direct_sales WHERE $where";
+           FROM public.direct_sales d WHERE $where";
        $st=direct_db()->prepare($sqlTotal); $st->execute($p); $total=$st->fetch();
 
        direct_json(true,'',[
+          'is_local_sale'=>false,
           'coffee_type'=>$coffee,
           'regions'=>$regions,
           'total'=>[
@@ -276,7 +347,19 @@ async function loadRows(){
   $('status').textContent=d.rows.length.toLocaleString()+' '+category+' rows';
  }catch(e){$('status').textContent=e.message}
 }
-function summaryTable(rows,total,firstTitle){
+function summaryTable(rows,total,firstTitle,isLocalSale=false){
+ if(isLocalSale){
+   const grandBalance=Number(total.ls_balance_kg)||0;
+   let body=rows.map(r=>{
+     const originalKg=Number(r.net_kg)||0;
+     const balanceKg=Number(r.ls_balance_kg)||0;
+     const share=grandBalance>0?balanceKg/grandBalance*100:0;
+     return `<tr><td>${esc(r.label)}</td><td>${num(originalKg,3)}</td><td>${num(balanceKg,3)}</td><td>${num(r.value_usd,2)}</td><td>${num(share,2)}%</td></tr>`;
+   }).join('');
+   return `<table><thead><tr><th>${firstTitle}</th><th>Net Weight (kg)</th><th>LS Balance (kg)</th><th>Balance Value (USD)</th><th>% Share of LS Balance</th></tr></thead>
+   <tbody>${body||'<tr><td colspan="5">No data</td></tr>'}</tbody>
+   <tfoot><tr><td>Grand Total</td><td>${num(total.net_kg,3)}</td><td>${num(total.ls_balance_kg,3)}</td><td>${num(total.value_usd,2)}</td><td>${grandBalance>0?'100%':'0%'}</td></tr></tfoot></table>`;
+ }
  const grand=Number(total.net_kg)||0;
  let body=rows.map(r=>{
    const kg=Number(r.net_kg)||0,share=grand>0?kg/grand*100:0;
@@ -290,9 +373,9 @@ async function loadSummary(){
  try{
    $('status').textContent='Preparing Sale Summary…';
    let d=await api('Direct_sales.php?action=summary&category='+encodeURIComponent(category)+'&season='+encodeURIComponent($('season').value));
-   $('coffeeSummary').innerHTML=summaryTable(d.coffee_type,d.total,'Coffee Type');
-   $('regionSummary').innerHTML=summaryTable(d.regions,d.total,'Region');
-   $('status').textContent=category+' Sale Summary'+($('season').value?' · '+$('season').value:' · All Sale Seasons');
+   $('coffeeSummary').innerHTML=summaryTable(d.coffee_type,d.total,'Coffee Type',!!d.is_local_sale);
+   $('regionSummary').innerHTML=summaryTable(d.regions,d.total,'Region',!!d.is_local_sale);
+   $('status').textContent=category+' Sale Summary'+($('season').value?' · '+$('season').value:' · All Sale Seasons')+(d.is_local_sale?' · Value and share based on remaining LS Balance':'');
  }catch(e){$('status').textContent=e.message}
 }
 async function refreshCurrent(){
