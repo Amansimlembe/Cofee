@@ -453,7 +453,86 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
 @media(max-width:900px){.app{height:auto;min-height:100vh;overflow:visible}body{overflow:auto}.toolbar{align-items:flex-start}.controls{width:100%}.filters{width:100%}.card{min-height:65vh}.report-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.app{padding:5px}.title{font-size:13px}select,button,input{height:28px;font-size:10px}.controls>*{flex:1 1 auto}.uploadbox.open{width:100%;flex-wrap:wrap}.report-grid{grid-template-columns:repeat(2,1fr)}}
 
-.highlow{max-width:760px;margin:0 auto;padding:6px}.hl-title{text-align:center;font-weight:800;font-size:13px;line-height:1.35}.hl-sub{text-align:center;font-weight:700;font-size:11px;margin-top:1px}.hl-table{width:100%;min-width:0!important;border-collapse:collapse;margin-top:6px;font-size:10px}.hl-table th,.hl-table td{border:1px solid #72584e;padding:5px 7px;text-align:center;white-space:normal}.hl-table th{position:static;background:#5d4037;color:#fff;font-size:9px}.hl-section td{background:#e9dfda;color:#4b342c;font-weight:800;text-align:center}.hl-values td{font-weight:700;background:#fff}.hl-percent td{text-align:right;font-weight:800;background:#f5efec}.hl-money{font-variant-numeric:tabular-nums}@media(max-width:600px){.highlow{padding:3px}.hl-title{font-size:11px}.hl-sub{font-size:9px}.hl-table{font-size:8px}.hl-table th,.hl-table td{padding:4px 3px}.hl-table th{font-size:7.5px}}
+.highlow{
+    width:min(100%,760px);
+    margin:0 auto;
+    padding:5px 7px 8px;
+    overflow:visible
+}
+.hl-title{
+    text-align:center;
+    font-weight:800;
+    font-size:12px;
+    line-height:1.25;
+    padding:1px 3px
+}
+.hl-sub{
+    text-align:center;
+    font-weight:700;
+    font-size:10px;
+    line-height:1.2;
+    padding:1px 3px 3px
+}
+.hl-table{
+    width:100%!important;
+    min-width:0!important;
+    table-layout:fixed!important;
+    border-collapse:collapse;
+    margin:0;
+    font-size:9.5px
+}
+.hl-table col{width:33.333%}
+.hl-table th,.hl-table td{
+    border:1px solid #72584e;
+    padding:3px 5px;
+    height:22px;
+    line-height:1.15;
+    text-align:center;
+    vertical-align:middle;
+    white-space:normal;
+    overflow-wrap:break-word
+}
+.hl-table th{
+    position:static!important;
+    background:#5d4037;
+    color:#fff;
+    font-size:8.5px;
+    font-weight:800
+}
+.hl-section td{
+    background:#e9dfda;
+    color:#4b342c;
+    font-weight:800;
+    text-align:center;
+    height:22px
+}
+.hl-values td{
+    background:#fff;
+    font-weight:700;
+    font-variant-numeric:tabular-nums
+}
+.hl-percent td{
+    background:#f5efec;
+    text-align:right;
+    font-weight:800;
+    height:23px;
+    padding-right:8px
+}
+.hl-money{font-variant-numeric:tabular-nums}
+@media(max-width:900px){
+    .report{padding:7px}
+    .highlow{width:100%;max-width:720px;padding:4px}
+}
+@media(max-width:600px){
+    .report{padding:4px}
+    .highlow{padding:2px}
+    .hl-title{font-size:10px}
+    .hl-sub{font-size:8.5px}
+    .hl-table{font-size:7.7px}
+    .hl-table th{font-size:7px}
+    .hl-table th,.hl-table td{padding:3px 2px;height:20px}
+    .hl-percent td{padding-right:4px}
+}
 </style>
 </head>
 <body>
@@ -533,9 +612,10 @@ async function loadReport(){
  const held=r.auction_date ? new Date(r.auction_date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) : '-';
  $('report').innerHTML=`<div class="highlow">
    <div class="hl-title">TANZANIA COFFEE EXCHANGE</div>
-   <div class="hl-title">AUCTION RESULTS SALE NO. ${esc($('auction').value)}</div>
+   <div class="hl-title">AUCTION RESULTS SALE NO TCB/M/${esc($('auction').value)}</div>
    <div class="hl-sub">Held On ${esc(held)}</div>
    <table class="hl-table">
+    <colgroup><col><col><col></colgroup>
     <tr class="hl-section"><td colspan="3">Price USD/50KGS</td></tr>
     <tr><th>KGS OFFERED</th><th>KGS SOLD</th><th>TOTAL VALUE (USD)</th></tr>
     <tr class="hl-values"><td>${num(r.offered_kgs)}</td><td>${num(r.sold_kgs)}</td><td class="hl-money">${num(r.total_value)}</td></tr>
