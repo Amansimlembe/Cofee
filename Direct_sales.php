@@ -444,15 +444,69 @@ function exportWord(){
 function exportExcel(){
  if(typeof XLSX==='undefined'){alert('Excel export library is not available.');return}
  const wb=XLSX.utils.book_new();
+
+ // Force quantitative fields to real Excel numeric cells, not formatted text.
+ const numericHeaders=new Set([
+   'Net Kg','Net Weight (kg)','Local Sale Balance (kg)','LS Balance (kg)',
+   'Price (USD/50kgs)','Exchange Rate','Value (USD)','Balance Value (USD)',
+   '% Share','% Share of LS Balance'
+ ]);
+ const percentHeaders=new Set(['% Share','% Share of LS Balance']);
+
+ function sheetFromTable(table){
+   const matrix=[];
+   const trs=[...table.querySelectorAll('tr')];
+   trs.forEach(tr=>{
+     const row=[...tr.querySelectorAll('th,td')].map(cell=>cell.textContent.trim());
+     matrix.push(row);
+   });
+   if(!matrix.length)return XLSX.utils.aoa_to_sheet([]);
+
+   const headers=matrix[0];
+   const numericIndexes=new Set();
+   const percentIndexes=new Set();
+   headers.forEach((h,i)=>{
+     if(numericHeaders.has(h))numericIndexes.add(i);
+     if(percentHeaders.has(h))percentIndexes.add(i);
+   });
+
+   const aoa=matrix.map((row,ri)=>row.map((v,ci)=>{
+     if(ri===0 || !numericIndexes.has(ci)) return v;
+     if(v==='' || v==='-' || v===null) return null;
+     const cleaned=String(v).replace(/,/g,'').replace(/%/g,'').trim();
+     const n=Number(cleaned);
+     if(!Number.isFinite(n)) return v;
+     return percentIndexes.has(ci) ? n/100 : n;
+   }));
+
+   const ws=XLSX.utils.aoa_to_sheet(aoa);
+   const range=XLSX.utils.decode_range(ws['!ref']||'A1');
+   for(let c=range.s.c;c<=range.e.c;c++){
+     const header=headers[c]||'';
+     if(!numericHeaders.has(header))continue;
+     for(let r=1;r<=range.e.r;r++){
+       const addr=XLSX.utils.encode_cell({r,c});
+       const cell=ws[addr];
+       if(!cell || cell.v===null || typeof cell.v!=='number')continue;
+       cell.t='n';
+       if(percentHeaders.has(header)) cell.z='0.00%';
+       else if(header==='Exchange Rate') cell.z='#,##0.00####';
+       else if(header.includes('Price') || header.includes('Value')) cell.z='#,##0.00####';
+       else cell.z='#,##0.###';
+     }
+   }
+   return ws;
+ }
+
  if($('display').value==='summary'){
    [['Coffee Type',$('coffeeSummary').querySelector('table')],['Region',$('regionSummary').querySelector('table')]].forEach(([name,table])=>{
-     if(table){const ws=XLSX.utils.table_to_sheet(table,{raw:true});XLSX.utils.book_append_sheet(wb,ws,name);}
+     if(table)XLSX.utils.book_append_sheet(wb,sheetFromTable(table),name);
    });
  }else{
    const table=$('table');
-   if(table){const ws=XLSX.utils.table_to_sheet(table,{raw:true});XLSX.utils.book_append_sheet(wb,ws,'All Sales');}
+   if(table)XLSX.utils.book_append_sheet(wb,sheetFromTable(table),'All Sales');
  }
- XLSX.writeFile(wb,exportFileName('xlsx'));
+ XLSX.writeFile(wb,exportFileName('xlsx'),{cellStyles:true});
 }
 async function exportPdf(){
  if(!window.jspdf||typeof html2canvas==='undefined'){alert('PDF export library is not available.');return}
