@@ -2057,7 +2057,7 @@ function openCleanAuction(clickedElement) {
         };
 
         if (frame.getAttribute("src") === "about:blank") {
-            frame.src = "Clean_auction.php";
+            frame.src = "clean_auction.php";
         }
     }
 
