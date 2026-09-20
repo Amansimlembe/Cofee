@@ -396,6 +396,26 @@ function clean_report(): void {
     $soldKgs=(float)($r['sold_kgs']??0);
     $r['percentage_sold']=$offered>0 ? ($soldKgs/$offered*100) : 0;
 
+    /* Keep the report response aligned with the High & Low renderer.
+       Flat fields are retained for backward compatibility. */
+    $r['prices'] = [
+        'top' => [
+            'low_price'  => $r['top_low'] ?? null,
+            'avg_price'  => $r['top_avg'] ?? null,
+            'high_price' => $r['top_high'] ?? null,
+        ],
+        'c' => [
+            'low_price'  => $r['c_low'] ?? null,
+            'avg_price'  => $r['c_avg'] ?? null,
+            'high_price' => $r['c_high'] ?? null,
+        ],
+        'lower' => [
+            'low_price'  => $r['lower_low'] ?? null,
+            'avg_price'  => $r['lower_avg'] ?? null,
+            'high_price' => $r['lower_high'] ?? null,
+        ],
+    ];
+
     clean_json(true,'',['report'=>$r]);
 }
 function clean_update(): void {
@@ -626,7 +646,10 @@ async function loadReport(){
  if(!$('auction').value){$('report').innerHTML='<div class="muted">Select an auction to view High & Low.</div>';return}
  let d=await api('clean_auction.php?action=report&season='+encodeURIComponent($('season').value)+'&auction_no='+encodeURIComponent($('auction').value));
  let r=d.report;
- const p=r.prices||{}; const top=p.top||{}, cg=p.c||{}, low=p.lower||{};
+ const p=r.prices||{};
+ const top=p.top||{low_price:r.top_low,avg_price:r.top_avg,high_price:r.top_high};
+ const cg=p.c||{low_price:r.c_low,avg_price:r.c_avg,high_price:r.c_high};
+ const low=p.lower||{low_price:r.lower_low,avg_price:r.lower_avg,high_price:r.lower_high};
  const held=r.auction_date ? new Date(r.auction_date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) : '-';
  $('report').innerHTML=`<div class="highlow">
    <div class="hl-title">TANZANIA COFFEE EXCHANGE</div>
