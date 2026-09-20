@@ -1207,6 +1207,99 @@ submenu names.
     }
 }
 
+
+/* =========================================================
+   DISPLAY-FIRST RESPONSIVE LAYOUT
+   Compact navigation chrome so embedded dashboards receive
+   the maximum practical viewport on every screen size.
+========================================================= */
+:root {
+    --shell-sidebar: 220px;
+    --shell-sidebar-collapsed: 62px;
+    --shell-topbar: 54px;
+}
+
+.sidebar { width: var(--shell-sidebar); --sidebar-width: var(--shell-sidebar); }
+.sidebar.collapsed { width: var(--shell-sidebar-collapsed); --sidebar-width: var(--shell-sidebar-collapsed); }
+.sidebar-header { height: 68px; padding: 10px 42px 10px 14px; }
+.logo-icon { font-size: 23px; }
+.logo-text { font-size: 16px; }
+.logo-subtitle { font-size: 10px; }
+.menu { padding: 10px 8px 16px; }
+.menu-item { margin-bottom: 3px; }
+.menu-link { min-height: 40px; padding: 7px 9px; font-size: 13px; }
+.menu-left { gap: 9px; }
+.menu-icon { width: 22px; min-width: 22px; height: 22px; font-size: 16px; }
+.menu-text { font-size: 13px; }
+.submenu { margin: 3px 6px 5px 29px; padding-left: 7px; }
+.submenu a { padding: 7px 8px; font-size: 12px; }
+.sidebar-toggle { top: 20px; right: 8px; width: 27px; height: 27px; }
+.main { margin-left: var(--shell-sidebar); min-width: 0; }
+.sidebar.collapsed ~ .main { margin-left: var(--shell-sidebar-collapsed); }
+.topbar { height: var(--shell-topbar); min-height: var(--shell-topbar); padding: 0 16px; }
+.topbar-left { gap: 9px; min-width: 0; }
+.topbar-icon { width: 32px; height: 32px; min-width: 32px; font-size: 16px; border-radius: 7px; }
+.topbar-title { font-size: 16px; line-height: 1.15; }
+.topbar-subtitle { font-size: 9px; margin-top: 1px; }
+.topbar-right { gap: 10px; }
+.market-label { font-size: 10px; }
+.user-info { gap: 7px; padding-left: 10px; }
+.user-avatar { width: 29px; height: 29px; font-size: 12px; }
+.user-name { font-size: 11px; }
+.logout { font-size: 10px; }
+.content { padding: 8px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; }
+.kagera-page-section, .clean-page-section { min-height: calc(100dvh - var(--shell-topbar) - 16px); height: calc(100dvh - var(--shell-topbar) - 16px); }
+.kagera-auction-frame, .clean-auction-frame { min-height: 100%; height: 100%; width: 100%; }
+
+@media (max-width: 1100px) {
+    :root { --shell-sidebar: 190px; }
+    .sidebar { width: var(--shell-sidebar); --sidebar-width: var(--shell-sidebar); }
+    .main { margin-left: var(--shell-sidebar); }
+    .content { padding: 6px; }
+    .market-label { display: none; }
+}
+
+@media (max-width: 900px) {
+    :root { --shell-sidebar: 58px; --shell-sidebar-collapsed: 58px; --shell-topbar: 50px; }
+    .sidebar, .sidebar.collapsed { width: var(--shell-sidebar); --sidebar-width: var(--shell-sidebar); }
+    .sidebar .logo-text, .sidebar .logo-subtitle, .sidebar .menu-text, .sidebar .arrow { display: none; }
+    .sidebar-header { height: 58px; padding: 8px 5px; }
+    .sidebar .menu { padding: 8px 5px 12px; }
+    .sidebar .menu-link { min-height: 38px; justify-content: center; padding: 6px 4px; }
+    .sidebar .menu-left { justify-content: center; gap: 0; }
+    .sidebar-toggle { display: none; }
+    .main, .sidebar.collapsed ~ .main { margin-left: var(--shell-sidebar); }
+    .topbar { padding: 0 10px; }
+    .topbar-right { display: none; }
+    .content { padding: 4px; }
+    .kagera-page-section, .clean-page-section { min-height: calc(100dvh - var(--shell-topbar) - 8px); height: calc(100dvh - var(--shell-topbar) - 8px); }
+}
+
+@media (max-width: 600px) {
+    :root { --shell-sidebar: 50px; --shell-sidebar-collapsed: 50px; --shell-topbar: 46px; }
+    .sidebar, .sidebar.collapsed { width: var(--shell-sidebar); --sidebar-width: var(--shell-sidebar); }
+    .main, .sidebar.collapsed ~ .main { margin-left: var(--shell-sidebar); }
+    .sidebar-header { height: 50px; padding: 6px 3px; }
+    .logo-icon { font-size: 19px; }
+    .sidebar .menu { padding: 6px 4px 10px; }
+    .sidebar .menu-link { min-height: 36px; padding: 5px 3px; }
+    .menu-icon { width: 20px; min-width: 20px; height: 20px; font-size: 15px; }
+    .topbar { height: var(--shell-topbar); min-height: var(--shell-topbar); padding: 0 7px; }
+    .topbar-icon { width: 28px; height: 28px; min-width: 28px; font-size: 14px; }
+    .topbar-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .topbar-subtitle { display: none; }
+    .content { padding: 2px; }
+    .kagera-page-section, .clean-page-section { min-height: calc(100dvh - var(--shell-topbar) - 4px); height: calc(100dvh - var(--shell-topbar) - 4px); }
+}
+
+@media (max-width: 400px) {
+    :root { --shell-sidebar: 46px; --shell-sidebar-collapsed: 46px; --shell-topbar: 44px; }
+    .sidebar, .sidebar.collapsed { width: var(--shell-sidebar); --sidebar-width: var(--shell-sidebar); }
+    .main, .sidebar.collapsed ~ .main { margin-left: var(--shell-sidebar); }
+    .topbar-left { gap: 6px; }
+    .topbar-title { font-size: 12px; }
+}
+
 </style>
 
 </head>
@@ -1861,7 +1954,7 @@ function openCleanAuction(clickedElement) {
         section.classList.remove("active");
     });
 
-    const CleanSection = document.getElementById("Clean-auction");
+    const CleanSection = document.getElementById("clean-auction");
 
     if (CleanSection) {
         CleanSection.classList.add("active");
