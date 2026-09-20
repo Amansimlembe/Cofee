@@ -336,56 +336,68 @@ function clean_auctions(): void {
 }
 function clean_report(): void {
     ensure_clean_table(); $db=clean_db();
-    $season=trim($_GET['season']??''); $auction=trim($_GET['auction_no']??'');
+    $season=trim($_GET['season']??'');
+    $auction=trim($_GET['auction_no']??'');
     if($auction==='') clean_json(false,'Select an Auction No. to view High & Low.',[],400);
 
-    $where="auction_no=:a"; $p=['a'=>$auction];
+    $where="auction_no=:a";
+    $p=['a'=>$auction];
     if($season!==''){
         [$from,$to]=clean_sale_season_range($season);
         $where.=" AND auction_date BETWEEN :season_from AND :season_to";
-        $p['season_from']=$from; $p['season_to']=$to;
+        $p['season_from']=$from;
+        $p['season_to']=$to;
     }
 
-    /* Grade2 takes priority where present; otherwise use Grade. Spaces, hyphens
-       and underscores are ignored so workbook/database spelling remains robust. */
-    $gradeExpr="UPPER(REGEXP_REPLACE(COALESCE(NULLIF(BTRIM(grade2),''),NULLIF(BTRIM(grade),''),''),'[^A-Za-z0-9]+','','g'))";
-    $sold="LOWER(BTRIM(COALESCE(status,'')))='sold'";
+    /*
+     * Excel PRICE (/50Kg) is already USD per 50 kg.
+     * A sold lot is recognised after trimming/case-normalising STATUS.
+     * Price statistics exclude blank/zero prices but do NOT divide the displayed
+     * lowest/average/highest price by 50.
+     */
+    $sold = "UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
+    $validPrice = "($sold AND price_per_50kg IS NOT NULL AND price_per_50kg > 0)";
+    $gradeNorm = "UPPER(REGEXP_REPLACE(BTRIM(COALESCE(grade,'')), '[^A-Za-z0-9]+', '', 'g'))";
 
-    $summary=$db->prepare("SELECT
+    $sql="SELECT
         MAX(auction_date) AS auction_date,
-        SUM(COALESCE(n_kgs,0)) AS offered_kgs,
-        SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END) AS sold_kgs,
-        SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0)*COALESCE(price_per_50kg,0)/50.0 ELSE 0 END) AS total_value
-      FROM public.clean_auction_results WHERE $where");
-    $summary->execute($p); $r=$summary->fetch() ?: [];
+        COALESCE(SUM(n_kgs),0) AS offered_kgs,
+        COALESCE(SUM(CASE WHEN $sold THEN n_kgs ELSE 0 END),0) AS sold_kgs,
+        COALESCE(SUM(CASE WHEN $validPrice THEN (n_kgs * price_per_50kg / 50.0) ELSE 0 END),0) AS total_value,
 
-    $groups=[
-      'top'=>['AAA','AA','AB','A','B','PB'],
-      'c'=>['C'],
-      'lower'=>['AF','F','E','TT','UG']
-    ];
-    $prices=[];
-    foreach($groups as $key=>$grades){
-        $ph=[]; $gp=$p;
-        foreach($grades as $i=>$g){$name='g'.$i;$ph[]=':'.$name;$gp[$name]=$g;}
-        $q=$db->prepare("SELECT
-            MIN(CASE WHEN $sold THEN price_per_50kg END) AS low_price,
-            CASE WHEN SUM(CASE WHEN $sold THEN n_kgs ELSE 0 END)>0
-                 THEN SUM(CASE WHEN $sold THEN n_kgs*price_per_50kg ELSE 0 END)
-                    / SUM(CASE WHEN $sold THEN n_kgs ELSE 0 END)
-                 ELSE NULL END AS avg_price,
-            MAX(CASE WHEN $sold THEN price_per_50kg END) AS high_price
-          FROM public.clean_auction_results
-          WHERE $where AND $gradeExpr IN (".implode(',',$ph).")");
-        $q->execute($gp); $prices[$key]=$q->fetch() ?: [];
-    }
+        MIN(CASE WHEN $validPrice AND $gradeNorm IN ('AAA','AA','AB','A','B','PB') THEN price_per_50kg END) AS top_low,
+        CASE WHEN SUM(CASE WHEN $validPrice AND $gradeNorm IN ('AAA','AA','AB','A','B','PB') THEN n_kgs ELSE 0 END)>0
+             THEN SUM(CASE WHEN $validPrice AND $gradeNorm IN ('AAA','AA','AB','A','B','PB') THEN n_kgs*price_per_50kg ELSE 0 END)
+                / SUM(CASE WHEN $validPrice AND $gradeNorm IN ('AAA','AA','AB','A','B','PB') THEN n_kgs ELSE 0 END)
+             ELSE NULL END AS top_avg,
+        MAX(CASE WHEN $validPrice AND $gradeNorm IN ('AAA','AA','AB','A','B','PB') THEN price_per_50kg END) AS top_high,
 
-    $r['percentage_sold']=((float)($r['offered_kgs']??0)>0)
-        ? ((float)($r['sold_kgs']??0)/(float)$r['offered_kgs']*100) : 0;
-    $r['prices']=$prices;
+        MIN(CASE WHEN $validPrice AND $gradeNorm='C' THEN price_per_50kg END) AS c_low,
+        CASE WHEN SUM(CASE WHEN $validPrice AND $gradeNorm='C' THEN n_kgs ELSE 0 END)>0
+             THEN SUM(CASE WHEN $validPrice AND $gradeNorm='C' THEN n_kgs*price_per_50kg ELSE 0 END)
+                / SUM(CASE WHEN $validPrice AND $gradeNorm='C' THEN n_kgs ELSE 0 END)
+             ELSE NULL END AS c_avg,
+        MAX(CASE WHEN $validPrice AND $gradeNorm='C' THEN price_per_50kg END) AS c_high,
+
+        MIN(CASE WHEN $validPrice AND $gradeNorm IN ('AF','F','E','TT','UG') THEN price_per_50kg END) AS lower_low,
+        CASE WHEN SUM(CASE WHEN $validPrice AND $gradeNorm IN ('AF','F','E','TT','UG') THEN n_kgs ELSE 0 END)>0
+             THEN SUM(CASE WHEN $validPrice AND $gradeNorm IN ('AF','F','E','TT','UG') THEN n_kgs*price_per_50kg ELSE 0 END)
+                / SUM(CASE WHEN $validPrice AND $gradeNorm IN ('AF','F','E','TT','UG') THEN n_kgs ELSE 0 END)
+             ELSE NULL END AS lower_avg,
+        MAX(CASE WHEN $validPrice AND $gradeNorm IN ('AF','F','E','TT','UG') THEN price_per_50kg END) AS lower_high
+      FROM public.clean_auction_results
+      WHERE $where";
+
+    $s=$db->prepare($sql);
+    $s->execute($p);
+    $r=$s->fetch() ?: [];
+
+    $offered=(float)($r['offered_kgs']??0);
+    $soldKgs=(float)($r['sold_kgs']??0);
+    $r['percentage_sold']=$offered>0 ? ($soldKgs/$offered*100) : 0;
+
     clean_json(true,'',['report'=>$r]);
 }
-
 function clean_update(): void {
     ensure_clean_table();$db=clean_db();
     $in=json_decode(file_get_contents('php://input'),true)?:[];
@@ -457,21 +469,24 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
     width:min(100%,760px);
     margin:0 auto;
     padding:5px 7px 8px;
-    overflow:visible
+    overflow:visible;
+    background:#fff
 }
 .hl-title{
     text-align:center;
     font-weight:800;
     font-size:12px;
     line-height:1.25;
-    padding:1px 3px
+    padding:1px 3px;
+    background:transparent
 }
 .hl-sub{
     text-align:center;
     font-weight:700;
     font-size:10px;
     line-height:1.2;
-    padding:1px 3px 3px
+    padding:1px 3px 3px;
+    background:transparent
 }
 .hl-table{
     width:100%!important;
@@ -479,45 +494,48 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
     table-layout:fixed!important;
     border-collapse:collapse;
     margin:0;
-    font-size:9.5px
+    font-size:9.5px;
+    border:3px solid #000!important;
+    background:#fff
 }
 .hl-table col{width:33.333%}
 .hl-table th,.hl-table td{
-    border:1px solid #72584e;
+    border:1px solid #000!important;
     padding:3px 5px;
     height:22px;
     line-height:1.15;
     text-align:center;
     vertical-align:middle;
     white-space:normal;
-    overflow-wrap:break-word
+    overflow-wrap:break-word;
+    background:#fff!important;
+    color:#000!important
 }
 .hl-table th{
     position:static!important;
-    background:#5d4037;
-    color:#fff;
     font-size:8.5px;
     font-weight:800
 }
 .hl-section td{
-    background:#e9dfda;
-    color:#4b342c;
     font-weight:800;
     text-align:center;
     height:22px
 }
 .hl-values td{
-    background:#fff;
     font-weight:700;
     font-variant-numeric:tabular-nums
 }
 .hl-percent td{
-    background:#f5efec;
     text-align:right;
     font-weight:800;
     height:23px;
     padding-right:8px
 }
+/* Reinforce the workbook-style thick perimeter. */
+.hl-table tr:first-child > *{border-top-width:3px!important}
+.hl-table tr:last-child > *{border-bottom-width:3px!important}
+.hl-table tr > *:first-child{border-left-width:3px!important}
+.hl-table tr > *:last-child{border-right-width:3px!important}
 .hl-money{font-variant-numeric:tabular-nums}
 @media(max-width:900px){
     .report{padding:7px}
