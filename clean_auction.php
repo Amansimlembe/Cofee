@@ -335,31 +335,57 @@ function clean_auctions(): void {
     clean_json(true,'',['auctions'=>$s->fetchAll()]);
 }
 function clean_report(): void {
-    ensure_clean_table();$db=clean_db();
-    $season=trim($_GET['season']??'');$auction=trim($_GET['auction_no']??'');
+    ensure_clean_table(); $db=clean_db();
+    $season=trim($_GET['season']??''); $auction=trim($_GET['auction_no']??'');
     if($auction==='') clean_json(false,'Select an Auction No. to view High & Low.',[],400);
-    $where="auction_no=:a";$p=['a'=>$auction];
+
+    $where="auction_no=:a"; $p=['a'=>$auction];
     if($season!==''){
         [$from,$to]=clean_sale_season_range($season);
         $where.=" AND auction_date BETWEEN :season_from AND :season_to";
-        $p['season_from']=$from;
-        $p['season_to']=$to;
+        $p['season_from']=$from; $p['season_to']=$to;
     }
 
-    $s=$db->prepare("SELECT MAX(auction_date) auction_date,
-      SUM(n_kgs) offered_kgs,
-      SUM(CASE WHEN LOWER(status)='sold' THEN n_kgs ELSE 0 END) sold_kgs,
-      SUM(CASE WHEN LOWER(status)='sold' THEN n_kgs*price_per_50kg/50.0 ELSE 0 END) total_value,
-      MIN(CASE WHEN LOWER(status)='sold' THEN price_per_50kg END) low_price,
-      CASE WHEN SUM(CASE WHEN LOWER(status)='sold' THEN n_kgs ELSE 0 END)>0
-           THEN SUM(CASE WHEN LOWER(status)='sold' THEN n_kgs*price_per_50kg ELSE 0 END)
-              / SUM(CASE WHEN LOWER(status)='sold' THEN n_kgs ELSE 0 END) ELSE NULL END avg_price,
-      MAX(CASE WHEN LOWER(status)='sold' THEN price_per_50kg END) high_price
+    /* Grade2 takes priority where present; otherwise use Grade. Spaces, hyphens
+       and underscores are ignored so workbook/database spelling remains robust. */
+    $gradeExpr="UPPER(REGEXP_REPLACE(COALESCE(NULLIF(BTRIM(grade2),''),NULLIF(BTRIM(grade),''),''),'[^A-Za-z0-9]+','','g'))";
+    $sold="LOWER(BTRIM(COALESCE(status,'')))='sold'";
+
+    $summary=$db->prepare("SELECT
+        MAX(auction_date) AS auction_date,
+        SUM(COALESCE(n_kgs,0)) AS offered_kgs,
+        SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END) AS sold_kgs,
+        SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0)*COALESCE(price_per_50kg,0)/50.0 ELSE 0 END) AS total_value
       FROM public.clean_auction_results WHERE $where");
-    $s->execute($p);$r=$s->fetch();
-    $r['percentage_sold']=((float)$r['offered_kgs']>0)?((float)$r['sold_kgs']/(float)$r['offered_kgs']*100):0;
+    $summary->execute($p); $r=$summary->fetch() ?: [];
+
+    $groups=[
+      'top'=>['AAA','AA','AB','A','B','PB'],
+      'c'=>['C'],
+      'lower'=>['AF','F','E','TT','UG']
+    ];
+    $prices=[];
+    foreach($groups as $key=>$grades){
+        $ph=[]; $gp=$p;
+        foreach($grades as $i=>$g){$name='g'.$i;$ph[]=':'.$name;$gp[$name]=$g;}
+        $q=$db->prepare("SELECT
+            MIN(CASE WHEN $sold THEN price_per_50kg END) AS low_price,
+            CASE WHEN SUM(CASE WHEN $sold THEN n_kgs ELSE 0 END)>0
+                 THEN SUM(CASE WHEN $sold THEN n_kgs*price_per_50kg ELSE 0 END)
+                    / SUM(CASE WHEN $sold THEN n_kgs ELSE 0 END)
+                 ELSE NULL END AS avg_price,
+            MAX(CASE WHEN $sold THEN price_per_50kg END) AS high_price
+          FROM public.clean_auction_results
+          WHERE $where AND $gradeExpr IN (".implode(',',$ph).")");
+        $q->execute($gp); $prices[$key]=$q->fetch() ?: [];
+    }
+
+    $r['percentage_sold']=((float)($r['offered_kgs']??0)>0)
+        ? ((float)($r['sold_kgs']??0)/(float)$r['offered_kgs']*100) : 0;
+    $r['prices']=$prices;
     clean_json(true,'',['report'=>$r]);
 }
+
 function clean_update(): void {
     ensure_clean_table();$db=clean_db();
     $in=json_decode(file_get_contents('php://input'),true)?:[];
@@ -426,6 +452,8 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
 .metric{border:1px solid #e5dbd6;border-radius:7px;padding:8px;background:#faf8f7}.metric span{font-size:8px;color:#8b7d77;text-transform:uppercase}.metric strong{display:block;margin-top:3px;font-size:12px}
 @media(max-width:900px){.app{height:auto;min-height:100vh;overflow:visible}body{overflow:auto}.toolbar{align-items:flex-start}.controls{width:100%}.filters{width:100%}.card{min-height:65vh}.report-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.app{padding:5px}.title{font-size:13px}select,button,input{height:28px;font-size:10px}.controls>*{flex:1 1 auto}.uploadbox.open{width:100%;flex-wrap:wrap}.report-grid{grid-template-columns:repeat(2,1fr)}}
+
+.highlow{max-width:760px;margin:0 auto;padding:6px}.hl-title{text-align:center;font-weight:800;font-size:13px;line-height:1.35}.hl-sub{text-align:center;font-weight:700;font-size:11px;margin-top:1px}.hl-table{width:100%;min-width:0!important;border-collapse:collapse;margin-top:6px;font-size:10px}.hl-table th,.hl-table td{border:1px solid #72584e;padding:5px 7px;text-align:center;white-space:normal}.hl-table th{position:static;background:#5d4037;color:#fff;font-size:9px}.hl-section td{background:#e9dfda;color:#4b342c;font-weight:800;text-align:center}.hl-values td{font-weight:700;background:#fff}.hl-percent td{text-align:right;font-weight:800;background:#f5efec}.hl-money{font-variant-numeric:tabular-nums}@media(max-width:600px){.highlow{padding:3px}.hl-title{font-size:11px}.hl-sub{font-size:9px}.hl-table{font-size:8px}.hl-table th,.hl-table td{padding:4px 3px}.hl-table th{font-size:7.5px}}
 </style>
 </head>
 <body>
@@ -501,15 +529,27 @@ async function loadReport(){
  if(!$('auction').value){$('report').innerHTML='<div class="muted">Select an auction to view High & Low.</div>';return}
  let d=await api('clean_auction.php?action=report&season='+encodeURIComponent($('season').value)+'&auction_no='+encodeURIComponent($('auction').value));
  let r=d.report;
- $('report').innerHTML=`<h2>Clean Coffee Auction No. ${esc($('auction').value)}</h2><div class="muted">Held On ${esc(r.auction_date||'-')}</div>
- <div class="report-grid">
- <div class="metric"><span>Kilos Offered</span><strong>${num(r.offered_kgs)} kg</strong></div>
- <div class="metric"><span>Kilos Sold</span><strong>${num(r.sold_kgs)} kg</strong></div>
- <div class="metric"><span>% Sold</span><strong>${num(r.percentage_sold)}%</strong></div>
- <div class="metric"><span>Lowest /50Kg</span><strong>${num(r.low_price)}</strong></div>
- <div class="metric"><span>Average /50Kg</span><strong>${num(r.avg_price)}</strong></div>
- <div class="metric"><span>Highest /50Kg</span><strong>${num(r.high_price)}</strong></div>
- <div class="metric"><span>Total Value</span><strong>${num(r.total_value)} TZS</strong></div>
+ const p=r.prices||{}; const top=p.top||{}, cg=p.c||{}, low=p.lower||{};
+ const held=r.auction_date ? new Date(r.auction_date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) : '-';
+ $('report').innerHTML=`<div class="highlow">
+   <div class="hl-title">TANZANIA COFFEE EXCHANGE</div>
+   <div class="hl-title">AUCTION RESULTS SALE NO. ${esc($('auction').value)}</div>
+   <div class="hl-sub">Held On ${esc(held)}</div>
+   <table class="hl-table">
+    <tr class="hl-section"><td colspan="3">Price USD/50KGS</td></tr>
+    <tr><th>KGS OFFERED</th><th>KGS SOLD</th><th>TOTAL VALUE (USD)</th></tr>
+    <tr class="hl-values"><td>${num(r.offered_kgs)}</td><td>${num(r.sold_kgs)}</td><td class="hl-money">${num(r.total_value)}</td></tr>
+    <tr class="hl-section"><td colspan="3">Top Grades (AAA, AA, AB, A, B, PB)</td></tr>
+    <tr><th>LOWEST PRICE</th><th>AVERAGE PRICE</th><th>HIGHEST PRICE</th></tr>
+    <tr class="hl-values"><td>${num(top.low_price)}</td><td>${num(top.avg_price)}</td><td>${num(top.high_price)}</td></tr>
+    <tr class="hl-section"><td colspan="3">C - Grade</td></tr>
+    <tr><th>LOWEST PRICE</th><th>AVERAGE PRICE</th><th>HIGHEST PRICE</th></tr>
+    <tr class="hl-values"><td>${num(cg.low_price)}</td><td>${num(cg.avg_price)}</td><td>${num(cg.high_price)}</td></tr>
+    <tr class="hl-section"><td colspan="3">Lower grades (AF, F, E, TT, UG)</td></tr>
+    <tr><th>LOWEST PRICE</th><th>AVERAGE PRICE</th><th>HIGHEST PRICE</th></tr>
+    <tr class="hl-values"><td>${num(low.low_price)}</td><td>${num(low.avg_price)}</td><td>${num(low.high_price)}</td></tr>
+    <tr class="hl-percent"><td colspan="3">PERCENTAGE SOLD = ${num(r.percentage_sold)}%</td></tr>
+   </table>
  </div>`;
 }
 async function refreshAll(){try{await loadRows();await loadReport()}catch(e){message(e.message,false)}}
