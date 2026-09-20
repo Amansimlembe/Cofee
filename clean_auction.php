@@ -742,7 +742,16 @@ function exportTableMarkup(){
 }
 function exportHighLow(type){
  $('exportMenu').classList.remove('open');
- if($('display').value!=='report'){message('High & Low must be selected before exporting.',false);return}
+ const mode=$('display').value;
+ if(mode==='summary'){
+   try{
+     if(type==='excel') return exportSaleSummaryExcel();
+     if(type==='word') return exportSaleSummaryWord();
+     if(type==='pdf') return exportSaleSummaryPdf();
+   }catch(e){message(e.message,false)}
+   return;
+ }
+ if(mode!=='report'){message('Select High & Low or Sale Summary before exporting.',false);return}
  try{
    if(type==='excel') return exportHighLowExcel();
    if(type==='word') return exportHighLowWord();
@@ -773,6 +782,79 @@ function exportHighLowWord(){
  downloadBlob(new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),highLowExportName('doc'));
  message('High & Low Word export prepared successfully.');
 }
+
+function saleSummaryExportName(ext){
+ const auction=$('auction').value||'Auction';
+ const season=($('season').value||'Season').replace('/','-');
+ return `Clean_Auction_Sale_Summary_${season}_Auction_${auction}.${ext}`;
+}
+function saleSummaryMarkup(){
+ const source=$('summaryreport')?.querySelector('.summary-sheet');
+ if(!source || !$('auction').value) throw new Error('Sale Summary is not ready for export.');
+ return source.outerHTML;
+}
+function exportSaleSummaryExcel(){
+ const body=saleSummaryMarkup();
+ const html=`<!doctype html><html><head><meta charset="utf-8"><style>
+ body{font-family:Arial,sans-serif;color:#000;background:#fff}
+ .summary-title{text-align:center;font-weight:bold;margin-bottom:6px}
+ table{border-collapse:collapse;width:100%;border:3px solid #000}
+ th,td{border:1px solid #000;padding:5px;text-align:right;background:#fff;color:#000}
+ th{text-align:center}td:first-child{text-align:left;font-weight:bold}
+ tr:first-child>*{border-top:3px solid #000}tr:last-child>*{border-bottom:3px solid #000}
+ tr>*:first-child{border-left:3px solid #000}tr>*:last-child{border-right:3px solid #000}
+ .total td{font-weight:bold;border-top:2px solid #000}
+ </style></head><body>${body}</body></html>`;
+ downloadBlob(new Blob(['\ufeff',html],{type:'application/vnd.ms-excel;charset=utf-8'}),saleSummaryExportName('xls'));
+ message('Sale Summary Excel downloaded successfully.');
+}
+function exportSaleSummaryWord(){
+ const body=saleSummaryMarkup();
+ const html=`<!doctype html><html><head><meta charset="utf-8"><style>
+ @page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;color:#000;background:#fff}
+ .summary-title{text-align:center;font-weight:bold;margin-bottom:6px}
+ table{border-collapse:collapse;width:100%;border:3px solid #000}
+ th,td{border:1px solid #000;padding:5px;text-align:right;background:#fff;color:#000}
+ th{text-align:center}td:first-child{text-align:left;font-weight:bold}
+ tr:first-child>*{border-top:3px solid #000}tr:last-child>*{border-bottom:3px solid #000}
+ tr>*:first-child{border-left:3px solid #000}tr>*:last-child{border-right:3px solid #000}
+ .total td{font-weight:bold;border-top:2px solid #000}
+ </style></head><body>${body}</body></html>`;
+ downloadBlob(new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),saleSummaryExportName('doc'));
+ message('Sale Summary Word downloaded successfully.');
+}
+async function exportSaleSummaryPdf(){
+ const source=$('summaryreport')?.querySelector('.summary-sheet');
+ if(!source || !$('auction').value) throw new Error('Sale Summary is not ready for export.');
+ if(!window.html2canvas || !window.jspdf || !window.jspdf.jsPDF)
+   throw new Error('PDF exporter did not load. Refresh the page and try again.');
+
+ const button=$('exportButton'), original=button?button.textContent:'';
+ if(button){button.disabled=true;button.textContent='Preparing PDF…';}
+
+ const clone=source.cloneNode(true);
+ clone.style.width='1050px';clone.style.maxWidth='1050px';clone.style.padding='10px';
+ clone.style.background='#fff';clone.style.color='#000';
+ clone.querySelectorAll('table').forEach(x=>{x.style.width='100%';x.style.borderCollapse='collapse';x.style.border='3px solid #000';x.style.background='#fff'});
+ clone.querySelectorAll('th,td').forEach(x=>{x.style.border='1px solid #000';x.style.background='#fff';x.style.color='#000'});
+ const stage=document.createElement('div');
+ stage.style.position='fixed';stage.style.left='-12000px';stage.style.top='0';stage.style.width='1070px';stage.style.background='#fff';
+ stage.appendChild(clone);document.body.appendChild(stage);
+ try{
+   const canvas=await html2canvas(clone,{scale:2.2,backgroundColor:'#fff',useCORS:true,logging:false});
+   const {jsPDF}=window.jspdf;
+   const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a4',compress:true});
+   const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight(), margin=8;
+   const w=pw-margin*2, h=canvas.height*w/canvas.width;
+   pdf.addImage(canvas.toDataURL('image/jpeg',0.96),'JPEG',margin,margin,w,Math.min(h,ph-margin*2),undefined,'FAST');
+   pdf.save(saleSummaryExportName('pdf'));
+   message('Sale Summary PDF downloaded successfully.');
+ }finally{
+   stage.remove();
+   if(button){button.disabled=false;button.textContent=original;}
+ }
+}
+
 async function exportHighLowPdf(){
  const report=$('report');
  if(!report || !$('auction').value) throw new Error('Select an Auction No. before exporting High & Low.');
@@ -867,7 +949,8 @@ async function exportHighLowPdf(){
 
 function syncExportVisibility(){
  const wrap=$('exportWrap');
- if(wrap)wrap.style.display=$('display').value==='report'?'block':'none';
+ const mode=$('display').value;
+ if(wrap)wrap.style.display=(mode==='report'||mode==='summary')?'block':'none';
 }
 
 function toggleSettings(){$('settingsMenu').classList.toggle('open')}
