@@ -1300,6 +1300,31 @@ submenu names.
     .topbar-title { font-size: 12px; }
 }
 
+
+/* SMART COMPACT NAVIGATION */
+.mobile-account-button,.mobile-account-menu{display:none}
+@media(max-width:900px){
+ .topbar-right{display:flex!important;margin-left:auto;position:relative;flex:0 0 auto;gap:0}
+ .topbar-right>.market-label,.topbar-right>.user-info{display:none!important}
+ .mobile-account-button{display:inline-flex;width:30px;height:30px;border:0;border-radius:50%;align-items:center;justify-content:center;background:#6d4c41;color:#fff;font-size:11px;font-weight:700;cursor:pointer}
+ .mobile-account-menu{position:absolute;top:calc(100% + 7px);right:0;width:min(245px,calc(100vw - var(--shell-sidebar) - 18px));padding:10px;background:#fff;border:1px solid #e6dedb;border-radius:9px;box-shadow:0 10px 28px rgba(45,29,25,.18);z-index:5000}
+ .mobile-account-menu.open{display:block}
+ .mobile-account-market{font-size:10px;color:#8b7b75;padding:1px 2px 8px;border-bottom:1px solid #eee7e4}
+ .mobile-account-user{display:flex;align-items:center;gap:8px;padding:9px 2px 8px;min-width:0}
+ .mobile-account-avatar{width:27px;height:27px;flex:0 0 27px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#6d4c41;color:#fff;font-size:11px;font-weight:700}
+ .mobile-account-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#4e342e;font-size:11px;font-weight:600}
+ .mobile-logout{display:block;padding:7px 9px;border-radius:6px;background:#f6f1ef;color:#5d4037;text-decoration:none;text-align:center;font-size:11px;font-weight:700}
+ .sidebar .menu-item{position:relative}
+ .sidebar .menu-item.mobile-open>.collapsed-tooltip{display:block!important;position:fixed;left:var(--shell-sidebar)!important;min-width:175px;max-width:min(230px,calc(100vw - var(--shell-sidebar) - 8px));padding:6px;border-radius:0 8px 8px 0;background:#2b1b18;box-shadow:0 8px 24px rgba(0,0,0,.24);z-index:4500}
+ .sidebar .menu-item.mobile-open>.collapsed-tooltip a{display:block;padding:8px 10px;border-radius:5px;color:#fff;font-size:12px;line-height:1.25}
+ .topbar-left{min-width:0;flex:1 1 auto}
+ .topbar-title{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+}
+@media(max-width:600px){
+ .mobile-account-button{width:28px;height:28px;font-size:10px}
+ .mobile-account-menu{width:min(220px,calc(100vw - var(--shell-sidebar) - 12px));top:calc(100% + 5px)}
+}
+
 </style>
 
 </head>
@@ -1604,7 +1629,7 @@ submenu names.
         </div>
 
 
-        <div class="topbar-right">
+        <div class="topbar-right" id="topbarRight">
 
             <div class="market-label">
                 Tanzania Coffee Market
@@ -1641,6 +1666,21 @@ submenu names.
 
                 </div>
 
+            </div>
+
+            <button type="button" class="mobile-account-button" id="mobileAccountButton"
+                    aria-label="Open account menu" aria-expanded="false"
+                    onclick="toggleMobileAccountMenu(event)">
+                <?= strtoupper(substr($_SESSION["username"], 0, 1)) ?>
+            </button>
+
+            <div class="mobile-account-menu" id="mobileAccountMenu">
+                <div class="mobile-account-market">Tanzania Coffee Market</div>
+                <div class="mobile-account-user">
+                    <span class="mobile-account-avatar"><?= strtoupper(substr($_SESSION["username"], 0, 1)) ?></span>
+                    <span class="mobile-account-name"><?= htmlspecialchars($_SESSION["username"]) ?></span>
+                </div>
+                <a href="login.php?logout=1" class="mobile-logout">Logout</a>
             </div>
 
         </div>
@@ -1921,34 +1961,71 @@ window.addEventListener("resize", function() {
 });
 
 function toggleSubmenu(element) {
+    const menuItem=element.parentElement;
+    const compact=window.matchMedia("(max-width: 900px)").matches;
 
-    const menuItem =
-        element.parentElement;
-
-
-    const allMenuItems =
-        document.querySelectorAll(".menu-item");
-
-
-    allMenuItems.forEach(function(item) {
-
-        if (item !== menuItem) {
-
-            item.classList.remove("open");
-
+    document.querySelectorAll(".menu-item").forEach(function(item){
+        if(item!==menuItem){
+            item.classList.remove("open","mobile-open");
+            const tip=item.querySelector(".collapsed-tooltip");
+            if(tip) tip.style.display="";
         }
-
     });
 
-
+    if(compact){
+        const tip=menuItem.querySelector(".collapsed-tooltip");
+        if(!tip) return;
+        const opening=!menuItem.classList.contains("mobile-open");
+        menuItem.classList.toggle("mobile-open",opening);
+        menuItem.classList.remove("open");
+        if(opening){
+            tip.style.display="block";
+            positionCollapsedTooltip(menuItem);
+        }else{
+            tip.style.display="";
+        }
+        return;
+    }
     menuItem.classList.toggle("open");
-
 }
+
+function toggleMobileAccountMenu(event){
+    if(event) event.stopPropagation();
+    const menu=document.getElementById("mobileAccountMenu");
+    const button=document.getElementById("mobileAccountButton");
+    if(!menu||!button) return;
+    const opening=!menu.classList.contains("open");
+    menu.classList.toggle("open",opening);
+    button.setAttribute("aria-expanded",opening?"true":"false");
+}
+
+document.addEventListener("click",function(event){
+    const menu=document.getElementById("mobileAccountMenu");
+    const button=document.getElementById("mobileAccountButton");
+    if(menu&&button&&!menu.contains(event.target)&&!button.contains(event.target)){
+        menu.classList.remove("open");
+        button.setAttribute("aria-expanded","false");
+    }
+    if(window.matchMedia("(max-width: 900px)").matches&&!event.target.closest(".sidebar .menu-item")){
+        document.querySelectorAll(".menu-item.mobile-open").forEach(function(item){
+            item.classList.remove("mobile-open");
+            const tip=item.querySelector(".collapsed-tooltip");
+            if(tip) tip.style.display="";
+        });
+    }
+});
+
 /* =========================================================
    CLEAN AUCTION NAVIGATION
 ========================================================= */
 
 function openCleanAuction(clickedElement) {
+    document.querySelectorAll(".menu-item.mobile-open").forEach(function(item){
+        item.classList.remove("mobile-open");
+        const tip=item.querySelector(".collapsed-tooltip");
+        if(tip) tip.style.display="";
+    });
+
 
     document.querySelectorAll(".section").forEach(function(section) {
         section.classList.remove("active");
@@ -2004,6 +2081,12 @@ function openCleanAuction(clickedElement) {
 ========================================================= */
 
 function openKageraAuction(clickedElement) {
+    document.querySelectorAll(".menu-item.mobile-open").forEach(function(item){
+        item.classList.remove("mobile-open");
+        const tip=item.querySelector(".collapsed-tooltip");
+        if(tip) tip.style.display="";
+    });
+
 
     document.querySelectorAll(".section").forEach(function(section) {
         section.classList.remove("active");
