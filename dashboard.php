@@ -1,165 +1,66 @@
 <?php
 session_start();
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header('Location: login.php'); exit;
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) { header('Location: login.php'); exit; }
+
+$display=strtolower(trim($_GET['display']??'kagera'));
+if(!in_array($display,['kagera','clean'],true))$display='kagera';
+
+function nf($v,$dec=0){$v=(float)$v;$d=(abs($v-round($v))<0.000001)?0:$dec;return number_format($v,$d,'.',',');}
+function pct($a,$b){return $b>0?($a/$b*100):0;}
+
+if($display==='clean'){
+ require_once __DIR__.'/clean_database.php'; ensure_clean_table(); $db=clean_db();
+ function season_bounds($s){if(!preg_match('/^(\d{4})\/(\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
+ function current_season(){$y=(int)date('Y');$m=(int)date('n');return $m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
+ $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM auction_date)::int y,EXTRACT(MONTH FROM auction_date)::int m FROM public.clean_auction_results WHERE auction_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
+ $seasons=[];foreach($rs as $r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
+ $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $sold="UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
+ $valid="($sold AND price_per_50kg IS NOT NULL AND price_per_50kg>0)";
+ $q=$db->prepare("SELECT COUNT(DISTINCT NULLIF(BTRIM(auction_no),'')) FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t");$q->execute(['f'=>$from,'t'=>$to]);$auctions=(int)$q->fetchColumn();
+ $q=$db->prepare("SELECT COALESCE(SUM(n_kgs),0) offered,COALESCE(SUM(CASE WHEN $sold THEN n_kgs ELSE 0 END),0) sold,
+ COALESCE(SUM(CASE WHEN $valid THEN n_kgs*price_per_50kg/50.0 ELSE 0 END),0) val,
+ CASE WHEN SUM(CASE WHEN $valid THEN n_kgs ELSE 0 END)>0 THEN SUM(CASE WHEN $valid THEN n_kgs*price_per_50kg ELSE 0 END)/SUM(CASE WHEN $valid THEN n_kgs ELSE 0 END) ELSE 0 END avg
+ FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t");$q->execute(['f'=>$from,'t'=>$to]);$s=$q->fetch()?:[];
+ $offered=(float)$s['offered'];$grandSold=(float)$s['sold'];$grandValue=(float)$s['val'];$avgPrice=(float)$s['avg'];$soldPct=pct($grandSold,$offered);
+ function clean_rank($db,$f,$t,$col){if(!in_array($col,['buyer','seller'],true))return[];$sold="UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
+  $sql="SELECT COALESCE(NULLIF(BTRIM($col),''),'Unspecified') name,SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END) total_qty,
+  SUM(CASE WHEN $sold AND price_per_50kg IS NOT NULL AND price_per_50kg>0 THEN COALESCE(n_kgs,0)*price_per_50kg/50.0 ELSE 0 END) total_value
+  FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1 HAVING SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END)>0 ORDER BY total_qty DESC,total_value DESC";
+  $q=$db->prepare($sql);$q->execute(['f'=>$f,'t'=>$t]);return$q->fetchAll();}
+ function top5c($rows,$label){$top=array_slice($rows,0,5);$other=array_slice($rows,5);if($other){$a=['name'=>'Other ('.count($other).' '.$label.')','total_qty'=>0,'total_value'=>0,'_other'=>1];foreach($other as$r){$a['total_qty']+=(float)$r['total_qty'];$a['total_value']+=(float)$r['total_value'];}$top[]=$a;}return$top;}
+ $buyersCombined=top5c(clean_rank($db,$from,$to,'buyer'),'buyers');$amcosCombined=top5c(clean_rank($db,$from,$to,'seller'),'sellers');
+ $q=$db->prepare("SELECT auction_no,MIN(auction_date) auction_date,SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END) qty,
+ CASE WHEN SUM(CASE WHEN $valid THEN n_kgs ELSE 0 END)>0 THEN SUM(CASE WHEN $valid THEN n_kgs*price_per_50kg ELSE 0 END)/SUM(CASE WHEN $valid THEN n_kgs ELSE 0 END) END avg_price
+ FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY auction_no ORDER BY MIN(auction_date),CASE WHEN auction_no ~ '^[0-9]+$' THEN auction_no::int ELSE NULL END NULLS LAST,auction_no");
+ $q->execute(['f'=>$from,'t'=>$to]);$auctionTrend=$q->fetchAll();
+ $dashboardTitle='Clean Auction — Season Performance';$dashboardSub='Clean coffee auction analytical summary';$priceUnit='USD/50kg';$rank2='Top 5 Sellers';$rank2First='Seller';
+}else{
+ require_once __DIR__.'/kagera_database.php';ensure_kagera_table();ensure_kagera_catalogue_table();$db=kagera_db();
+ function season_bounds($s){if(!preg_match('/^(\d{4})\/(\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-06-01',$m[2].'-05-30'];}
+ function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=6?$y.'/'.($y+1):($y-1).'/'.$y;}
+ function coffee_case_sql(){return"CASE WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%dry cherry%' THEN 'Dry Cherry Coffee' WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%clean%' THEN 'Clean Coffee' ELSE NULL END";}
+ $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM auction_date)::int y,EXTRACT(MONTH FROM auction_date)::int m FROM(SELECT auction_date FROM public.kagera_auction_results UNION ALL SELECT auction_date FROM public.kagera_auction_catalogue)d WHERE auction_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
+ $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=6)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
+ $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $summary=['Dry Cherry Coffee'=>['offered'=>0,'sold'=>0,'value'=>0,'avg'=>0,'pct'=>0],'Clean Coffee'=>['offered'=>0,'sold'=>0,'value'=>0,'avg'=>0,'pct'=>0]];$case=coffee_case_sql();
+ $q=$db->prepare("SELECT $case type,SUM(COALESCE(kgs,0)) offered FROM public.kagera_auction_catalogue WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['f'=>$from,'t'=>$to]);foreach($q as$r)if(isset($summary[$r['type']]))$summary[$r['type']]['offered']=(float)$r['offered'];
+ $q=$db->prepare("SELECT $case type,SUM(COALESCE(kgs,0)) sold,SUM(COALESCE(kgs,0)*COALESCE(price,0)) val FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['f'=>$from,'t'=>$to]);foreach($q as$r)if(isset($summary[$r['type']])){$x=&$summary[$r['type']];$x['sold']=(float)$r['sold'];$x['value']=(float)$r['val'];$x['avg']=$x['sold']?$x['value']/$x['sold']:0;$x['pct']=pct($x['sold'],$x['offered']);}
+ $q=$db->prepare("SELECT COUNT(DISTINCT NULLIF(BTRIM(auction_no),'')) FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t");$q->execute(['f'=>$from,'t'=>$to]);$auctions=(int)$q->fetchColumn();
+ $offered=$summary['Dry Cherry Coffee']['offered']+$summary['Clean Coffee']['offered'];$grandSold=$summary['Dry Cherry Coffee']['sold']+$summary['Clean Coffee']['sold'];$grandValue=$summary['Dry Cherry Coffee']['value']+$summary['Clean Coffee']['value'];$avgPrice=$grandSold?$grandValue/$grandSold:0;$soldPct=pct($grandSold,$offered);
+ function kr($db,$f,$t,$col){$case=coffee_case_sql();$sql="SELECT COALESCE(NULLIF(BTRIM($col),''),'Unspecified') name,SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) cherry_qty,SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) clean_qty,SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END) total_qty,SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END) total_value FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t AND $case IS NOT NULL GROUP BY 1 HAVING SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END)>0 ORDER BY total_qty DESC,total_value DESC";$q=$db->prepare($sql);$q->execute(['f'=>$f,'t'=>$t]);return$q->fetchAll();}
+ function top5k($rows,$label){$top=array_slice($rows,0,5);$o=array_slice($rows,5);if($o){$a=['name'=>'Other ('.count($o).' '.$label.')','cherry_qty'=>0,'clean_qty'=>0,'total_qty'=>0,'total_value'=>0,'_other'=>1];foreach($o as$r)foreach(['cherry_qty','clean_qty','total_qty','total_value']as$k)$a[$k]+=(float)$r[$k];$top[]=$a;}return$top;}
+ $buyersCombined=top5k(kr($db,$from,$to,'buyer'),'buyers');$amcosCombined=top5k(kr($db,$from,$to,'warehouse'),'AMCOS / warehouses');
+ $q=$db->prepare("SELECT auction_no,MIN(auction_date) auction_date,SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) dry_qty,SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) clean_qty,CASE WHEN SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END)>0 THEN SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END)/SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) END dry_avg_price,CASE WHEN SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END)>0 THEN SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END)/SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) END clean_avg_price FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t AND $case IS NOT NULL GROUP BY auction_no ORDER BY CASE WHEN auction_no ~ '^[0-9]+$' THEN auction_no::int ELSE NULL END,auction_no");
+ $q->execute(['f'=>$from,'t'=>$to]);$auctionTrend=$q->fetchAll();
+ $dashboardTitle='Kagera Auction — Season Performance';$dashboardSub='Compact analytical summary';$priceUnit='TZS/kg';$rank2='Top 5 AMCOS / Warehouses';$rank2First='AMCOS / Warehouse';
 }
-require_once __DIR__ . '/kagera_database.php';
-ensure_kagera_table();
-ensure_kagera_catalogue_table();
-$db = kagera_db();
-
-function season_bounds($season) {
-    if (!preg_match('/^(\d{4})\/(\d{4})$/', $season, $m) || (int)$m[2] !== (int)$m[1] + 1) return null;
-    return [$m[1].'-06-01', $m[2].'-05-30'];
-}
-function current_season() {
-    $y=(int)date('Y'); $m=(int)date('n');
-    return $m>=6 ? $y.'/'.($y+1) : ($y-1).'/'.$y;
-}
-function nf($v,$dec=0){
-    $v=(float)$v; $d=(abs($v-round($v))<0.000001)?0:$dec; return number_format($v,$d,'.',',');
-}
-function pct($a,$b){ return $b>0 ? ($a/$b*100) : 0; }
-function coffee_case_sql() {
-    // Keep Dashboard classification identical to the working High & Low report:
-    // Grade2 is the source of Dry Cherry Coffee / Clean Coffee.
-    return "CASE
-        WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%dry cherry%' THEN 'Dry Cherry Coffee'
-        WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%clean%' THEN 'Clean Coffee'
-        ELSE NULL
-    END";
-}
-
-$seasonRows=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM auction_date)::int AS y, EXTRACT(MONTH FROM auction_date)::int AS m FROM (SELECT auction_date FROM public.kagera_auction_results UNION ALL SELECT auction_date FROM public.kagera_auction_catalogue) d WHERE auction_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll(PDO::FETCH_ASSOC);
-$seasons=[]; foreach($seasonRows as $r){$start=((int)$r['m']>=6)?(int)$r['y']:(int)$r['y']-1; $s=$start.'/'.($start+1); $seasons[$s]=true;}
-$seasons=array_keys($seasons); rsort($seasons);
-$season=$_GET['season'] ?? current_season(); if(!season_bounds($season)) $season=current_season(); [$from,$to]=season_bounds($season);
-
-$summary=[];
-foreach(['Dry Cherry Coffee','Clean Coffee'] as $type){$summary[$type]=['offered'=>0,'sold'=>0,'value'=>0,'avg'=>0,'pct'=>0];}
-$catType=coffee_case_sql();
-$resType=coffee_case_sql();
-$stmt=$db->prepare("SELECT $catType type, SUM(COALESCE(kgs,0)) offered FROM public.kagera_auction_catalogue WHERE auction_date BETWEEN :f AND :t GROUP BY 1"); $stmt->execute(['f'=>$from,'t'=>$to]);
-foreach($stmt as $r) if(isset($summary[$r['type']])) $summary[$r['type']]['offered']=(float)$r['offered'];
-$stmt=$db->prepare("SELECT $resType type, SUM(COALESCE(kgs,0)) sold, SUM(COALESCE(kgs,0) * COALESCE(price,0)) val FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1"); $stmt->execute(['f'=>$from,'t'=>$to]);
-foreach($stmt as $r) if(isset($summary[$r['type']])){$x=&$summary[$r['type']];$x['sold']=(float)$r['sold'];$x['value']=(float)$r['val'];$x['avg']=$x['sold']>0?$x['value']/$x['sold']:0;$x['pct']=pct($x['sold'],$x['offered']);}
-
-$stmt=$db->prepare("SELECT COUNT(DISTINCT TRIM(auction_no)) FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t AND NULLIF(TRIM(auction_no),'') IS NOT NULL");$stmt->execute(['f'=>$from,'t'=>$to]);$auctions=(int)$stmt->fetchColumn();
-
-function top_rows($db,$from,$to,$type,$column,$limit=5){
-    $case=coffee_case_sql(); $allowed=['buyer','warehouse']; if(!in_array($column,$allowed,true)) return [];
-    $sql="SELECT COALESCE(NULLIF(TRIM($column),''),'Unspecified') name, SUM(COALESCE(kgs,0)) qty, SUM(COALESCE(kgs,0) * COALESCE(price,0)) val FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t AND $case=:type GROUP BY 1 ORDER BY qty DESC, val DESC LIMIT $limit";
-    $s=$db->prepare($sql);$s->execute(['f'=>$from,'t'=>$to,'type'=>$type]);return $s->fetchAll(PDO::FETCH_ASSOC);
-}
-
-function combined_rank_rows($db,$from,$to,$column,$limit=5){
-    if(!in_array($column,['buyer','warehouse'],true)) return [];
-    $case=coffee_case_sql();
-    $sql="SELECT
-        COALESCE(NULLIF(TRIM($column),''),'Unspecified') name,
-        SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) cherry_qty,
-        SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) clean_qty,
-        SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END) total_qty,
-        SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END) total_value
-      FROM public.kagera_auction_results
-      WHERE auction_date BETWEEN :f AND :t AND $case IS NOT NULL
-      GROUP BY 1
-      HAVING SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END)>0
-      ORDER BY total_qty DESC,total_value DESC";
-    $s=$db->prepare($sql); $s->execute(['f'=>$from,'t'=>$to]);
-    return $s->fetchAll(PDO::FETCH_ASSOC);
-}
-$grandSold=$summary['Dry Cherry Coffee']['sold']+$summary['Clean Coffee']['sold'];
-$grandValue=$summary['Dry Cherry Coffee']['value']+$summary['Clean Coffee']['value'];
-function top5_with_other($rows,$entityLabel){
-    $top=array_slice($rows,0,5);
-    $other=array_slice($rows,5);
-
-    if($other){
-        $agg=[
-            'name'=>'Other ('.count($other).' '.$entityLabel.')',
-            'cherry_qty'=>0,
-            'clean_qty'=>0,
-            'total_qty'=>0,
-            'total_value'=>0,
-            '_other'=>true
-        ];
-        foreach($other as $r){
-            $agg['cherry_qty']+=(float)$r['cherry_qty'];
-            $agg['clean_qty']+=(float)$r['clean_qty'];
-            $agg['total_qty']+=(float)$r['total_qty'];
-            $agg['total_value']+=(float)$r['total_value'];
-        }
-        $top[]=$agg;
-    }
-    return $top;
-}
-$buyersCombined=top5_with_other(combined_rank_rows($db,$from,$to,'buyer'),'buyers');
-
-$amcosCombined=top5_with_other(combined_rank_rows($db,$from,$to,'warehouse'),'AMCOS / warehouses');
-
-
-/*
-|--------------------------------------------------------------------------
-| AUTHORITATIVE SEASON GRAND TOTALS
-|--------------------------------------------------------------------------
-| Recalculate directly from Results so each footer column is independent
-| and cannot accidentally repeat the Clean Coffee value.
-|--------------------------------------------------------------------------
-*/
-$grandCase=coffee_case_sql();
-$grandSql="SELECT
-    SUM(CASE WHEN $grandCase='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) AS dry_sold,
-    SUM(CASE WHEN $grandCase='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) AS clean_sold,
-    SUM(CASE WHEN $grandCase IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END) AS total_sold,
-    SUM(CASE WHEN $grandCase IS NOT NULL THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END) AS total_value
-  FROM public.kagera_auction_results
-  WHERE auction_date BETWEEN :f AND :t
-    AND $grandCase IS NOT NULL";
-$grandStmt=$db->prepare($grandSql);
-$grandStmt->execute(['f'=>$from,'t'=>$to]);
-$grand=$grandStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-
-$grandDrySold=(float)($grand['dry_sold'] ?? 0);
-$grandCleanSold=(float)($grand['clean_sold'] ?? 0);
-$grandSold=(float)($grand['total_sold'] ?? 0);
-$grandValue=(float)($grand['total_value'] ?? 0);
-
-/*
-|--------------------------------------------------------------------------
-| AUCTION TREND — DRY CHERRY VS CLEAN
-|--------------------------------------------------------------------------
-*/
-$case=coffee_case_sql();
-$trendSql="SELECT
-    auction_no,
-    MIN(auction_date) AS auction_date,
-    SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) AS dry_qty,
-    SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) AS clean_qty,
-    CASE WHEN SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END)>0
-      THEN SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END)
-         / SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END)
-      ELSE NULL END AS dry_avg_price,
-    CASE WHEN SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END)>0
-      THEN SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END)
-         / SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END)
-      ELSE NULL END AS clean_avg_price
-  FROM public.kagera_auction_results
-  WHERE auction_date BETWEEN :f AND :t AND $case IS NOT NULL
-  GROUP BY auction_no
-  ORDER BY
-    CASE WHEN auction_no ~ '^[0-9]+$' THEN auction_no::integer ELSE NULL END ASC NULLS LAST,
-    auction_no ASC";
-$trendStmt=$db->prepare($trendSql);
-$trendStmt->execute(['f'=>$from,'t'=>$to]);
-$auctionTrend=$trendStmt->fetchAll(PDO::FETCH_ASSOC);
-?>
-<!doctype html>
+?><!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Kagera Auction Dashboard</title>
+<title>Auction Sales Dashboard</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f6f3f1;color:#352720;font-family:Arial,sans-serif}
@@ -168,7 +69,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f6f3f1;col
 .title{display:flex;align-items:baseline;gap:9px;min-width:0}
 .title h1{font-size:16px;margin:0;color:#3f2b24;white-space:nowrap}
 .title span{font-size:10px;color:#8a7a72;white-space:nowrap}
-.season{display:flex;align-items:center;gap:6px}
+.season{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .season label{font-size:10px;font-weight:700;color:#6b554b}
 .season select{height:22px;padding:0 27px 0 9px;border:1px solid #d7ccc7;border-radius:7px;background:#fff;color:#4b3830;font-size:11px;font-weight:700}
 
@@ -287,134 +188,64 @@ tfoot td{font-weight:700!important}
 .trend-wrap{padding:3px 8px 16px!important}
 #auctionTrendChart{display:block}
 
+@media(max-width:560px){.season{width:100%;justify-content:flex-end}.season select{max-width:145px!important}}
 </style>
 </head>
 <body>
 <div class="dashboard">
     <div class="topbar">
         <div class="title">
-            <h1>Kagera Auction — Season Performance</h1>
-            <span>Compact analytical summary</span>
+            <h1><?=htmlspecialchars($dashboardTitle)?></h1>
+            <span><?=htmlspecialchars($dashboardSub)?></span>
         </div>
         <form class="season" method="get">
             <label>Season</label>
-            <select name="season" onchange="this.form.submit()">
-                <?php foreach($seasons ?: [$season] as $s): ?>
-                    <option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option>
-                <?php endforeach ?>
-            </select>
+            <select name="season" onchange="this.form.submit()"><?php foreach($seasons ?: [$season] as $s): ?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach ?></select>
+            <label>Display</label>
+            <select name="display" onchange="this.form.submit()"><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option></select>
         </form>
     </div>
 
     <div class="kpis">
- <div class="kpi">
-  <span class="label">Season</span>
-  <strong><?=htmlspecialchars($season)?></strong>
-  <div class="sub"><?=date('d M',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div>
+ <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
+ <div class="kpi"><span class="label">Auctions</span><strong><?=nf($auctions)?></strong><div class="sub">Held</div></div>
+ <?php if($display==='clean'): ?>
+ <div class="metric-group dry"><div class="metric"><span class="m-label coffee-name">Clean Coffee · Offered</span><strong><?=nf($offered)?> kg</strong><small>All lots</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($grandSold)?> kg</strong><small><?=nf($soldPct,2)?>% of offered</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($avgPrice,2)?></strong><small><?=$priceUnit?></small></div></div>
+ <div class="metric-group clean"><div class="metric"><span class="m-label coffee-name">Sales Value</span><strong><?=nf($grandValue,2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Unsold</span><strong><?=nf(max(0,$offered-$grandSold))?> kg</strong><small><?=nf(max(0,100-$soldPct),2)?>%</small></div><div class="metric"><span class="m-label">Sale Rate</span><strong><?=nf($soldPct,2)?>%</strong><small>Season</small></div></div>
+ <?php else: foreach(['Dry Cherry Coffee','Clean Coffee'] as $type):$x=$summary[$type];$cls=$type==='Dry Cherry Coffee'?'dry':'clean'; ?>
+ <div class="metric-group <?=$cls?>"><div class="metric"><span class="m-label coffee-name"><?=$type==='Dry Cherry Coffee'?'Dry Cherry':'Clean Coffee'?> · Offered</span><strong><?=nf($x['offered'])?> kg</strong><small>Catalogue</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($x['sold'])?> kg</strong><small><?=nf($x['pct'],2)?>%</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small><?=$priceUnit?></small></div></div>
+ <?php endforeach;endif;?>
  </div>
- <div class="kpi">
-  <span class="label">Auctions</span>
-  <strong><?=nf($auctions)?></strong>
-  <div class="sub">Held</div>
- </div>
- <?php foreach(['Dry Cherry Coffee','Clean Coffee'] as $type): $x=$summary[$type]; $cls=$type==='Dry Cherry Coffee'?'dry':'clean'; ?>
- <div class="metric-group <?=$cls?>">
-  <div class="metric">
-   <span class="m-label coffee-name"><?=$type==='Dry Cherry Coffee'?'Dry Cherry':'Clean Coffee'?> · Offered</span>
-   <strong><?=nf($x['offered'],0)?> kg</strong><small>Catalogue</small>
-  </div>
-  <div class="metric">
-   <span class="m-label">Sold</span>
-   <strong><?=nf($x['sold'],0)?> kg</strong><small><?=nf($x['pct'],2)?>% of offered</small>
-  </div>
-  <div class="metric">
-   <span class="m-label">Avg. Price</span>
-   <strong><?=nf($x['avg'],2)?></strong><small>TZS/kg</small>
-  </div>
- </div>
- <?php endforeach ?>
-</div>
-
-<div class="analytics">
-<?php foreach([
- ['Top 5 Buyers',$buyersCombined,'Buyer'],
- ['Top 5 AMCOS / Warehouses',$amcosCombined,'AMCOS / Warehouse']
-] as [$heading,$rows,$firstLabel]): ?>
-<section class="panel">
- <div class="panel-head"><strong><?=$heading?></strong><span>Ranked by total quantity</span></div>
- <div class="table-box"><table>
-  <thead><tr>
-   <th style="width:27%"><?=$firstLabel?></th>
-   <th>Dry Cherry<br>(kg)</th><th>Clean<br>(kg)</th>
-   <th>Total<br>(kg)</th><th>Value<br>(TZS)</th><th>Share<br>(%)</th>
-  </tr></thead>
-  <tbody>
-  <?php if(!$rows): ?><tr><td colspan="6" class="empty">No sales data for this season</td></tr><?php endif; ?>
-  <?php foreach($rows as $i=>$r): ?>
-   <tr>
-    <td title="<?=htmlspecialchars($r['name'])?>">
-      <?php if(empty($r['_other'])): ?><span class="rank"><?=$i+1?></span><?php endif; ?>
-      <?=htmlspecialchars($r['name'])?>
-    </td>
-    <td><?=nf($r['cherry_qty'],2)?></td>
-    <td><?=nf($r['clean_qty'],2)?></td>
-    <td><?=nf($r['total_qty'],2)?></td>
-    <td><?=nf($r['total_value'],2)?></td>
-    <td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?>%</td>
-   </tr>
-  <?php endforeach ?>
-  </tbody>
-  <tfoot><tr>
-   <td>Season Grand Total</td>
-   <td><?=nf($grandDrySold,2)?></td>
-   <td><?=nf($grandCleanSold,2)?></td>
-   <td><?=nf($grandSold,2)?></td>
-   <td><?=nf($grandValue,2)?></td>
-   <td>100%</td>
-  </tr></tfoot>
- </table></div>
-</section>
-<?php endforeach ?>
-</div>
-
+ <div class="analytics">
+ <?php foreach([['Top 5 Buyers',$buyersCombined,'Buyer'],[$rank2,$amcosCombined,$rank2First]] as[$heading,$rows,$firstLabel]):?>
+ <section class="panel"><div class="panel-head"><strong><?=$heading?></strong><span>Ranked by sold quantity</span></div><div class="table-box"><table>
+ <?php if($display==='clean'):?>
+ <thead><tr><th><?=$firstLabel?></th><th>Sold Qty<br>(kg)</th><th>Value<br>(USD)</th><th>Share<br>(%)</th></tr></thead><tbody>
+ <?php if(!$rows):?><tr><td colspan="4" class="empty">No sold data for this season</td></tr><?php endif;foreach($rows as$i=>$r):?><tr><td title="<?=htmlspecialchars($r['name'])?>"><?php if(empty($r['_other'])):?><span class="rank"><?=$i+1?></span><?php endif;?><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['total_qty'],2)?></td><td><?=nf($r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?>%</td></tr><?php endforeach;?></tbody><tfoot><tr><td>Season Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot>
+ <?php else:?>
+ <thead><tr><th><?=$firstLabel?></th><th>Dry Cherry<br>(kg)</th><th>Clean<br>(kg)</th><th>Total<br>(kg)</th><th>Value<br>(TZS)</th><th>Share<br>(%)</th></tr></thead><tbody>
+ <?php if(!$rows):?><tr><td colspan="6" class="empty">No sales data for this season</td></tr><?php endif;foreach($rows as$i=>$r):?><tr><td title="<?=htmlspecialchars($r['name'])?>"><?php if(empty($r['_other'])):?><span class="rank"><?=$i+1?></span><?php endif;?><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['cherry_qty'],2)?></td><td><?=nf($r['clean_qty'],2)?></td><td><?=nf($r['total_qty'],2)?></td><td><?=nf($r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?>%</td></tr><?php endforeach;?></tbody><tfoot><tr><td>Season Grand Total</td><td><?=nf($summary['Dry Cherry Coffee']['sold'],2)?></td><td><?=nf($summary['Clean Coffee']['sold'],2)?></td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot>
+ <?php endif;?></table></div></section><?php endforeach;?></div>
 <section class="trend-panel">
  <div class="trend-head">
   <strong>Auction Performance Trend</strong>
-  <span>Dry Cherry and Clean Coffee · quantity sold & weighted average price</span>
+  <span><?=$display==='clean'?'Clean Coffee · quantity sold & weighted average price':'Dry Cherry and Clean Coffee · quantity sold & weighted average price'?></span>
  </div>
  <div class="trend-wrap"><canvas id="auctionTrendChart"></canvas></div>
 </section>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
-const auctionTrend = <?=json_encode($auctionTrend, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>;
-const ctx = document.getElementById('auctionTrendChart');
-if (ctx && window.Chart) {
- new Chart(ctx,{
-  data:{
-   labels:auctionTrend.map(r=>'A'+r.auction_no),
-   datasets:[
-    {type:'bar',label:'Dry Cherry Qty (kg)',data:auctionTrend.map(r=>Number(r.dry_qty)||0),yAxisID:'yQty',borderWidth:0,maxBarThickness:18},
-    {type:'bar',label:'Clean Coffee Qty (kg)',data:auctionTrend.map(r=>Number(r.clean_qty)||0),yAxisID:'yQty',borderWidth:0,maxBarThickness:18},
-    {type:'line',label:'Dry Cherry Avg Price',data:auctionTrend.map(r=>r.dry_avg_price===null?null:Number(r.dry_avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25,spanGaps:false},
-    {type:'line',label:'Clean Coffee Avg Price',data:auctionTrend.map(r=>r.clean_avg_price===null?null:Number(r.clean_avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25,spanGaps:false}
-   ]
-  },
-  options:{
-   responsive:true,maintainAspectRatio:false,layout:{padding:{top:0,right:3,bottom:10,left:3}},
-   interaction:{mode:'index',intersect:false},
-   plugins:{
-    legend:{position:'top',labels:{boxWidth:9,boxHeight:9,font:{size:8},padding:8}},
-    tooltip:{callbacks:{label:c=>c.dataset.label+': '+(Number(c.raw)||0).toLocaleString(undefined,{maximumFractionDigits:2})}}
-   },
-   scales:{
-    x:{grid:{display:false},ticks:{font:{size:8},maxRotation:0,minRotation:0,autoSkip:false,padding:5},title:{display:true,text:'Auction No.',font:{size:8},padding:{top:3,bottom:0}}},
-    yQty:{position:'left',beginAtZero:true,title:{display:true,text:'Quantity sold (kg)',font:{size:8}},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}},
-    yPrice:{position:'right',beginAtZero:false,title:{display:true,text:'Avg. price (TZS/kg)',font:{size:8}},grid:{drawOnChartArea:false},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}}
-   }
-  }
- });
-}
+const auctionTrend=<?=json_encode($auctionTrend,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>,cleanMode=<?=json_encode($display==='clean')?>,ctx=document.getElementById('auctionTrendChart');
+if(ctx&&window.Chart){const datasets=cleanMode?[
+{type:'bar',label:'Quantity Sold (kg)',data:auctionTrend.map(r=>Number(r.qty)||0),yAxisID:'yQty',borderWidth:0,maxBarThickness:24},
+{type:'line',label:'Weighted Avg Price (USD/50kg)',data:auctionTrend.map(r=>r.avg_price===null?null:Number(r.avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25}
+]:[
+{type:'bar',label:'Dry Cherry Qty (kg)',data:auctionTrend.map(r=>Number(r.dry_qty)||0),yAxisID:'yQty',borderWidth:0,maxBarThickness:18},
+{type:'bar',label:'Clean Coffee Qty (kg)',data:auctionTrend.map(r=>Number(r.clean_qty)||0),yAxisID:'yQty',borderWidth:0,maxBarThickness:18},
+{type:'line',label:'Dry Cherry Avg Price',data:auctionTrend.map(r=>r.dry_avg_price===null?null:Number(r.dry_avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25},
+{type:'line',label:'Clean Coffee Avg Price',data:auctionTrend.map(r=>r.clean_avg_price===null?null:Number(r.clean_avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25}];
+new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'top',labels:{boxWidth:9,boxHeight:9,font:{size:8},padding:8}}},scales:{x:{grid:{display:false},ticks:{font:{size:8},autoSkip:false},title:{display:true,text:'Auction No.',font:{size:8}}},yQty:{position:'left',beginAtZero:true,title:{display:true,text:'Quantity sold (kg)',font:{size:8}},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}},yPrice:{position:'right',title:{display:true,text:cleanMode?'Avg. price (USD/50kg)':'Avg. price (TZS/kg)',font:{size:8}},grid:{drawOnChartArea:false},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}}}}});}
 </script>
 </body>
 </html>
