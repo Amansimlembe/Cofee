@@ -3144,6 +3144,44 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
 .kagera-upload-status.warning{background:#fff8e8;border-color:#ead7a4;color:#775a16}
 .kagera-upload-status.warning::before{content:"!"}
 
+
+
+/* ===== Responsive refinement: Kagera Auction ===== */
+.kagera-container,.kagera-card,.kagera-data-card{width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+.kagera-results-header{display:grid;grid-template-columns:minmax(170px,1fr) auto minmax(0,2fr);align-items:end;gap:10px;width:100%}
+.kagera-results-heading{min-width:0}.kagera-results-heading h2,.kagera-results-heading p{overflow-wrap:anywhere}
+.kagera-results-actions{min-width:0;display:flex;align-items:flex-end;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.kagera-filters{display:flex;align-items:flex-end;gap:7px;flex-wrap:wrap;min-width:0}
+.filter-group,.kagera-display-type{min-width:0}.kagera-filter-select{max-width:100%}
+.kagera-table-wrap{width:100%;max-width:100%;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.kagera-report-panel,.kagera-report-table-wrap{width:100%;max-width:100%;min-width:0}
+.kagera-high-low-report{width:100%;max-width:100%;min-width:0;padding:10px;overflow-x:auto}
+.kagera-high-low-table{min-width:560px}
+@media(max-width:1100px){
+ .kagera-results-header{grid-template-columns:1fr auto}.kagera-results-actions{grid-column:1/-1;justify-content:flex-start}
+ .kagera-main{padding:16px!important}
+}
+@media(max-width:760px){
+ .kagera-main,body.sidebar-collapsed .kagera-main{padding:10px!important;margin-left:0!important}
+ .kagera-results-header{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+ .kagera-display-type,.kagera-display-type select{width:100%}
+ .kagera-results-actions,.kagera-filters{width:100%;align-items:stretch}
+ .filter-group{flex:1 1 145px}.filter-group select{width:100%}
+ .kagera-refresh-btn,.kagera-settings-btn{min-height:38px}
+ .kagera-report-header{padding:8px 10px;flex-wrap:wrap}
+ .kagera-high-low-report{padding:7px}
+ .kagera-high-low-table th,.kagera-high-low-table td{padding:6px 7px;font-size:10px}
+ .kagera-table-wrap{height:auto!important;max-height:calc(100vh - 245px);min-height:260px}
+ .kagera-settings-upload-panel{position:fixed!important;left:8px!important;right:8px!important;top:72px!important;width:auto!important;max-height:calc(100vh - 88px);overflow:auto}
+}
+@media(max-width:480px){
+ .kagera-main,body.sidebar-collapsed .kagera-main{padding:6px!important}
+ .kagera-data-card{border-radius:7px}.kagera-results-heading h2{font-size:15px}
+ .kagera-results-heading p{font-size:9px}.kagera-filters{gap:5px}
+ .filter-group{flex:1 1 120px}.kagera-filter-select{font-size:10px;padding-left:7px;padding-right:22px}
+ .kagera-high-low-report{padding:5px}.kagera-high-low-table{min-width:520px}
+}
+
 </style>
 
 </head>
@@ -5831,7 +5869,6 @@ kageraSetupHighLowExport();
 |--------------------------------------------------------------------------
 */
 kageraSyncUploadWithDisplay();
-loadKageraResults();
 
 
 
@@ -5918,10 +5955,70 @@ function escapeKageraHtml(value)
 |--------------------------------------------------------------------------
 */
 
-document.addEventListener(
-    "DOMContentLoaded",
-    loadKageraResults
-);
+async function kageraInitializeDefaultView()
+{
+    /*
+     * Default landing view: High & Low for the latest auction in the
+     * database. "Latest" is determined by Auction Date first, then by
+     * numeric Auction No. This avoids assuming the highest auction number
+     * always has the newest date.
+     */
+    try {
+        const rows = await loadKageraData("results");
+        if (!Array.isArray(rows) || rows.length === 0) {
+            if (kageraDisplayType) kageraDisplayType.value = "high_low";
+            kageraSyncUploadWithDisplay();
+            await kageraShowReport();
+            return;
+        }
+
+        const valid = rows.filter(function(row) {
+            return row && String(row.auction_no ?? "").trim() && String(row.auction_date ?? "").trim();
+        });
+
+        valid.sort(function(a, b) {
+            const da = String(a.auction_date || "");
+            const db = String(b.auction_date || "");
+            if (da !== db) return db.localeCompare(da);
+            const na = kageraAuctionNumber(a.auction_no);
+            const nb = kageraAuctionNumber(b.auction_no);
+            if (na !== null && nb !== null && na !== nb) return nb - na;
+            return String(b.auction_no).localeCompare(String(a.auction_no), undefined, {numeric:true,sensitivity:"base"});
+        });
+
+        const latest = valid[0];
+        if (!latest) return;
+
+        const latestSeason = kageraGetSeason(latest.auction_date) || "";
+        const latestAuction = String(latest.auction_no || "").trim();
+        const seasonSelect = document.getElementById("kageraSeasonFilter");
+        const auctionSelect = document.getElementById("kageraAuctionFilter");
+
+        kageraPopulateSeasonFilterFromRows(rows);
+        if (seasonSelect && latestSeason) seasonSelect.value = latestSeason;
+        kageraPopulateAuctionFilterFromRows(rows);
+        if (auctionSelect && latestAuction) auctionSelect.value = latestAuction;
+
+        if (kageraDisplayType) kageraDisplayType.value = "high_low";
+        kageraSyncUploadWithDisplay();
+
+        const resultsTable = document.getElementById("kageraResultsTable");
+        const catalogueTable = document.getElementById("kageraCatalogueTable");
+        if (resultsTable) resultsTable.style.display = "none";
+        if (catalogueTable) catalogueTable.style.display = "none";
+
+        await kageraShowReport();
+    } catch (error) {
+        console.error("Kagera default High & Low initialization:", error);
+        if (kageraDisplayType) kageraDisplayType.value = "results";
+        kageraSyncUploadWithDisplay();
+        await loadKageraResults();
+    }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    void kageraInitializeDefaultView();
+});
 
 
 let kageraEditMode = false;
