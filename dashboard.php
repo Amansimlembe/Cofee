@@ -309,30 +309,44 @@ tfoot td{font-weight:700!important}
 .tc-export-menu.show{display:block}.tc-export-menu button{display:block;width:100%;border:0;background:#fff;text-align:left;padding:6px 7px;font-size:8px;border-radius:4px;cursor:pointer}.tc-export-menu button:hover{background:#f4eee9}
 @media(max-width:560px){.totalclean-head{align-items:flex-start}.totalclean-head>div:first-child{display:block}.tc-export-btn{padding:4px 6px}}
 
-.tc-analysis-panel{margin-top:6px}
-.tc-analysis-head{display:flex!important;justify-content:space-between;align-items:center;gap:8px}
-.tc-analysis-head>div:first-child{display:flex;gap:7px;align-items:baseline}
-.tc-analysis-controls{display:flex!important;align-items:center!important;gap:5px!important;flex-wrap:wrap;justify-content:flex-end}
-.tc-analysis-select{min-width:245px;padding:4px 6px;border:1px solid #d8cec8;border-radius:6px;background:#fff;font-size:8px}
-.tc-party-search{width:175px;padding:4px 7px;border:1px solid #d8cec8;border-radius:6px;background:#fff;font-size:8px}
+.tc-analysis-panel{margin-top:6px;min-width:0}
+.tc-analysis-head{display:flex!important;justify-content:space-between;align-items:center;gap:6px}
+.tc-analysis-head>div:first-child{display:flex;gap:6px;align-items:baseline;min-width:0}
+.tc-analysis-controls{display:flex!important;align-items:center!important;gap:4px!important;flex-wrap:wrap;justify-content:flex-end}
+.tc-analysis-select{min-width:220px;max-width:285px;padding:3px 5px;border:1px solid #d8cec8;border-radius:6px;background:#fff;font-size:7.7px}
+.tc-party-search{width:155px;padding:3px 6px;border:1px solid #d8cec8;border-radius:6px;background:#fff;font-size:7.7px}
 .tc-analysis-export{position:relative}
-.tc-analysis-status{padding:3px 6px 1px;color:#76655d;font-size:7.5px}
-.tc-analysis-panel .table-box{width:100%;overflow-x:auto!important}
-.tc-pivot-table{width:100%!important;min-width:max-content!important;table-layout:auto!important;border-collapse:collapse}
-.tc-pivot-table th,.tc-pivot-table td{padding:3px 5px!important;font-size:7.3px!important;line-height:1.08!important;white-space:nowrap!important}
-.tc-pivot-table th:first-child,.tc-pivot-table td:first-child{width:26px!important;text-align:center!important}
-.tc-pivot-table th:nth-child(2),.tc-pivot-table td:nth-child(2){min-width:175px!important;max-width:240px!important;text-align:left!important;overflow:hidden;text-overflow:ellipsis}
+.tc-analysis-status{padding:2px 5px;color:#76655d;font-size:7.2px}
+.tc-analysis-panel .table-box{width:100%;max-width:100%;overflow-x:auto!important;overflow-y:visible}
+.tc-pivot-table{width:100%!important;min-width:0!important;table-layout:auto!important;border-collapse:collapse!important}
+.tc-pivot-table th,.tc-pivot-table td{padding:2px 3px!important;font-size:7px!important;line-height:1.05!important;white-space:nowrap!important}
+.tc-pivot-table th:first-child,.tc-pivot-table td:first-child{width:22px!important;min-width:22px!important;max-width:22px!important;text-align:center!important}
+.tc-pivot-table th:nth-child(2),.tc-pivot-table td:nth-child(2){width:150px!important;min-width:120px!important;max-width:185px!important;text-align:left!important;overflow:hidden!important;text-overflow:ellipsis!important}
 .tc-pivot-table td:not(:nth-child(2)){text-align:right!important}
-.tc-pivot-table thead th{text-align:center!important;vertical-align:middle}
+.tc-pivot-table thead th{text-align:center!important;vertical-align:middle!important;padding-left:2px!important;padding-right:2px!important}
+.tc-pivot-table thead tr:nth-child(2) th{min-width:66px!important;width:66px!important}
 .tc-pivot-table .pivot-total,.tc-pivot-table tfoot td{font-weight:800}
 .tc-other-row{font-weight:800;cursor:pointer;background:#faf7f5}
 .tc-other-row:hover{background:#f4eee9}
 .tc-other-row .tc-expand{text-align:left!important}
-.tc-detail-row td:nth-child(2){padding-left:14px!important}
-.tc-hidden{display:none}
+.tc-detail-row td:nth-child(2){padding-left:10px!important}
 .tc-overall-row{font-weight:900}
-@media(max-width:850px){.tc-analysis-head{flex-direction:column;align-items:stretch}.tc-analysis-head>div:first-child{display:block}.tc-analysis-controls{justify-content:flex-start}.tc-analysis-select,.tc-party-search{flex:1 1 220px}}
-@media(max-width:560px){.tc-analysis-select,.tc-party-search{width:100%;min-width:0;flex-basis:100%}.tc-pivot-table th,.tc-pivot-table td{padding:3px 4px!important;font-size:7px!important}.tc-pivot-table th:nth-child(2),.tc-pivot-table td:nth-child(2){min-width:145px!important}}
+@media(min-width:901px){
+ .tc-pivot-table{font-size:7px!important}
+}
+@media(max-width:900px){
+ .tc-analysis-head{flex-direction:column;align-items:stretch}
+ .tc-analysis-head>div:first-child{display:block}
+ .tc-analysis-controls{justify-content:flex-start}
+ .tc-analysis-select,.tc-party-search{flex:1 1 190px;max-width:none}
+ .tc-pivot-table{width:max-content!important;min-width:100%!important}
+}
+@media(max-width:560px){
+ .tc-analysis-select,.tc-party-search{width:100%;min-width:0;flex-basis:100%}
+ .tc-pivot-table th,.tc-pivot-table td{padding:2px!important;font-size:6.8px!important}
+ .tc-pivot-table th:nth-child(2),.tc-pivot-table td:nth-child(2){width:130px!important;min-width:110px!important;max-width:150px!important}
+ .tc-pivot-table thead tr:nth-child(2) th{min-width:60px!important;width:60px!important}
+}
 .totalclean-view-select{min-width:205px;font-weight:700}
 @media(max-width:1050px){.topbar{align-items:flex-start}.season{flex-wrap:wrap;justify-content:flex-end}.season select{max-width:230px}}
 @media(max-width:720px){.topbar{display:block}.topbar .title{margin-bottom:6px}.season{display:grid!important;grid-template-columns:auto minmax(0,1fr);gap:4px 6px!important;width:100%;align-items:center}.season label{margin:0!important}.season select,.totalclean-view-select{width:100%!important;max-width:none!important;min-width:0!important}}
@@ -402,16 +416,16 @@ tfoot td{font-weight:700!important}
 </div>
 <div class="analytics direct-analytics">
 <section class="panel"><div class="panel-head"><strong>Sales Channels Summary</strong><span>Quantity & value</span></div><div class="table-box"><table>
-<thead><tr><th>Sales Channel</th><th>Net Weight (kg)</th><th>Value (USD)</th><th>Qty Share</th></tr></thead><tbody>
+<thead><tr><th>Sales Channel</th><th>Net Weight (kg)</th><th>Value USD</th><th>Qty Share</th></tr></thead><tbody>
 <?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?><tr><td><?=htmlspecialchars($ch)?></td><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf(pct($x['kgs'],$grandSold),2)?>%</td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td>Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <section class="panel"><div class="panel-head"><strong>Sales by Coffee Type</strong><span>All direct sales channels</span></div><div class="table-box"><table>
-<thead><tr><th>Coffee Type</th><th>Net Weight (kg)</th><th>Value (USD)</th><th>Qty Share</th></tr></thead><tbody>
+<thead><tr><th>Coffee Type</th><th>Net Weight (kg)</th><th>Value USD</th><th>Qty Share</th></tr></thead><tbody>
 <?php foreach($coffeeTotals as $ct=>$x):?><tr><td><?=htmlspecialchars($ct)?></td><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf(pct($x['kgs'],$grandSold),2)?>%</td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td>Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 </div>
 <section class="trend-panel"><div class="trend-head"><strong>Sales Channel × Coffee Type</strong><span>Net weight (kg) and value (USD)</span></div><div class="table-box"><table>
-<thead><tr><th>Sales Channel</th><th>Coffee Type</th><th>Net Weight (kg)</th><th>Value (USD)</th><th>Qty Share</th></tr></thead><tbody>
+<thead><tr><th>Sales Channel</th><th>Coffee Type</th><th>Net Weight (kg)</th><th>Value USD</th><th>Qty Share</th></tr></thead><tbody>
 <?php foreach($directRows as$r):?><tr><td><?=htmlspecialchars($r['channel'])?></td><td><?=htmlspecialchars($r['coffee_type'])?></td><td><?=nf($r['kgs'],2)?></td><td><?=nf($r['value_usd'],2)?></td><td><?=nf(pct((float)$r['kgs'],$grandSold),2)?>%</td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td colspan="2">Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php else: ?>
@@ -465,7 +479,7 @@ tfoot td{font-weight:700!important}
   supplier_type:{party:'supplier',dim:'coffee_type',partyLabel:'Supplier / Seller',dimLabel:'Coffee Type'}
  };
  const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
- const fmt=(v,d=2)=>Number(v||0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:d});
+ const fmt=(v,d=2)=>{v=Number(v)||0;return v.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:Number.isInteger(v)?0:Math.min(d,2)})};
  let expanded=false,current={};
 
  function build(){
@@ -506,8 +520,8 @@ tfoot td{font-weight:700!important}
  function draw(){
   build();const {cfg,top,others,dims,q,filtered,allParties}=current;
   let h=`<table id="tcPivotExportTable" class="tc-pivot-table"><thead><tr><th rowspan="2">#</th><th rowspan="2">${esc(cfg.partyLabel)}</th>`;
-  dims.forEach(d=>h+=`<th colspan="2">${esc(d)}</th>`);h+='<th colspan="2">Overall Total</th></tr><tr>';
-  dims.forEach(()=>h+='<th>Kg</th><th>Value (USD)</th>');h+='<th>Kg</th><th>Value (USD)</th></tr></thead><tbody>';
+  dims.forEach(d=>h+=`<th colspan="2">${esc(d)}</th>`);h+='<th colspan="2">Total</th></tr><tr>';
+  dims.forEach(()=>h+='<th>Kg</th><th>Value USD</th>');h+='<th>Kg</th><th>Value USD</th></tr></thead><tbody>';
   top.forEach((p,i)=>h+=row(p,i+1));
   if(!q&&others.length){
    const a=aggregate(others);
