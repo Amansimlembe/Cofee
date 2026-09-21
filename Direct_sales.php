@@ -210,7 +210,8 @@ if(isset($_GET['action'])){
            $st->execute(array_merge($p,$deParams));
            $coffee=$st->fetchAll();
 
-           $sqlRegion="SELECT COALESCE(NULLIF(BTRIM(d.region),''),'Unspecified') label,
+           $sqlRegion="SELECT CASE WHEN NULLIF(BTRIM(d.region),'') IS NULL THEN 'Unspecified'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.region), '\\s+', ' ', 'g'))) END label,
                COALESCE(SUM(d.net_kg),0) net_kg,
                COALESCE(SUM($balanceExpr),0) ls_balance_kg,
                COALESCE(SUM($valueExpr),0) value_usd
@@ -228,16 +229,47 @@ if(isset($_GET['action'])){
            $st->execute(array_merge($p,$deParams));
            $total=$st->fetch();
 
-           $sqlSupplierCoffee="SELECT COALESCE(NULLIF(BTRIM(d.supplier_seller),''),'Unspecified') party,
+           $sqlSupplierCoffee="SELECT CASE
+ WHEN NULLIF(BTRIM(d.supplier_seller),'') IS NULL THEN 'Unspecified'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '[.]', '', 'g')) IN ('A.LE &TOM NORTH AMERICA LLC','ALE &TOM NORTH AMERICA LLC') THEN 'A.LE &TOM North America LLC'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '[.]', '', 'g')) IN ('BERNHARD ROTHFOS INTERCAFE','BERNHARD ROTHFOS INTERCAFE AG') THEN 'BERNHARD ROTHFOS INTERCAFE'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '\\s+', ' ', 'g')))
+ END party,
                COALESCE(NULLIF(BTRIM(d.coffee_type),''),'Unspecified') coffee_type,
                COALESCE(SUM($balanceExpr),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
                FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,coffee_type";
            $st=direct_db()->prepare($sqlSupplierCoffee); $st->execute(array_merge($p,$deParams)); $supplierCoffee=$st->fetchAll();
-           $sqlBuyerCoffee="SELECT COALESCE(NULLIF(BTRIM(d.buyer),''),'Unspecified') party,
+           $sqlBuyerCoffee="SELECT CASE
+ WHEN NULLIF(BTRIM(d.buyer),'') IS NULL THEN 'Unspecified'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.buyer), '[.]', '', 'g')) IN ('A.LE &TOM NORTH AMERICA LLC','ALE &TOM NORTH AMERICA LLC') THEN 'A.LE &TOM North America LLC'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.buyer), '[.]', '', 'g')) IN ('BERNHARD ROTHFOS INTERCAFE','BERNHARD ROTHFOS INTERCAFE AG') THEN 'BERNHARD ROTHFOS INTERCAFE'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.buyer), '\\s+', ' ', 'g')))
+ END party,
                COALESCE(NULLIF(BTRIM(d.coffee_type),''),'Unspecified') coffee_type,
                COALESCE(SUM($balanceExpr),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
                FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,coffee_type";
            $st=direct_db()->prepare($sqlBuyerCoffee); $st->execute(array_merge($p,$deParams)); $buyerCoffee=$st->fetchAll();
+
+           $sqlSupplierRegion="SELECT CASE
+ WHEN NULLIF(BTRIM(d.supplier_seller),'') IS NULL THEN 'Unspecified'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '[.]', '', 'g')) IN ('A.LE &TOM NORTH AMERICA LLC','ALE &TOM NORTH AMERICA LLC') THEN 'A.LE &TOM North America LLC'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '[.]', '', 'g')) IN ('BERNHARD ROTHFOS INTERCAFE','BERNHARD ROTHFOS INTERCAFE AG') THEN 'BERNHARD ROTHFOS INTERCAFE'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '\\s+', ' ', 'g')))
+ END party, CASE WHEN NULLIF(BTRIM(d.region),'') IS NULL THEN 'Unspecified'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.region), '\\s+', ' ', 'g'))) END region,
+               COALESCE(SUM($balanceExpr),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
+               FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,region";
+           $st=direct_db()->prepare($sqlSupplierRegion); $st->execute(array_merge($p,$deParams)); $supplierRegion=$st->fetchAll();
+           $sqlBuyerRegion="SELECT CASE
+ WHEN NULLIF(BTRIM(d.buyer),'') IS NULL THEN 'Unspecified'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.buyer), '[.]', '', 'g')) IN ('A.LE &TOM NORTH AMERICA LLC','ALE &TOM NORTH AMERICA LLC') THEN 'A.LE &TOM North America LLC'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.buyer), '[.]', '', 'g')) IN ('BERNHARD ROTHFOS INTERCAFE','BERNHARD ROTHFOS INTERCAFE AG') THEN 'BERNHARD ROTHFOS INTERCAFE'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.buyer), '\\s+', ' ', 'g')))
+ END party, CASE WHEN NULLIF(BTRIM(d.region),'') IS NULL THEN 'Unspecified'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.region), '\\s+', ' ', 'g'))) END region,
+               COALESCE(SUM($balanceExpr),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
+               FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,region";
+           $st=direct_db()->prepare($sqlBuyerRegion); $st->execute(array_merge($p,$deParams)); $buyerRegion=$st->fetchAll();
 
            direct_json(true,'',[
               'is_local_sale'=>true,
@@ -245,6 +277,8 @@ if(isset($_GET['action'])){
               'regions'=>$regions,
               'supplier_coffee'=>$supplierCoffee,
               'buyer_coffee'=>$buyerCoffee,
+              'supplier_region'=>$supplierRegion,
+              'buyer_region'=>$buyerRegion,
               'total'=>[
                  'net_kg'=>(float)($total['net_kg']??0),
                  'ls_balance_kg'=>(float)($total['ls_balance_kg']??0),
@@ -262,7 +296,8 @@ if(isset($_GET['action'])){
            GROUP BY 1 ORDER BY net_kg DESC,label";
        $st=direct_db()->prepare($sqlCoffee); $st->execute($p); $coffee=$st->fetchAll();
 
-       $sqlRegion="SELECT COALESCE(NULLIF(BTRIM(d.region),''),'Unspecified') label,
+       $sqlRegion="SELECT CASE WHEN NULLIF(BTRIM(d.region),'') IS NULL THEN 'Unspecified'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.region), '\\s+', ' ', 'g'))) END label,
            COALESCE(SUM(d.net_kg),0) net_kg,
            COALESCE(SUM($valueExpr),0) value_usd
            FROM public.direct_sales d WHERE $where
@@ -274,16 +309,47 @@ if(isset($_GET['action'])){
            FROM public.direct_sales d WHERE $where";
        $st=direct_db()->prepare($sqlTotal); $st->execute($p); $total=$st->fetch();
 
-       $sqlSupplierCoffee="SELECT COALESCE(NULLIF(BTRIM(d.supplier_seller),''),'Unspecified') party,
+       $sqlSupplierCoffee="SELECT CASE
+ WHEN NULLIF(BTRIM(d.supplier_seller),'') IS NULL THEN 'Unspecified'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '[.]', '', 'g')) IN ('A.LE &TOM NORTH AMERICA LLC','ALE &TOM NORTH AMERICA LLC') THEN 'A.LE &TOM North America LLC'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '[.]', '', 'g')) IN ('BERNHARD ROTHFOS INTERCAFE','BERNHARD ROTHFOS INTERCAFE AG') THEN 'BERNHARD ROTHFOS INTERCAFE'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '\\s+', ' ', 'g')))
+ END party,
            COALESCE(NULLIF(BTRIM(d.coffee_type),''),'Unspecified') coffee_type,
            COALESCE(SUM(d.net_kg),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
            FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,coffee_type";
        $st=direct_db()->prepare($sqlSupplierCoffee); $st->execute($p); $supplierCoffee=$st->fetchAll();
-       $sqlBuyerCoffee="SELECT COALESCE(NULLIF(BTRIM(d.buyer),''),'Unspecified') party,
+       $sqlBuyerCoffee="SELECT CASE
+ WHEN NULLIF(BTRIM(d.buyer),'') IS NULL THEN 'Unspecified'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.buyer), '[.]', '', 'g')) IN ('A.LE &TOM NORTH AMERICA LLC','ALE &TOM NORTH AMERICA LLC') THEN 'A.LE &TOM North America LLC'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.buyer), '[.]', '', 'g')) IN ('BERNHARD ROTHFOS INTERCAFE','BERNHARD ROTHFOS INTERCAFE AG') THEN 'BERNHARD ROTHFOS INTERCAFE'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.buyer), '\\s+', ' ', 'g')))
+ END party,
            COALESCE(NULLIF(BTRIM(d.coffee_type),''),'Unspecified') coffee_type,
            COALESCE(SUM(d.net_kg),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
            FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,coffee_type";
        $st=direct_db()->prepare($sqlBuyerCoffee); $st->execute($p); $buyerCoffee=$st->fetchAll();
+
+       $sqlSupplierRegion="SELECT CASE
+ WHEN NULLIF(BTRIM(d.supplier_seller),'') IS NULL THEN 'Unspecified'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '[.]', '', 'g')) IN ('A.LE &TOM NORTH AMERICA LLC','ALE &TOM NORTH AMERICA LLC') THEN 'A.LE &TOM North America LLC'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '[.]', '', 'g')) IN ('BERNHARD ROTHFOS INTERCAFE','BERNHARD ROTHFOS INTERCAFE AG') THEN 'BERNHARD ROTHFOS INTERCAFE'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.supplier_seller), '\\s+', ' ', 'g')))
+ END party, CASE WHEN NULLIF(BTRIM(d.region),'') IS NULL THEN 'Unspecified'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.region), '\\s+', ' ', 'g'))) END region,
+           COALESCE(SUM(d.net_kg),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
+           FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,region";
+       $st=direct_db()->prepare($sqlSupplierRegion); $st->execute($p); $supplierRegion=$st->fetchAll();
+       $sqlBuyerRegion="SELECT CASE
+ WHEN NULLIF(BTRIM(d.buyer),'') IS NULL THEN 'Unspecified'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.buyer), '[.]', '', 'g')) IN ('A.LE &TOM NORTH AMERICA LLC','ALE &TOM NORTH AMERICA LLC') THEN 'A.LE &TOM North America LLC'
+ WHEN UPPER(REGEXP_REPLACE(BTRIM(d.buyer), '[.]', '', 'g')) IN ('BERNHARD ROTHFOS INTERCAFE','BERNHARD ROTHFOS INTERCAFE AG') THEN 'BERNHARD ROTHFOS INTERCAFE'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.buyer), '\\s+', ' ', 'g')))
+ END party, CASE WHEN NULLIF(BTRIM(d.region),'') IS NULL THEN 'Unspecified'
+ ELSE INITCAP(LOWER(REGEXP_REPLACE(BTRIM(d.region), '\\s+', ' ', 'g'))) END region,
+           COALESCE(SUM(d.net_kg),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
+           FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,region";
+       $st=direct_db()->prepare($sqlBuyerRegion); $st->execute($p); $buyerRegion=$st->fetchAll();
 
        direct_json(true,'',[
           'is_local_sale'=>false,
@@ -291,6 +357,8 @@ if(isset($_GET['action'])){
           'regions'=>$regions,
           'supplier_coffee'=>$supplierCoffee,
           'buyer_coffee'=>$buyerCoffee,
+          'supplier_region'=>$supplierRegion,
+          'buyer_region'=>$buyerRegion,
           'total'=>[
              'net_kg'=>(float)($total['net_kg']??0),
              'value_usd'=>(float)($total['value_usd']??0)
@@ -359,11 +427,15 @@ th:first-child,td:first-child{text-align:left}td.text{text-align:left}.num{font-
 </div>
 <div class="status" id="status"></div>
 <div class="tablewrap" id="tablewrap"><table id="table"></table></div>
-<div class="summary-toolbar" id="summaryToolbar"><b>Sale Summary</b><select id="summaryType"><option value="coffee">By Coffee Type</option><option value="region">By Region</option><option value="supplier">By Supplier & Coffee Type</option><option value="buyer">By Buyer & Coffee Type</option></select></div><div class="summary" id="summary">
+<div class="summary-toolbar" id="summaryToolbar"><b>Sale Summary</b><select id="summaryType"><option value="coffee">By Coffee Type</option><option value="region">By Region</option><option value="supplier">By Supplier & Coffee Type</option><option value="buyer">By Buyer & Coffee Type</option>
+<option value="supplier_region">By Supplier & Region</option>
+<option value="buyer_region">By Buyer & Region</option></select></div><div class="summary" id="summary">
  <section class="summary-card summary-view active" data-summary="coffee"><div class="summary-head">Sales Summary by Coffee Type <span class="summary-note">Value = (USD/50kg ÷ 50) × Net kg</span></div><div id="coffeeSummary"></div></section>
  <section class="summary-card summary-view" data-summary="region"><div class="summary-head">Sales Summary by Region <span class="summary-note">Share based on Grand Total net weight</span></div><div id="regionSummary"></div></section>
  <section class="summary-card summary-wide summary-view" data-summary="supplier"><div class="summary-head">Sales Summary by Supplier & Coffee Type</div><div id="supplierCoffeeSummary"></div></section>
  <section class="summary-card summary-wide summary-view" data-summary="buyer"><div class="summary-head">Sales Summary by Buyer & Coffee Type</div><div id="buyerCoffeeSummary"></div></section>
+ <section class="summary-card summary-wide summary-view" data-summary="supplier_region"><div class="summary-head">Sales Summary by Supplier & Region</div><div id="supplierRegionSummary"></div></section>
+ <section class="summary-card summary-wide summary-view" data-summary="buyer_region"><div class="summary-head">Sales Summary by Buyer & Region</div><div id="buyerRegionSummary"></div></section>
 </div>
 </div>
 <script>
@@ -427,6 +499,7 @@ function partyCoffeeTable(rows,partyTitle){
 
 function showSelectedSummary(){const v=$('summaryType').value;document.querySelectorAll('.summary-view').forEach(x=>x.classList.toggle('active',x.dataset.summary===v));}
 $('summaryType').addEventListener('change',showSelectedSummary);
+function partyRegionTable(rows,partyTitle){return partyCoffeeTable((rows||[]).map(r=>({...r,coffee_type:r.region})),partyTitle);}
 async function loadSummary(){
  try{
    $('status').textContent='Preparing Sale Summary…';
@@ -435,6 +508,8 @@ async function loadSummary(){
    $('regionSummary').innerHTML=summaryTable(d.regions,d.total,'Region',!!d.is_local_sale);
    $('supplierCoffeeSummary').innerHTML=partyCoffeeTable(d.supplier_coffee||[],'Supplier / Seller');
    $('buyerCoffeeSummary').innerHTML=partyCoffeeTable(d.buyer_coffee||[],'Buyer');
+   $('supplierRegionSummary').innerHTML=partyRegionTable(d.supplier_region||[],'Supplier / Seller');
+   $('buyerRegionSummary').innerHTML=partyRegionTable(d.buyer_region||[],'Buyer');
    showSelectedSummary();
    $('status').textContent=category+' Sale Summary'+($('season').value?' · '+$('season').value:' · All Sale Seasons')+(d.is_local_sale?' · Value and share based on remaining LS Balance':'');
  }catch(e){$('status').textContent=e.message}
@@ -545,7 +620,9 @@ function exportExcel(){
  }
 
  if($('display').value==='summary'){
-   const opts={coffee:['Coffee Type',$('coffeeSummary').querySelector('table')],region:['Region',$('regionSummary').querySelector('table')],supplier:['Supplier by Coffee',$('supplierCoffeeSummary').querySelector('table')],buyer:['Buyer by Coffee',$('buyerCoffeeSummary').querySelector('table')]};
+   const opts={coffee:['Coffee Type',$('coffeeSummary').querySelector('table')],region:['Region',$('regionSummary').querySelector('table')],supplier:['Supplier by Coffee',$('supplierCoffeeSummary').querySelector('table')],buyer:['Buyer by Coffee',$('buyerCoffeeSummary').querySelector('table')],
+     supplier_region:['Supplier by Region',$('supplierRegionSummary').querySelector('table')],
+     buyer_region:['Buyer by Region',$('buyerRegionSummary').querySelector('table')]};
    const [name,table]=opts[$('summaryType').value]; if(table)XLSX.utils.book_append_sheet(wb,sheetFromTable(table),name);
  }else{
    const table=$('table');
