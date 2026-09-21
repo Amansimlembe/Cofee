@@ -3,11 +3,30 @@ session_start();
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) { header('Location: login.php'); exit; }
 
 $display=strtolower(trim($_GET['display']??'kagera'));
-if(!in_array($display,['kagera','clean'],true))$display='kagera';
+if(!in_array($display,['kagera','clean','direct'],true))$display='kagera';
 
 function nf($v,$dec=0){$v=(float)$v;$d=(abs($v-round($v))<0.000001)?0:$dec;return number_format($v,$d,'.',',');}
 function pct($a,$b){return $b>0?($a/$b*100):0;}
 
+
+if($display==='direct'){
+ require_once __DIR__.'/Direct__database.php';
+ if(function_exists('ensure_direct_table')) ensure_direct_table();
+ elseif(function_exists('ensure_direct_sales_table')) ensure_direct_sales_table();
+ $db=function_exists('direct_db')?direct_db():$pdo;
+ function season_bounds($s){if(!preg_match('/^(\d{4})\/(\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
+ function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
+ $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM invoice_date)::int y,EXTRACT(MONTH FROM invoice_date)::int m FROM public.direct_sales WHERE invoice_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
+ $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
+ $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $channelCase="CASE WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('DE','DIRECT EXPORT') THEN 'Direct Export' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LS','LOCAL SALE') THEN 'Local Sale' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LR','LOCAL ROAST','LOCAL ROAST SALE','SLS') THEN 'Local Roast' ELSE NULL END";
+ $valueExpr="COALESCE(net_kg,0)*COALESCE(price_usd_50kgs,0)/50.0";
+ $q=$db->prepare("SELECT $channelCase channel,COALESCE(NULLIF(INITCAP(LOWER(BTRIM(coffee_type))),''),'Unspecified') coffee_type,SUM(COALESCE(net_kg,0)) kgs,SUM($valueExpr) value_usd FROM public.direct_sales WHERE invoice_date BETWEEN :f AND :t AND $channelCase IS NOT NULL GROUP BY 1,2 ORDER BY 1,2");
+ $q->execute(['f'=>$from,'t'=>$to]);$directRows=$q->fetchAll();
+ $channelTotals=[];$coffeeTotals=[];$grandSold=0;$grandValue=0;
+ foreach($directRows as$r){$c=$r['channel'];$ct=$r['coffee_type'];$kg=(float)$r['kgs'];$v=(float)$r['value_usd'];$channelTotals[$c]['kgs']=($channelTotals[$c]['kgs']??0)+$kg;$channelTotals[$c]['value']=($channelTotals[$c]['value']??0)+$v;$coffeeTotals[$ct]['kgs']=($coffeeTotals[$ct]['kgs']??0)+$kg;$coffeeTotals[$ct]['value']=($coffeeTotals[$ct]['value']??0)+$v;$grandSold+=$kg;$grandValue+=$v;}
+ $dashboardTitle='Direct Sales — Season Summary';$dashboardSub='Sales channels and coffee type performance';
+}else
 if($display==='clean'){
  require_once __DIR__.'/clean_database.php'; ensure_clean_table(); $db=clean_db();
  function season_bounds($s){if(!preg_match('/^(\d{4})\/(\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
@@ -189,6 +208,11 @@ tfoot td{font-weight:700!important}
 #auctionTrendChart{display:block}
 
 @media(max-width:560px){.season{width:100%;justify-content:flex-end}.season select{max-width:145px!important}}
+
+.direct-kpis{grid-template-columns:110px repeat(3,minmax(0,1fr))}
+.direct-analytics{grid-template-columns:1fr 1fr}
+@media(max-width:900px){.direct-kpis{grid-template-columns:1fr 1fr}.direct-kpis>.kpi{grid-column:1/-1}}
+@media(max-width:560px){.direct-kpis,.direct-analytics{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -202,10 +226,33 @@ tfoot td{font-weight:700!important}
             <label>Season</label>
             <select name="season" onchange="this.form.submit()"><?php foreach($seasons ?: [$season] as $s): ?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach ?></select>
             <label>Display</label>
-            <select name="display" onchange="this.form.submit()"><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option></select>
+            <select name="display" onchange="this.form.submit()"><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option><option value="direct" <?=$display==='direct'?'selected':''?>>Direct Sales Summary</option></select>
         </form>
     </div>
 
+
+<?php if($display==='direct'): ?>
+<div class="kpis direct-kpis">
+ <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
+ <?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?>
+ <div class="metric-group <?=$ch==='Direct Export'?'dry':'clean'?>"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small>Net weight</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Qty Share</span><strong><?=nf(pct($x['kgs'],$grandSold),2)?>%</strong><small>of total</small></div></div>
+ <?php endforeach;?>
+</div>
+<div class="analytics direct-analytics">
+<section class="panel"><div class="panel-head"><strong>Sales Channels Summary</strong><span>Quantity & value</span></div><div class="table-box"><table>
+<thead><tr><th>Sales Channel</th><th>Net Weight (kg)</th><th>Value (USD)</th><th>Qty Share</th></tr></thead><tbody>
+<?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?><tr><td><?=htmlspecialchars($ch)?></td><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf(pct($x['kgs'],$grandSold),2)?>%</td></tr><?php endforeach;?>
+</tbody><tfoot><tr><td>Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
+<section class="panel"><div class="panel-head"><strong>Sales by Coffee Type</strong><span>All direct sales channels</span></div><div class="table-box"><table>
+<thead><tr><th>Coffee Type</th><th>Net Weight (kg)</th><th>Value (USD)</th><th>Qty Share</th></tr></thead><tbody>
+<?php foreach($coffeeTotals as $ct=>$x):?><tr><td><?=htmlspecialchars($ct)?></td><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf(pct($x['kgs'],$grandSold),2)?>%</td></tr><?php endforeach;?>
+</tbody><tfoot><tr><td>Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
+</div>
+<section class="trend-panel"><div class="trend-head"><strong>Sales Channel × Coffee Type</strong><span>Net weight (kg) and value (USD)</span></div><div class="table-box"><table>
+<thead><tr><th>Sales Channel</th><th>Coffee Type</th><th>Net Weight (kg)</th><th>Value (USD)</th><th>Qty Share</th></tr></thead><tbody>
+<?php foreach($directRows as$r):?><tr><td><?=htmlspecialchars($r['channel'])?></td><td><?=htmlspecialchars($r['coffee_type'])?></td><td><?=nf($r['kgs'],2)?></td><td><?=nf($r['value_usd'],2)?></td><td><?=nf(pct((float)$r['kgs'],$grandSold),2)?>%</td></tr><?php endforeach;?>
+</tbody><tfoot><tr><td colspan="2">Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
+<?php else: ?>
     <div class="kpis">
  <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
  <div class="kpi"><span class="label">Auctions</span><strong><?=nf($auctions)?></strong><div class="sub">Held</div></div>
@@ -234,9 +281,11 @@ tfoot td{font-weight:700!important}
  <div class="trend-wrap"><canvas id="auctionTrendChart"></canvas></div>
 </section>
 </div>
+<?php endif; ?>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
-const auctionTrend=<?=json_encode($auctionTrend,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>,cleanMode=<?=json_encode($display==='clean')?>,ctx=document.getElementById('auctionTrendChart');
+const auctionTrend=<?=json_encode($display==='direct'?[]:$auctionTrend,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>,cleanMode=<?=json_encode($display==='clean')?>,ctx=document.getElementById('auctionTrendChart');
 if(ctx&&window.Chart){const datasets=cleanMode?[
 {type:'bar',label:'Quantity Sold (kg)',data:auctionTrend.map(r=>Number(r.qty)||0),yAxisID:'yQty',borderWidth:0,maxBarThickness:24},
 {type:'line',label:'Weighted Avg Price (USD/50kg)',data:auctionTrend.map(r=>r.avg_price===null?null:Number(r.avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25}
