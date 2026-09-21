@@ -19,9 +19,28 @@ if($display==='direct'){
  $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
  $channelCase="CASE WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('DE','DIRECT EXPORT') THEN 'Direct Export' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LS','LOCAL SALE') THEN 'Local Sale' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LR','LOCAL ROAST','LOCAL ROAST SALE','SLS') THEN 'Local Roast' ELSE NULL END";
- $valueExpr="COALESCE(net_kg,0)*COALESCE(price_usd_50kg,0)/50.0";
- $q=$db->prepare("SELECT $channelCase channel,COALESCE(NULLIF(INITCAP(LOWER(BTRIM(coffee_type))),''),'Unspecified') coffee_type,SUM(COALESCE(net_kg,0)) kgs,SUM($valueExpr) value_usd FROM public.direct_sales WHERE invoice_date BETWEEN :f AND :t AND $channelCase IS NOT NULL GROUP BY 1,2 ORDER BY 1,2");
- $q->execute(['f'=>$from,'t'=>$to]);$directRows=$q->fetchAll();
+ /* Local Sale dashboard quantity is ALWAYS Local Sale Balance. */
+ $lsBalanceExpr="GREATEST(
+     COALESCE(d.net_kg,0) -
+     COALESCE((
+         SELECT SUM(COALESCE(de.net_kg,0))
+         FROM public.direct_sales de
+         WHERE UPPER(BTRIM(COALESCE(de.sale_category,''))) IN ('DE','DIRECT EXPORT')
+           AND NULLIF(BTRIM(de.source_invoice_number),'') IS NOT NULL
+           AND UPPER(BTRIM(de.source_invoice_number))=UPPER(BTRIM(d.invoice_number))
+           AND de.invoice_date BETWEEN :lsf AND :lst
+     ),0),
+     0
+ )";
+ $qtyExpr="CASE
+     WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('LS','LOCAL SALE')
+     THEN $lsBalanceExpr
+     ELSE COALESCE(d.net_kg,0)
+ END";
+ $valueExpr="($qtyExpr)*COALESCE(d.price_usd_50kg,0)/50.0";
+ $channelCaseD="CASE WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('DE','DIRECT EXPORT') THEN 'Direct Export' WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('LS','LOCAL SALE') THEN 'Local Sale' WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('LR','LOCAL ROAST','LOCAL ROAST SALE','SLS') THEN 'Local Roast' ELSE NULL END";
+ $q=$db->prepare("SELECT $channelCaseD channel,COALESCE(NULLIF(INITCAP(LOWER(BTRIM(d.coffee_type))),''),'Unspecified') coffee_type,SUM($qtyExpr) kgs,SUM($valueExpr) value_usd FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channelCaseD IS NOT NULL GROUP BY 1,2 ORDER BY 1,2");
+ $q->execute(['f'=>$from,'t'=>$to,'lsf'=>$from,'lst'=>$to]);$directRows=$q->fetchAll();
  $channelTotals=[];$coffeeTotals=[];$grandSold=0;$grandValue=0;
  foreach($directRows as$r){$c=$r['channel'];$ct=$r['coffee_type'];$kg=(float)$r['kgs'];$v=(float)$r['value_usd'];$channelTotals[$c]['kgs']=($channelTotals[$c]['kgs']??0)+$kg;$channelTotals[$c]['value']=($channelTotals[$c]['value']??0)+$v;$coffeeTotals[$ct]['kgs']=($coffeeTotals[$ct]['kgs']??0)+$kg;$coffeeTotals[$ct]['value']=($coffeeTotals[$ct]['value']??0)+$v;$grandSold+=$kg;$grandValue+=$v;}
  $dashboardTitle='Direct Sales — Season Summary';$dashboardSub='Sales channels and coffee type performance';
