@@ -10,7 +10,7 @@ function pct($a,$b){return $b>0?($a/$b*100):0;}
 
 
 if($display==='direct'){
- require_once __DIR__.'/Direct__database.php';
+ require_once __DIR__.'/Direct_database.php';
  if(function_exists('ensure_direct_table')) ensure_direct_table();
  elseif(function_exists('ensure_direct_sales_table')) ensure_direct_sales_table();
  $db=function_exists('direct_db')?direct_db():$pdo;
