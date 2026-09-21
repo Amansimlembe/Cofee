@@ -335,7 +335,7 @@ th:first-child,td:first-child{text-align:left}td.text{text-align:left}.num{font-
 @media(max-width:1100px){.app{padding:7px}.toolbar{gap:7px}.controls{gap:5px}.tablewrap{height:calc(100vh - 100px)}th,td{padding:6px;font-size:11px}.summary-card th,.summary-card td{padding:5px 6px}}
 @media(max-width:760px){.toolbar{position:relative;align-items:stretch}.controls{display:grid;grid-template-columns:1fr 1fr;gap:6px}.controls select,.controls button,.controls input{width:100%;min-width:0}.upload{grid-column:1/-1;width:100%}.upload input{flex:1}.export-wrap{position:static}.export-menu{right:8px;top:auto;margin-top:3px}.tablewrap{height:calc(100vh - 190px);border-radius:6px}.summary{gap:7px}.summary-card{max-width:100%}.summary-card table{min-width:560px}.summary-card th,.summary-card td{font-size:10.5px;padding:5px}.summary-head{font-size:12px}}
 @media(max-width:480px){.app{padding:5px}.controls{grid-template-columns:1fr}.upload{grid-column:auto;display:grid!important;grid-template-columns:1fr auto}.title{font-size:15px}.toolbar{padding:7px}.status{margin:5px 2px}.tablewrap{height:calc(100vh - 250px)}.summary-card table{min-width:520px}.summary-note{display:block;margin:2px 0 0}.export-menu{left:7px;right:7px;min-width:0}}
-</style></head>
+.summary-toolbar{display:none;justify-content:space-between;align-items:center;margin:8px 0 6px;padding:7px 9px;background:#fff;border:1px solid #d9d2cf;border-radius:8px}.summary-toolbar.show{display:flex}.summary-toolbar select{min-width:230px}.summary.show{display:block}.summary-view{display:none!important}.summary-view.active{display:block!important;width:100%}@media(max-width:600px){.summary-toolbar{flex-direction:column;align-items:stretch;gap:6px}.summary-toolbar select{width:100%;min-width:0}}</style></head>
 <body><div class="app">
 <div class="toolbar">
  <div><div class="title"><?=htmlspecialchars($category)?></div><small>Direct Sales database</small></div>
@@ -359,11 +359,11 @@ th:first-child,td:first-child{text-align:left}td.text{text-align:left}.num{font-
 </div>
 <div class="status" id="status"></div>
 <div class="tablewrap" id="tablewrap"><table id="table"></table></div>
-<div class="summary" id="summary">
- <section class="summary-card"><div class="summary-head">Sales Summary by Coffee Type <span class="summary-note">Value = (USD/50kg ÷ 50) × Net kg</span></div><div id="coffeeSummary"></div></section>
- <section class="summary-card"><div class="summary-head">Sales Summary by Region <span class="summary-note">Share based on Grand Total net weight</span></div><div id="regionSummary"></div></section>
- <section class="summary-card summary-wide"><div class="summary-head">Sales Summary by Supplier & Coffee Type</div><div id="supplierCoffeeSummary"></div></section>
- <section class="summary-card summary-wide"><div class="summary-head">Sales Summary by Buyer & Coffee Type</div><div id="buyerCoffeeSummary"></div></section>
+<div class="summary-toolbar" id="summaryToolbar"><b>Sale Summary</b><select id="summaryType"><option value="coffee">By Coffee Type</option><option value="region">By Region</option><option value="supplier">By Supplier & Coffee Type</option><option value="buyer">By Buyer & Coffee Type</option></select></div><div class="summary" id="summary">
+ <section class="summary-card summary-view active" data-summary="coffee"><div class="summary-head">Sales Summary by Coffee Type <span class="summary-note">Value = (USD/50kg ÷ 50) × Net kg</span></div><div id="coffeeSummary"></div></section>
+ <section class="summary-card summary-view" data-summary="region"><div class="summary-head">Sales Summary by Region <span class="summary-note">Share based on Grand Total net weight</span></div><div id="regionSummary"></div></section>
+ <section class="summary-card summary-wide summary-view" data-summary="supplier"><div class="summary-head">Sales Summary by Supplier & Coffee Type</div><div id="supplierCoffeeSummary"></div></section>
+ <section class="summary-card summary-wide summary-view" data-summary="buyer"><div class="summary-head">Sales Summary by Buyer & Coffee Type</div><div id="buyerCoffeeSummary"></div></section>
 </div>
 </div>
 <script>
@@ -425,6 +425,8 @@ function partyCoffeeTable(rows,partyTitle){
  return `<div style="overflow:auto">${h}</table></div>`.replace('<thead>','<table><thead>');
 }
 
+function showSelectedSummary(){const v=$('summaryType').value;document.querySelectorAll('.summary-view').forEach(x=>x.classList.toggle('active',x.dataset.summary===v));}
+$('summaryType').addEventListener('change',showSelectedSummary);
 async function loadSummary(){
  try{
    $('status').textContent='Preparing Sale Summary…';
@@ -433,6 +435,7 @@ async function loadSummary(){
    $('regionSummary').innerHTML=summaryTable(d.regions,d.total,'Region',!!d.is_local_sale);
    $('supplierCoffeeSummary').innerHTML=partyCoffeeTable(d.supplier_coffee||[],'Supplier / Seller');
    $('buyerCoffeeSummary').innerHTML=partyCoffeeTable(d.buyer_coffee||[],'Buyer');
+   showSelectedSummary();
    $('status').textContent=category+' Sale Summary'+($('season').value?' · '+$('season').value:' · All Sale Seasons')+(d.is_local_sale?' · Value and share based on remaining LS Balance':'');
  }catch(e){$('status').textContent=e.message}
 }
@@ -440,6 +443,7 @@ async function refreshCurrent(){
  const summary=$('display').value==='summary';
  $('tablewrap').style.display=summary?'none':'block';
  $('summary').classList.toggle('show',summary);
+ $('summaryToolbar').classList.toggle('show',summary);
  $('uploadForm').style.display=summary?'none':'flex';
  if(summary) await loadSummary(); else await loadRows();
 }
@@ -466,7 +470,7 @@ function exportFileName(ext){
  return (category+'_'+mode+'_'+season).replace(/[^\w.-]+/g,'_')+'.'+ext;
 }
 function currentExportNode(){
- return $('display').value==='summary' ? $('summary') : $('tablewrap');
+ return $('display').value==='summary' ? (document.querySelector('.summary-view.active')||$('summary')) : $('tablewrap');
 }
 function exportTitle(){
  return `${category} — ${$('display').value==='summary'?'Sale Summary':'All Sales'} — ${$('season').value||'All Sale Seasons'}`;
@@ -541,9 +545,8 @@ function exportExcel(){
  }
 
  if($('display').value==='summary'){
-   [['Coffee Type',$('coffeeSummary').querySelector('table')],['Region',$('regionSummary').querySelector('table')],['Supplier by Coffee',$('supplierCoffeeSummary').querySelector('table')],['Buyer by Coffee',$('buyerCoffeeSummary').querySelector('table')]].forEach(([name,table])=>{
-     if(table)XLSX.utils.book_append_sheet(wb,sheetFromTable(table),name);
-   });
+   const opts={coffee:['Coffee Type',$('coffeeSummary').querySelector('table')],region:['Region',$('regionSummary').querySelector('table')],supplier:['Supplier by Coffee',$('supplierCoffeeSummary').querySelector('table')],buyer:['Buyer by Coffee',$('buyerCoffeeSummary').querySelector('table')]};
+   const [name,table]=opts[$('summaryType').value]; if(table)XLSX.utils.book_append_sheet(wb,sheetFromTable(table),name);
  }else{
    const table=$('table');
    if(table)XLSX.utils.book_append_sheet(wb,sheetFromTable(table),'All Sales');
