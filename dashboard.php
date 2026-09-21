@@ -4,6 +4,8 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) { header(
 
 $display=strtolower(trim($_GET['display']??'kagera'));
 if(!in_array($display,['kagera','clean','direct','totalclean'],true))$display='kagera';
+$totalCleanView=$_GET['totalclean_view']??'summary';
+if(!in_array($totalCleanView,['summary','analysis'],true))$totalCleanView='summary';
 
 function nf($v,$dec=0){$v=(float)$v;$d=(abs($v-round($v))<0.000001)?0:$dec;return number_format($v,$d,'.',',');}
 function pct($a,$b){return $b>0?($a/$b*100):0;}
@@ -331,6 +333,9 @@ tfoot td{font-weight:700!important}
 .tc-overall-row{font-weight:900}
 @media(max-width:850px){.tc-analysis-head{flex-direction:column;align-items:stretch}.tc-analysis-head>div:first-child{display:block}.tc-analysis-controls{justify-content:flex-start}.tc-analysis-select,.tc-party-search{flex:1 1 220px}}
 @media(max-width:560px){.tc-analysis-select,.tc-party-search{width:100%;min-width:0;flex-basis:100%}.tc-pivot-table th,.tc-pivot-table td{padding:3px 4px!important;font-size:7px!important}.tc-pivot-table th:nth-child(2),.tc-pivot-table td:nth-child(2){min-width:145px!important}}
+.totalclean-view-select{min-width:205px;font-weight:700}
+@media(max-width:1050px){.topbar{align-items:flex-start}.season{flex-wrap:wrap;justify-content:flex-end}.season select{max-width:230px}}
+@media(max-width:720px){.topbar{display:block}.topbar .title{margin-bottom:6px}.season{display:grid!important;grid-template-columns:auto minmax(0,1fr);gap:4px 6px!important;width:100%;align-items:center}.season label{margin:0!important}.season select,.totalclean-view-select{width:100%!important;max-width:none!important;min-width:0!important}}
 </style>
 </head>
 <body>
@@ -345,6 +350,13 @@ tfoot td{font-weight:700!important}
             <select name="season" onchange="this.form.submit()"><?php foreach($seasons ?: [$season] as $s): ?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach ?></select>
             <label>Display</label>
             <select name="display" onchange="this.form.submit()"><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option><option value="direct" <?=$display==='direct'?'selected':''?>>Direct Sales Summary</option><option value="totalclean" <?=$display==='totalclean'?'selected':''?>>Total Clean Coffee Summary</option></select>
+            <?php if($display==='totalclean'): ?>
+            <label>View</label>
+            <select name="totalclean_view" class="totalclean-view-select" onchange="this.form.submit()">
+              <option value="summary" <?=$totalCleanView==='summary'?'selected':''?>>Coffee Sales Summary</option>
+              <option value="analysis" <?=$totalCleanView==='analysis'?'selected':''?>>Buyer / Supplier-Seller Analysis</option>
+            </select>
+            <?php endif; ?>
         </form>
     </div>
 
@@ -354,11 +366,13 @@ tfoot td{font-weight:700!important}
  <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
  <?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><div class="metric-group"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small><?=nf(pct($x['kgs'],$tcGrandKg),2)?>% of total</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small>USD/50kg</small></div></div><?php endforeach;?>
 </div>
+<?php if($totalCleanView==='summary'): ?>
 <section class="panel totalclean-panel"><div class="panel-head totalclean-head"><div><strong>Coffee Sales Summary</strong><span>Clean coffee · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></span></div><div class="tc-export"><button type="button" id="tcExportBtn" class="tc-export-btn" title="Export Coffee Sales Summary">⇩ Export</button><div id="tcExportMenu" class="tc-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div><div class="table-box"><table id="totalCleanSalesTable" class="totalclean-table">
 <thead><tr><th rowspan="2">Type of Coffee</th><?php foreach($channels as$ch):?><th colspan="3"><?=htmlspecialchars($ch)?></th><?php endforeach;?><th colspan="3">Total</th></tr><tr><?php foreach($channels as$ch):?><th>Kg</th><th>USD</th><th>$/50kg</th><?php endforeach;?><th>Kg</th><th>USD</th><th>%</th></tr></thead><tbody>
 <?php foreach($types as$ct):$rk=$rv=0;foreach($channels as$ch){$rk+=$totalClean[$ct][$ch]['kgs'];$rv+=$totalClean[$ct][$ch]['value'];}?><tr><td><?=htmlspecialchars($ct)?></td><?php foreach($channels as$ch):$x=$totalClean[$ct][$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($rk,2)?></td><td><?=nf($rv,2)?></td><td><?=nf(pct($rk,$tcGrandKg),2)?>%</td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td>Grand Total</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($tcGrandKg,2)?></td><td><?=nf($tcGrandValue,2)?></td><td><?=$tcGrandKg>0?'100%':'0%'?></td></tr><tr class="share-row"><td>Channel Share</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf(pct($x['kgs'],$tcGrandKg),2)?>%</td><td colspan="2"></td><?php endforeach;?><td colspan="3"></td></tr></tfoot>
 </table></div></section>
+<?php else: ?>
 <section class="panel tc-analysis-panel">
  <div class="panel-head tc-analysis-head">
   <div><strong>Buyer / Supplier-Seller Analysis</strong><span>Top 10 + Other + Overall Total · Kg and Value (USD)</span></div>
@@ -378,6 +392,7 @@ tfoot td{font-weight:700!important}
  <div id="tcAnalysisStatus" class="tc-analysis-status"></div>
  <div id="tcAnalysisTable" class="table-box"></div>
 </section>
+<?php endif; ?>
 <?php elseif($display==='direct'): ?>
 <div class="kpis direct-kpis">
  <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
