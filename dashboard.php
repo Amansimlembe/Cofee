@@ -3,7 +3,7 @@ session_start();
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) { header('Location: login.php'); exit; }
 
 $display=strtolower(trim($_GET['display']??'kagera'));
-if(!in_array($display,['kagera','clean','direct','totalclean'],true))$display='kagera';
+if(!in_array($display,['sales','kagera','clean','direct','totalclean'],true))$display='kagera';
 $totalCleanView=$_GET['totalclean_view']??'summary';
 if(!in_array($totalCleanView,['summary','analysis'],true))$totalCleanView='summary';
 
@@ -11,6 +11,36 @@ function nf($v,$dec=0){$v=(float)$v;$d=(abs($v-round($v))<0.000001)?0:$dec;retur
 function pct($a,$b){return $b>0?($a/$b*100):0;}
 
 
+if($display==='sales'){
+ require_once __DIR__.'/kagera_database.php';
+ require_once __DIR__.'/clean_database.php';
+ require_once __DIR__.'/Direct_database.php';
+ ensure_kagera_table(); ensure_kagera_catalogue_table(); ensure_clean_table(); direct_ensure_table();
+ $db=kagera_db(); $cdb=clean_db(); $ddb=direct_db();
+ function season_bounds($s){if(!preg_match('/^(\\d{4})\\/(\\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
+ function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
+ $dateRows=$ddb->query("SELECT invoice_date d FROM public.direct_sales WHERE invoice_date IS NOT NULL UNION SELECT auction_date FROM public.clean_auction_results WHERE auction_date IS NOT NULL UNION SELECT auction_date FROM public.kagera_auction_results WHERE auction_date IS NOT NULL")->fetchAll();
+ $seasons=[];foreach($dateRows as$r){$d=$r['d']??null;if(!$d)continue;$y=(int)substr($d,0,4);$m=(int)substr($d,5,2);$sy=$m>=7?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
+ $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $endQ=$ddb->prepare("SELECT MAX(d) FROM (SELECT invoice_date d FROM public.direct_sales WHERE invoice_date BETWEEN :f1 AND :t1 UNION ALL SELECT auction_date FROM public.clean_auction_results WHERE auction_date BETWEEN :f2 AND :t2 UNION ALL SELECT auction_date FROM public.kagera_auction_results WHERE auction_date BETWEEN :f3 AND :t3)x");
+ $endQ->execute(['f1'=>$from,'t1'=>$to,'f2'=>$from,'t2'=>$to,'f3'=>$from,'t3'=>$to]);$salesEnd=$endQ->fetchColumn()?:$to;
+ $weekStart=date('Y-m-d',strtotime('monday this week',strtotime($salesEnd))); if($weekStart<$from)$weekStart=$from;
+ $kcase="CASE WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%dry cherry%' THEN 'Dry Cherry' WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%clean%' THEN 'Clean Coffee' ELSE NULL END";
+ $salesFarm=['Dry Cherry'=>['weekkg'=>0,'weekval'=>0,'seasonkg'=>0,'seasonval'=>0],'Clean Coffee'=>['weekkg'=>0,'weekval'=>0,'seasonkg'=>0,'seasonval'=>0]];
+ $q=$db->prepare("SELECT $kcase typ,SUM(CASE WHEN auction_date BETWEEN :w AND :e THEN COALESCE(kgs,0) ELSE 0 END) weekkg,SUM(CASE WHEN auction_date BETWEEN :w AND :e THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END) weekval,SUM(COALESCE(kgs,0)) seasonkg,SUM(COALESCE(kgs,0)*COALESCE(price,0)) seasonval FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['w'=>$weekStart,'e'=>$salesEnd,'f'=>$from,'t'=>$to]);foreach($q as$r){if(isset($salesFarm[$r['typ']]))foreach(['weekkg','weekval','seasonkg','seasonval']as$k)$salesFarm[$r['typ']][$k]=(float)$r[$k];}
+ $coffeeTypes=['M-Arabica','H-Arabica','Robusta'];$channels=['Clean Auction','Direct Export','Local Roast','Local Sale'];$salesClean=[];foreach($channels as$ch)foreach($coffeeTypes as$ct)$salesClean[$ch][$ct]=['weekkg'=>0,'weekval'=>0,'seasonkg'=>0,'seasonval'=>0];
+ $ctype="CASE WHEN LOWER(COALESCE(grade2,'')||' '||COALESCE(grade,'')) LIKE '%robusta%' OR UPPER(BTRIM(COALESCE(grade,''))) LIKE 'R%' THEN 'Robusta' WHEN UPPER(BTRIM(COALESCE(grade,''))) LIKE 'H%' OR LOWER(COALESCE(grade2,'')) LIKE '%hard%' THEN 'H-Arabica' ELSE 'M-Arabica' END";
+ $sold="UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
+ $q=$cdb->prepare("SELECT $ctype ct,SUM(CASE WHEN auction_date BETWEEN :w AND :e AND $sold THEN COALESCE(n_kgs,0) ELSE 0 END) weekkg,SUM(CASE WHEN auction_date BETWEEN :w AND :e AND $sold THEN COALESCE(n_kgs,0)*COALESCE(price_per_50kg,0)/50.0 ELSE 0 END) weekval,SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END) seasonkg,SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0)*COALESCE(price_per_50kg,0)/50.0 ELSE 0 END) seasonval FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['w'=>$weekStart,'e'=>$salesEnd,'f'=>$from,'t'=>$to]);foreach($q as$r)if(isset($salesClean['Clean Auction'][$r['ct']]))foreach(['weekkg','weekval','seasonkg','seasonval']as$k)$salesClean['Clean Auction'][$r['ct']][$k]=(float)$r[$k];
+ $dtype="CASE WHEN LOWER(BTRIM(COALESCE(d.coffee_type,''))) LIKE '%robusta%' THEN 'Robusta' WHEN LOWER(BTRIM(COALESCE(d.coffee_type,''))) IN ('h/arabica','h-arabica','h arabica') OR LOWER(BTRIM(COALESCE(d.coffee_type,''))) LIKE '%hard arabica%' THEN 'H-Arabica' ELSE 'M-Arabica' END";
+ $dch="CASE WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('DE','DIRECT EXPORT') THEN 'Direct Export' WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('LS','LOCAL SALE') THEN 'Local Sale' WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('LR','LOCAL ROAST','LOCAL ROAST SALE','SLS') THEN 'Local Roast' END";
+ $lsSeason="GREATEST(COALESCE(d.net_kg,0)-COALESCE((SELECT SUM(COALESCE(de.net_kg,0)) FROM public.direct_sales de WHERE UPPER(BTRIM(COALESCE(de.sale_category,''))) IN ('DE','DIRECT EXPORT') AND NULLIF(BTRIM(de.source_invoice_number),'') IS NOT NULL AND UPPER(BTRIM(de.source_invoice_number))=UPPER(BTRIM(d.invoice_number)) AND de.invoice_date BETWEEN :lf AND :lt),0),0)";
+ $qty="CASE WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('LS','LOCAL SALE') THEN $lsSeason ELSE COALESCE(d.net_kg,0) END";
+ $q=$ddb->prepare("SELECT $dch ch,$dtype ct,SUM(CASE WHEN d.invoice_date BETWEEN :w AND :e THEN $qty ELSE 0 END) weekkg,SUM(CASE WHEN d.invoice_date BETWEEN :w AND :e THEN ($qty)*COALESCE(d.price_usd_50kg,0)/50.0 ELSE 0 END) weekval,SUM($qty) seasonkg,SUM(($qty)*COALESCE(d.price_usd_50kg,0)/50.0) seasonval FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $dch IS NOT NULL GROUP BY 1,2");$q->execute(['w'=>$weekStart,'e'=>$salesEnd,'f'=>$from,'t'=>$to,'lf'=>$from,'lt'=>$to]);foreach($q as$r)if(isset($salesClean[$r['ch']][$r['ct']]))foreach(['weekkg','weekval','seasonkg','seasonval']as$k)$salesClean[$r['ch']][$r['ct']][$k]=(float)$r[$k];
+ $salesGrandKg=$salesGrandVal=0;foreach($channels as$ch)foreach($coffeeTypes as$ct){$salesGrandKg+=$salesClean[$ch][$ct]['seasonkg'];$salesGrandVal+=$salesClean[$ch][$ct]['seasonval'];}
+ $estimatedProduction=85000.0;$productionPct=$estimatedProduction>0?($salesGrandKg/1000)/$estimatedProduction*100:0;
+ $dashboardTitle='Sales Dashboard';$dashboardSub='Tanzania Coffee Board · Sales Season (FY)';
+}else
 if($display==='totalclean'){
  require_once __DIR__.'/clean_database.php';
  require_once __DIR__.'/Direct_database.php';
@@ -201,6 +231,25 @@ tbody td:first-child{font-weight:600}
 .empty{text-align:center!important;color:#a2958e!important} tfoot td{font-size:9px;font-weight:700;background:#f7f3f0;border-top:1px solid #dfd5cf;color:#3f2b24}
 .rank{display:inline-flex;width:15px;height:15px;border-radius:50%;align-items:center;justify-content:center;background:#eee6e1;color:#654b40;font-size:7px;margin-right:4px}
 .type-tag{font-size:8px;font-weight:700;padding:2px 5px;border-radius:8px;background:#f1e9e5;color:#654a40}
+
+.sales-ppt{height:calc(100vh - 38px);min-height:0;overflow:auto;border:1px solid #b78a62;background:#f6eee5;box-shadow:0 3px 14px rgba(74,45,25,.12);font-family:Arial,sans-serif}
+.sales-ppt-header{height:120px;background:url('sales_dashboard_header.jpg') center 28%/cover no-repeat;display:flex;align-items:center;justify-content:center;text-align:center;padding-top:6px}
+.sales-ppt-header .gov-title{font-weight:800;color:#9a4f18;line-height:1.55;font-size:14px;text-shadow:0 1px rgba(255,255,255,.7)}
+.sales-ppt-title{text-align:center;font-size:26px;font-weight:800;color:#9a4f18;margin:3px 0 2px;letter-spacing:.3px}
+.sales-ppt-body{padding:0 2px;background:rgba(255,255,255,.74)}
+.sales-meta,.sales-table{width:100%;border-collapse:collapse;table-layout:fixed;color:#17110e}
+.sales-meta th,.sales-meta td,.sales-table th,.sales-table td{border:1px solid #5f4a3f;padding:2px 5px;font-size:10px;line-height:1.15}
+.sales-meta th,.sales-table th{font-weight:800;background:rgba(239,231,223,.78)}
+.sales-band td{background:#ef8f42!important;font-weight:800;text-align:left;font-size:11px}
+.sales-section{font-weight:800;text-align:left}.sales-label{font-weight:700;text-align:left}.sales-num{text-align:right;font-variant-numeric:tabular-nums}
+.sales-subhead{font-weight:800;text-align:center;background:rgba(239,231,223,.82)}
+.sales-grand td{font-weight:800;background:rgba(247,238,229,.9)}
+.sales-production td{font-weight:700;font-style:italic}
+.sales-ppt-footer{height:145px;background:url('sales_dashboard_footer.png') center 40%/cover no-repeat;position:relative}
+.sales-ppt-footer .contact{position:absolute;left:20px;bottom:9px;color:#23160f;font-size:9px;line-height:1.55}.sales-ppt-footer .social{position:absolute;right:24px;bottom:22px;color:#23160f;font-size:10px;font-weight:700}
+.sales-na{color:#77675f;text-align:center}
+@media(max-width:850px){.sales-ppt{height:calc(100vh - 72px)}.sales-ppt-header{height:95px}.sales-ppt-title{font-size:21px}.sales-meta th,.sales-meta td,.sales-table th,.sales-table td{font-size:8px;padding:2px}.sales-ppt-footer{height:110px}}
+
 @media(max-width:1050px){
  .kpis{grid-template-columns:repeat(4,1fr)}
  .title span{display:none}
@@ -386,8 +435,33 @@ tfoot td{font-weight:700!important}
             <label>Season</label>
             <select name="season" onchange="this.form.submit()"><?php foreach($seasons ?: [$season] as $s): ?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach ?></select>
             <label>Display</label>
-            <select name="display" onchange="this.form.submit()"><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option><option value="direct" <?=$display==='direct'?'selected':''?>>Direct Sales Summary</option><option value="totalclean" <?=$display==='totalclean'?'selected':''?>>Total Clean Coffee Summary</option></select>
-            <?php if($display==='totalclean'): ?>
+            <select name="display" onchange="this.form.submit()"><option value="sales" <?=$display==='sales'?'selected':''?>>Sales Dashboard</option><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option><option value="direct" <?=$display==='direct'?'selected':''?>>Direct Sales Summary</option><option value="totalclean" <?=$display==='totalclean'?'selected':''?>>Total Clean Coffee Summary</option></select>
+            <?php if($display==='sales'): ?>
+<section class="sales-ppt">
+ <div class="sales-ppt-header"><div class="gov-title">THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div></div>
+ <div class="sales-ppt-title">SALES DASHBOARD</div>
+ <div class="sales-ppt-body">
+  <table class="sales-meta"><tr><th>Sale Season (FY)</th><td><b><?=htmlspecialchars($season)?></b></td><th>End Date</th><td><b><?=date('d/m/Y',strtotime($salesEnd))?></b></td></tr><tr><th>Terminal Market</th><td>Arabica ($/kg) &nbsp; <b>7.5</b></td><td colspan="2">Robusta ($/kg) &nbsp; <b>3.6</b></td></tr></table>
+  <table class="sales-table">
+   <tr class="sales-band"><td colspan="5">Farmgate Market</td></tr>
+   <tr><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
+   <?php foreach(['Dry Cherry','Clean Coffee'] as$ct):$r=$salesFarm[$ct];?><tr><td class="sales-label"><?=htmlspecialchars($ct)?></td><td class="sales-num"><?=nf($r['weekkg']/1000,3)?></td><td class="sales-num"><?=nf($r['weekval'],2)?></td><td class="sales-num"><?=nf($r['seasonkg']/1000,3)?></td><td class="sales-num"><?=nf($r['seasonval'],2)?></td></tr><?php endforeach;?>
+   <tr><td class="sales-label">2&nbsp; Certified Coffee</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td></tr>
+   <tr><td class="sales-label">3&nbsp; Parchment</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td></tr>
+   <tr class="sales-band"><td colspan="5">Clean Coffee Market</td></tr>
+   <?php foreach($channels as$ci=>$ch): ?>
+   <tr><th><?=$ci+1?>&nbsp; <?=htmlspecialchars($ch)?></th><th>This Week (MT)</th><th>Value ($)</th><th>Season Total (MT)</th><th>Total Value ($)</th></tr>
+   <?php foreach($coffeeTypes as$ct):$r=$salesClean[$ch][$ct];?><tr><td class="sales-label"><?=htmlspecialchars($ct)?></td><td class="sales-num"><?=$r['weekkg']?nf($r['weekkg']/1000,2):'—'?></td><td class="sales-num"><?=$r['weekval']?nf($r['weekval'],2):'—'?></td><td class="sales-num"><?=$r['seasonkg']?nf($r['seasonkg']/1000,2):'—'?></td><td class="sales-num"><?=$r['seasonval']?nf($r['seasonval'],2):'—'?></td></tr><?php endforeach;?>
+   <?php endforeach;?>
+   <tr class="sales-grand"><td colspan="3">Grand Total (Clean Auctions, Direct Export, Local Roast and Local Sale)</td><td class="sales-num"><?=nf($salesGrandKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandVal,2)?></td></tr>
+   <tr class="sales-band"><td colspan="5">Production</td></tr>
+   <tr class="sales-production"><td colspan="3">Estimated Production (MT)</td><td colspan="2" class="sales-num"><?=nf($estimatedProduction,2)?></td></tr>
+   <tr class="sales-production"><td colspan="3">Percentage Achieved</td><td colspan="2" class="sales-num"><?=nf($productionPct,2)?>%</td></tr>
+  </table>
+ </div>
+ <div class="sales-ppt-footer"><div class="contact">www.coffee.go.tz<br>info@coffee.go.tz<br>+255 27 2752324</div><div class="social">coffeeboardtz</div></div>
+</section>
+<?php elseif($display==='totalclean'): ?>
             <label>View</label>
             <select name="totalclean_view" class="totalclean-view-select" onchange="this.form.submit()">
               <option value="summary" <?=$totalCleanView==='summary'?'selected':''?>>Coffee Sales Summary</option>
@@ -656,7 +730,7 @@ tfoot td{font-weight:700!important}
 </script>
 
 <script>
-const auctionTrend=<?=json_encode(in_array($display,['direct','totalclean'],true)?[]:$auctionTrend,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>,cleanMode=<?=json_encode($display==='clean')?>,ctx=document.getElementById('auctionTrendChart');
+const auctionTrend=<?=json_encode(in_array($display,['sales','direct','totalclean'],true)?[]:$auctionTrend,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>,cleanMode=<?=json_encode($display==='clean')?>,ctx=document.getElementById('auctionTrendChart');
 if(ctx&&window.Chart){const datasets=cleanMode?[
 {type:'bar',label:'Quantity Sold (kg)',data:auctionTrend.map(r=>Number(r.qty)||0),yAxisID:'yQty',borderWidth:0,maxBarThickness:24},
 {type:'line',label:'Weighted Avg Price (USD/50kg)',data:auctionTrend.map(r=>r.avg_price===null?null:Number(r.avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25}
