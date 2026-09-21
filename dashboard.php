@@ -34,6 +34,22 @@ if($display==='totalclean'){
  $q=$ddb->prepare("SELECT $directType coffee_type,$channel channel,SUM($qty) kgs,SUM(($qty)*COALESCE(d.price_usd_50kg,0)/50.0) value_usd FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channel IS NOT NULL GROUP BY 1,2");$q->execute(['f'=>$from,'t'=>$to,'lf'=>$from,'lt'=>$to]);
  foreach($q as$r){if(isset($totalClean[$r['coffee_type']][$r['channel']])){$kg=(float)$r['kgs'];$v=(float)$r['value_usd'];$totalClean[$r['coffee_type']][$r['channel']]=['kgs'=>$kg,'value'=>$v,'avg'=>$kg>0?$v*50/$kg:0];}}
  $tcChannelTotals=[];$tcGrandKg=0;$tcGrandValue=0;foreach($channels as$ch){$kg=$v=0;foreach($types as$ct){$kg+=$totalClean[$ct][$ch]['kgs'];$v+=$totalClean[$ct][$ch]['value'];}$tcChannelTotals[$ch]=['kgs'=>$kg,'value'=>$v,'avg'=>$kg>0?$v*50/$kg:0];$tcGrandKg+=$kg;$tcGrandValue+=$v;}
+ /* Analytical detail for Top 10 views. Local Sale continues to use LS Balance. */
+ $normParty=function($f){return "COALESCE(NULLIF(INITCAP(LOWER(REGEXP_REPLACE(BTRIM(COALESCE($f,'')),'\\s+',' ','g'))),''),'Unspecified')";};
+ $normRegion=function($f){return "COALESCE(NULLIF(INITCAP(LOWER(REGEXP_REPLACE(BTRIM(COALESCE($f,'')),'\\s+',' ','g'))),''),'Unspecified')";};
+ $cols=$db->query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='clean_auction_results'")->fetchAll(PDO::FETCH_COLUMN);
+ $buyerCol=null;foreach(['buyer_name','buyer','buyername'] as$c){if(in_array($c,$cols,true)){$buyerCol=$c;break;}}
+ $supplierCol=null;foreach(['seller_name','seller','warehouse_name_amcos','warehouse','sell_mark'] as$c){if(in_array($c,$cols,true)){$supplierCol=$c;break;}}
+ $regionCol=null;foreach(['region','warehouse_location','district','location'] as$c){if(in_array($c,$cols,true)){$regionCol=$c;break;}}
+ $ab=$buyerCol?$normParty($buyerCol):"'Unspecified'";$as=$supplierCol?$normParty($supplierCol):"'Unspecified'";$ar=$regionCol?$normRegion($regionCol):"'Unspecified'";
+ $aq=$db->prepare("SELECT 'Auction Sale' channel,$auctionType coffee_type,$ar region,$ab buyer,$as supplier,SUM(COALESCE(n_kgs,0)) kgs,SUM(COALESCE(n_kgs,0)*COALESCE(price_per_50kg,0)/50.0) value_usd FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t AND UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S') GROUP BY 1,2,3,4,5");
+ $aq->execute(['f'=>$from,'t'=>$to]);$auctionDetail=$aq->fetchAll();
+ $nb=$normParty('d.buyer');$ns=$normParty('d.supplier_seller');$nr=$normRegion('d.region');
+ $dq=$ddb->prepare("SELECT $channel channel,$directType coffee_type,$nr region,$nb buyer,$ns supplier,SUM($qty) kgs,SUM(($qty)*COALESCE(d.price_usd_50kg,0)/50.0) value_usd FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channel IS NOT NULL GROUP BY 1,2,3,4,5");
+ $dq->execute(['f'=>$from,'t'=>$to,'lf'=>$from,'lt'=>$to]);$tcDetail=array_merge($auctionDetail,$dq->fetchAll());
+ $tcAgg=function($rows,$keys){$o=[];foreach($rows as$r){$parts=[];foreach($keys as$k)$parts[]=$r[$k]??'Unspecified';$id=implode('|',$parts);if(!isset($o[$id]))$o[$id]=array_combine($keys,$parts)+['kgs'=>0.0,'value_usd'=>0.0];$o[$id]['kgs']+=(float)$r['kgs'];$o[$id]['value_usd']+=(float)$r['value_usd'];}return array_values($o);};
+ $tcAnalytics=['buyer_channel'=>$tcAgg($tcDetail,['channel','buyer']),'supplier_channel'=>$tcAgg($tcDetail,['channel','supplier']),'buyer_region'=>$tcAgg($tcDetail,['region','buyer']),'supplier_region'=>$tcAgg($tcDetail,['region','supplier']),'buyer_type'=>$tcAgg($tcDetail,['coffee_type','buyer']),'supplier_type'=>$tcAgg($tcDetail,['coffee_type','supplier'])];
+
  $dashboardTitle='Total Clean Coffee Summary';$dashboardSub='Auction, Direct Export, Local Sale balance and Local Roast';
 }else
 if($display==='direct'){
@@ -282,7 +298,16 @@ tfoot td{font-weight:700!important}
  .totalclean-kpis>.kpi{grid-column:auto}
  .totalclean-table{min-width:720px!important}
 }
-</style>
+
+.totalclean-head{display:flex!important;align-items:center;justify-content:space-between;gap:8px}
+.totalclean-head>div:first-child{display:flex;align-items:baseline;gap:8px;min-width:0}
+.tc-export{position:relative;flex:0 0 auto}
+.tc-export-btn{border:1px solid #6f4e37;background:#fff;color:#4b2e20;border-radius:6px;padding:4px 8px;font-size:8px;font-weight:800;cursor:pointer}
+.tc-export-menu{display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:92px;background:#fff;border:1px solid #d8cec8;border-radius:7px;box-shadow:0 7px 20px rgba(0,0,0,.12);padding:3px}
+.tc-export-menu.show{display:block}.tc-export-menu button{display:block;width:100%;border:0;background:#fff;text-align:left;padding:6px 7px;font-size:8px;border-radius:4px;cursor:pointer}.tc-export-menu button:hover{background:#f4eee9}
+@media(max-width:560px){.totalclean-head{align-items:flex-start}.totalclean-head>div:first-child{display:block}.tc-export-btn{padding:4px 6px}}
+
+.tc-analysis-panel{margin-top:6px}.tc-analysis-head{display:flex!important;justify-content:space-between;align-items:center;gap:8px}.tc-analysis-head>div{display:flex;gap:7px;align-items:baseline}.tc-analysis-select{min-width:250px;padding:4px 6px;border:1px solid #d8cec8;border-radius:6px;background:#fff;font-size:8px}.tc-analysis-panel table{width:100%!important;min-width:0!important;table-layout:fixed!important}.tc-analysis-panel th,.tc-analysis-panel td{padding:3px 4px!important}.tc-analysis-panel th:nth-child(1),.tc-analysis-panel td:nth-child(1){width:6%!important}.tc-analysis-panel th:nth-child(2),.tc-analysis-panel td:nth-child(2){width:21%!important;text-align:left}.tc-analysis-panel th:nth-child(3),.tc-analysis-panel td:nth-child(3){width:35%!important;text-align:left}.tc-analysis-panel th:nth-child(4),.tc-analysis-panel td:nth-child(4),.tc-analysis-panel th:nth-child(5),.tc-analysis-panel td:nth-child(5){width:19%!important;text-align:right}@media(max-width:700px){.tc-analysis-head{flex-direction:column;align-items:stretch}.tc-analysis-head>div{display:block}.tc-analysis-select{width:100%}.tc-analysis-panel .table-box{overflow-x:auto!important}.tc-analysis-panel table{min-width:600px!important}}</style>
 </head>
 <body>
 <div class="dashboard">
@@ -305,11 +330,12 @@ tfoot td{font-weight:700!important}
  <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
  <?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><div class="metric-group"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small><?=nf(pct($x['kgs'],$tcGrandKg),2)?>% of total</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small>USD/50kg</small></div></div><?php endforeach;?>
 </div>
-<section class="panel totalclean-panel"><div class="panel-head"><strong>Coffee Sales Summary</strong><span>Clean coffee · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></span></div><div class="table-box"><table class="totalclean-table">
+<section class="panel totalclean-panel"><div class="panel-head totalclean-head"><div><strong>Coffee Sales Summary</strong><span>Clean coffee · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></span></div><div class="tc-export"><button type="button" id="tcExportBtn" class="tc-export-btn" title="Export Coffee Sales Summary">⇩ Export</button><div id="tcExportMenu" class="tc-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div><div class="table-box"><table id="totalCleanSalesTable" class="totalclean-table">
 <thead><tr><th rowspan="2">Type of Coffee</th><?php foreach($channels as$ch):?><th colspan="3"><?=htmlspecialchars($ch)?></th><?php endforeach;?><th colspan="3">Total</th></tr><tr><?php foreach($channels as$ch):?><th>Kg</th><th>USD</th><th>$/50kg</th><?php endforeach;?><th>Kg</th><th>USD</th><th>%</th></tr></thead><tbody>
 <?php foreach($types as$ct):$rk=$rv=0;foreach($channels as$ch){$rk+=$totalClean[$ct][$ch]['kgs'];$rv+=$totalClean[$ct][$ch]['value'];}?><tr><td><?=htmlspecialchars($ct)?></td><?php foreach($channels as$ch):$x=$totalClean[$ct][$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($rk,2)?></td><td><?=nf($rv,2)?></td><td><?=nf(pct($rk,$tcGrandKg),2)?>%</td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td>Grand Total</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($tcGrandKg,2)?></td><td><?=nf($tcGrandValue,2)?></td><td><?=$tcGrandKg>0?'100%':'0%'?></td></tr><tr class="share-row"><td>Channel Share</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf(pct($x['kgs'],$tcGrandKg),2)?>%</td><td colspan="2"></td><?php endforeach;?><td colspan="3"></td></tr></tfoot>
 </table></div></section>
+<section class="panel tc-analysis-panel"><div class="panel-head tc-analysis-head"><div><strong>Top 10 Buyer / Supplier-Seller Analysis</strong><span>Clean coffee · Kg and Value (USD)</span></div><select id="tcAnalysisType" class="tc-analysis-select"><option value="buyer_channel">Top 10 Buyers by Sales Channel</option><option value="supplier_channel">Top 10 Suppliers/Sellers by Sales Channel</option><option value="buyer_region">Top 10 Buyers by Region</option><option value="supplier_region">Top 10 Suppliers/Sellers by Region</option><option value="buyer_type">Top 10 Buyers by Coffee Type</option><option value="supplier_type">Top 10 Suppliers/Sellers by Coffee Type</option></select></div><div id="tcAnalysisTable" class="table-box"></div></section>
 <?php elseif($display==='direct'): ?>
 <div class="kpis direct-kpis">
  <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
@@ -362,7 +388,83 @@ tfoot td{font-weight:700!important}
 </div>
 <?php endif; ?>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+ const sel=document.getElementById('tcAnalysisType'),box=document.getElementById('tcAnalysisTable');if(!sel||!box)return;
+ const D=<?=json_encode($display==='totalclean'?$tcAnalytics:[],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>;
+ const M={buyer_channel:['Sales Channel','Buyer','channel','buyer'],supplier_channel:['Sales Channel','Supplier / Seller','channel','supplier'],buyer_region:['Region','Buyer','region','buyer'],supplier_region:['Region','Supplier / Seller','region','supplier'],buyer_type:['Coffee Type','Buyer','coffee_type','buyer'],supplier_type:['Coffee Type','Supplier / Seller','coffee_type','supplier']};
+ const e=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])),n=(v,d=2)=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:d});
+ function draw(){let [gl,pl,gk,pk]=M[sel.value],rows=D[sel.value]||[],groups=[...new Set(rows.map(r=>r[gk]))].sort(),h=`<table><thead><tr><th>#</th><th>${gl}</th><th>${pl}</th><th>Kg</th><th>Value (USD)</th></tr></thead><tbody>`,found=false;groups.forEach(g=>rows.filter(r=>r[gk]===g).sort((a,b)=>Number(b.kgs)-Number(a.kgs)).slice(0,10).forEach((r,i)=>{found=true;h+=`<tr><td>${i+1}</td><td>${e(g)}</td><td>${e(r[pk])}</td><td>${n(r.kgs,3)}</td><td>${n(r.value_usd,2)}</td></tr>`}));if(!found)h+='<tr><td colspan="5">No data available</td></tr>';box.innerHTML=h+'</tbody></table>';}sel.addEventListener('change',draw);draw();
+})();
+</script>
+
+<script>
+(function(){
+ const btn=document.getElementById('tcExportBtn'),menu=document.getElementById('tcExportMenu'),table=document.getElementById('totalCleanSalesTable');
+ if(!btn||!menu||!table)return;
+ const season=<?=json_encode($season)?>;
+ const safe=s=>String(s).replace(/[^A-Za-z0-9_-]+/g,'_');
+ const filename=ext=>`Coffee_Sales_Summary_${safe(season)}.${ext}`;
+ btn.addEventListener('click',e=>{e.stopPropagation();menu.classList.toggle('show')});
+ document.addEventListener('click',()=>menu.classList.remove('show'));
+
+ function matrix(){
+   return [...table.rows].map(r=>[...r.cells].map(c=>c.innerText.trim()));
+ }
+ function numeric(v,percent=false){
+   if(v===''||v==='-')return null;
+   const n=Number(String(v).replace(/,/g,'').replace(/%/g,'').trim());
+   return Number.isFinite(n)?(percent?n/100:n):v;
+ }
+ function exportExcel(){
+   if(!window.XLSX){alert('Excel export library is not available.');return}
+   const aoa=matrix();
+   const ws=XLSX.utils.aoa_to_sheet(aoa);
+   const range=XLSX.utils.decode_range(ws['!ref']);
+   // Rows 3 onward contain data. First column is text; all remaining populated cells are numeric.
+   for(let r=2;r<=range.e.r;r++){
+     for(let c=1;c<=range.e.c;c++){
+       const a=XLSX.utils.encode_cell({r,c}),cell=ws[a];
+       if(!cell||cell.v==='')continue;
+       const isPct=(c===range.e.c)||(aoa[r]&&aoa[r][0]==='Channel Share'&&(c===1||c===4||c===7||c===10));
+       const n=numeric(cell.v,isPct);
+       if(typeof n==='number'){cell.v=n;cell.t='n';cell.z=isPct?'0.00%':'#,##0.00####';}
+     }
+   }
+   ws['!cols']=[{wch:18},...Array(15).fill({wch:12})];
+   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Coffee Sales Summary');
+   XLSX.writeFile(wb,filename('xlsx'),{cellStyles:true});
+ }
+ function exportPDF(){
+   if(!window.jspdf||!window.jspdf.jsPDF){alert('PDF export library is not available.');return}
+   const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+   doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text('Coffee Sales Summary',14,13);
+   doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(`Clean coffee · Sale Season ${season}`,14,18);
+   doc.autoTable({html:'#totalCleanSalesTable',startY:22,theme:'grid',
+     styles:{fontSize:5.7,cellPadding:1.2,textColor:[40,31,27],lineColor:[91,64,51],lineWidth:.15,fillColor:false},
+     headStyles:{fontStyle:'bold',textColor:[58,39,30],fillColor:[245,240,236],lineWidth:.25},
+     footStyles:{fontStyle:'bold',textColor:[58,39,30],fillColor:[250,247,245],lineWidth:.25},
+     columnStyles:{0:{cellWidth:24,halign:'left'}},
+     didParseCell:d=>{if(d.column.index>0)d.cell.styles.halign='right';}
+   });
+   doc.save(filename('pdf'));
+ }
+ function exportWord(){
+   const cloned=table.cloneNode(true);
+   cloned.querySelectorAll('th,td').forEach(c=>c.setAttribute('style','border:1px solid #5b4033;padding:4px;font-family:Arial;font-size:9pt;'));
+   cloned.setAttribute('style','border-collapse:collapse;width:100%;');
+   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Coffee Sales Summary</title></head><body><h2 style="font-family:Arial;color:#4b2e20;margin-bottom:3px">Coffee Sales Summary</h2><div style="font-family:Arial;font-size:9pt;margin-bottom:10px">Clean coffee · Sale Season ${season}</div>${cloned.outerHTML}</body></html>`;
+   const blob=new Blob(['\ufeff',html],{type:'application/msword'});
+   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename('doc');document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+ }
+ menu.addEventListener('click',e=>{const f=e.target.dataset.format;if(!f)return;e.stopPropagation();menu.classList.remove('show');if(f==='pdf')exportPDF();else if(f==='xlsx')exportExcel();else exportWord();});
+})();
+</script>
+
 <script>
 const auctionTrend=<?=json_encode(in_array($display,['direct','totalclean'],true)?[]:$auctionTrend,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>,cleanMode=<?=json_encode($display==='clean')?>,ctx=document.getElementById('auctionTrendChart');
 if(ctx&&window.Chart){const datasets=cleanMode?[
