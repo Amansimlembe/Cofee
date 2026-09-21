@@ -307,7 +307,31 @@ tfoot td{font-weight:700!important}
 .tc-export-menu.show{display:block}.tc-export-menu button{display:block;width:100%;border:0;background:#fff;text-align:left;padding:6px 7px;font-size:8px;border-radius:4px;cursor:pointer}.tc-export-menu button:hover{background:#f4eee9}
 @media(max-width:560px){.totalclean-head{align-items:flex-start}.totalclean-head>div:first-child{display:block}.tc-export-btn{padding:4px 6px}}
 
-.tc-analysis-panel{margin-top:6px}.tc-analysis-head{display:flex!important;justify-content:space-between;align-items:center;gap:8px}.tc-analysis-head>div{display:flex;gap:7px;align-items:baseline}.tc-analysis-select{min-width:250px;padding:4px 6px;border:1px solid #d8cec8;border-radius:6px;background:#fff;font-size:8px}.tc-analysis-panel table{width:100%!important;min-width:0!important;table-layout:fixed!important}.tc-analysis-panel th,.tc-analysis-panel td{padding:3px 4px!important}.tc-analysis-panel th:nth-child(1),.tc-analysis-panel td:nth-child(1){width:6%!important}.tc-analysis-panel th:nth-child(2),.tc-analysis-panel td:nth-child(2){width:21%!important;text-align:left}.tc-analysis-panel th:nth-child(3),.tc-analysis-panel td:nth-child(3){width:35%!important;text-align:left}.tc-analysis-panel th:nth-child(4),.tc-analysis-panel td:nth-child(4),.tc-analysis-panel th:nth-child(5),.tc-analysis-panel td:nth-child(5){width:19%!important;text-align:right}@media(max-width:700px){.tc-analysis-head{flex-direction:column;align-items:stretch}.tc-analysis-head>div{display:block}.tc-analysis-select{width:100%}.tc-analysis-panel .table-box{overflow-x:auto!important}.tc-analysis-panel table{min-width:600px!important}}</style>
+.tc-analysis-panel{margin-top:6px}
+.tc-analysis-head{display:flex!important;justify-content:space-between;align-items:center;gap:8px}
+.tc-analysis-head>div:first-child{display:flex;gap:7px;align-items:baseline}
+.tc-analysis-controls{display:flex!important;align-items:center!important;gap:5px!important;flex-wrap:wrap;justify-content:flex-end}
+.tc-analysis-select{min-width:245px;padding:4px 6px;border:1px solid #d8cec8;border-radius:6px;background:#fff;font-size:8px}
+.tc-party-search{width:175px;padding:4px 7px;border:1px solid #d8cec8;border-radius:6px;background:#fff;font-size:8px}
+.tc-analysis-export{position:relative}
+.tc-analysis-status{padding:3px 6px 1px;color:#76655d;font-size:7.5px}
+.tc-analysis-panel .table-box{width:100%;overflow-x:auto!important}
+.tc-pivot-table{width:100%!important;min-width:max-content!important;table-layout:auto!important;border-collapse:collapse}
+.tc-pivot-table th,.tc-pivot-table td{padding:3px 5px!important;font-size:7.3px!important;line-height:1.08!important;white-space:nowrap!important}
+.tc-pivot-table th:first-child,.tc-pivot-table td:first-child{width:26px!important;text-align:center!important}
+.tc-pivot-table th:nth-child(2),.tc-pivot-table td:nth-child(2){min-width:175px!important;max-width:240px!important;text-align:left!important;overflow:hidden;text-overflow:ellipsis}
+.tc-pivot-table td:not(:nth-child(2)){text-align:right!important}
+.tc-pivot-table thead th{text-align:center!important;vertical-align:middle}
+.tc-pivot-table .pivot-total,.tc-pivot-table tfoot td{font-weight:800}
+.tc-other-row{font-weight:800;cursor:pointer;background:#faf7f5}
+.tc-other-row:hover{background:#f4eee9}
+.tc-other-row .tc-expand{text-align:left!important}
+.tc-detail-row td:nth-child(2){padding-left:14px!important}
+.tc-hidden{display:none}
+.tc-overall-row{font-weight:900}
+@media(max-width:850px){.tc-analysis-head{flex-direction:column;align-items:stretch}.tc-analysis-head>div:first-child{display:block}.tc-analysis-controls{justify-content:flex-start}.tc-analysis-select,.tc-party-search{flex:1 1 220px}}
+@media(max-width:560px){.tc-analysis-select,.tc-party-search{width:100%;min-width:0;flex-basis:100%}.tc-pivot-table th,.tc-pivot-table td{padding:3px 4px!important;font-size:7px!important}.tc-pivot-table th:nth-child(2),.tc-pivot-table td:nth-child(2){min-width:145px!important}}
+</style>
 </head>
 <body>
 <div class="dashboard">
@@ -335,7 +359,25 @@ tfoot td{font-weight:700!important}
 <?php foreach($types as$ct):$rk=$rv=0;foreach($channels as$ch){$rk+=$totalClean[$ct][$ch]['kgs'];$rv+=$totalClean[$ct][$ch]['value'];}?><tr><td><?=htmlspecialchars($ct)?></td><?php foreach($channels as$ch):$x=$totalClean[$ct][$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($rk,2)?></td><td><?=nf($rv,2)?></td><td><?=nf(pct($rk,$tcGrandKg),2)?>%</td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td>Grand Total</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($tcGrandKg,2)?></td><td><?=nf($tcGrandValue,2)?></td><td><?=$tcGrandKg>0?'100%':'0%'?></td></tr><tr class="share-row"><td>Channel Share</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf(pct($x['kgs'],$tcGrandKg),2)?>%</td><td colspan="2"></td><?php endforeach;?><td colspan="3"></td></tr></tfoot>
 </table></div></section>
-<section class="panel tc-analysis-panel"><div class="panel-head tc-analysis-head"><div><strong>Top 10 Buyer / Supplier-Seller Analysis</strong><span>Clean coffee · Kg and Value (USD)</span></div><select id="tcAnalysisType" class="tc-analysis-select"><option value="buyer_channel">Top 10 Buyers by Sales Channel</option><option value="supplier_channel">Top 10 Suppliers/Sellers by Sales Channel</option><option value="buyer_region">Top 10 Buyers by Region</option><option value="supplier_region">Top 10 Suppliers/Sellers by Region</option><option value="buyer_type">Top 10 Buyers by Coffee Type</option><option value="supplier_type">Top 10 Suppliers/Sellers by Coffee Type</option></select></div><div id="tcAnalysisTable" class="table-box"></div></section>
+<section class="panel tc-analysis-panel">
+ <div class="panel-head tc-analysis-head">
+  <div><strong>Buyer / Supplier-Seller Analysis</strong><span>Top 10 + Other + Overall Total · Kg and Value (USD)</span></div>
+  <div class="tc-analysis-controls">
+   <select id="tcAnalysisType" class="tc-analysis-select">
+    <option value="buyer_channel">Buyers · Sales Channels as Columns</option>
+    <option value="supplier_channel">Suppliers/Sellers · Sales Channels as Columns</option>
+    <option value="buyer_region">Buyers · Regions as Columns</option>
+    <option value="supplier_region">Suppliers/Sellers · Regions as Columns</option>
+    <option value="buyer_type">Buyers · Coffee Types as Columns</option>
+    <option value="supplier_type">Suppliers/Sellers · Coffee Types as Columns</option>
+   </select>
+   <input id="tcPartySearch" class="tc-party-search" type="search" placeholder="Search buyer / supplier..." autocomplete="off">
+   <div class="tc-analysis-export"><button type="button" id="tcAnalysisExportBtn" class="tc-export-btn">⇩ Export</button><div id="tcAnalysisExportMenu" class="tc-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div>
+  </div>
+ </div>
+ <div id="tcAnalysisStatus" class="tc-analysis-status"></div>
+ <div id="tcAnalysisTable" class="table-box"></div>
+</section>
 <?php elseif($display==='direct'): ?>
 <div class="kpis direct-kpis">
  <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
@@ -394,11 +436,107 @@ tfoot td{font-weight:700!important}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 (function(){
- const sel=document.getElementById('tcAnalysisType'),box=document.getElementById('tcAnalysisTable');if(!sel||!box)return;
+ const sel=document.getElementById('tcAnalysisType'),box=document.getElementById('tcAnalysisTable'),
+ search=document.getElementById('tcPartySearch'),status=document.getElementById('tcAnalysisStatus'),
+ exportBtn=document.getElementById('tcAnalysisExportBtn'),exportMenu=document.getElementById('tcAnalysisExportMenu');
+ if(!sel||!box)return;
  const D=<?=json_encode($display==='totalclean'?$tcAnalytics:[],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>;
- const M={buyer_channel:['Sales Channel','Buyer','channel','buyer'],supplier_channel:['Sales Channel','Supplier / Seller','channel','supplier'],buyer_region:['Region','Buyer','region','buyer'],supplier_region:['Region','Supplier / Seller','region','supplier'],buyer_type:['Coffee Type','Buyer','coffee_type','buyer'],supplier_type:['Coffee Type','Supplier / Seller','coffee_type','supplier']};
- const e=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])),n=(v,d=2)=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:d});
- function draw(){let [gl,pl,gk,pk]=M[sel.value],rows=D[sel.value]||[],groups=[...new Set(rows.map(r=>r[gk]))].sort(),h=`<table><thead><tr><th>#</th><th>${gl}</th><th>${pl}</th><th>Kg</th><th>Value (USD)</th></tr></thead><tbody>`,found=false;groups.forEach(g=>rows.filter(r=>r[gk]===g).sort((a,b)=>Number(b.kgs)-Number(a.kgs)).slice(0,10).forEach((r,i)=>{found=true;h+=`<tr><td>${i+1}</td><td>${e(g)}</td><td>${e(r[pk])}</td><td>${n(r.kgs,3)}</td><td>${n(r.value_usd,2)}</td></tr>`}));if(!found)h+='<tr><td colspan="5">No data available</td></tr>';box.innerHTML=h+'</tbody></table>';}sel.addEventListener('change',draw);draw();
+ const M={
+  buyer_channel:{party:'buyer',dim:'channel',partyLabel:'Buyer',dimLabel:'Sales Channel'},
+  supplier_channel:{party:'supplier',dim:'channel',partyLabel:'Supplier / Seller',dimLabel:'Sales Channel'},
+  buyer_region:{party:'buyer',dim:'region',partyLabel:'Buyer',dimLabel:'Region'},
+  supplier_region:{party:'supplier',dim:'region',partyLabel:'Supplier / Seller',dimLabel:'Region'},
+  buyer_type:{party:'buyer',dim:'coffee_type',partyLabel:'Buyer',dimLabel:'Coffee Type'},
+  supplier_type:{party:'supplier',dim:'coffee_type',partyLabel:'Supplier / Seller',dimLabel:'Coffee Type'}
+ };
+ const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+ const fmt=(v,d=2)=>Number(v||0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:d});
+ let expanded=false,current={};
+
+ function build(){
+  const cfg=M[sel.value], all=D[sel.value]||[], q=(search?.value||'').trim().toLowerCase();
+  const partyTotals=new Map(),cells=new Map(),dimTotals=new Map();
+  all.forEach(r=>{
+   const p=r[cfg.party]||'Unspecified',d=r[cfg.dim]||'Unspecified',kg=+r.kgs||0,val=+r.value_usd||0;
+   let x=partyTotals.get(p)||{kg:0,val:0};x.kg+=kg;x.val+=val;partyTotals.set(p,x);
+   x=cells.get(p+'\x1f'+d)||{kg:0,val:0};x.kg+=kg;x.val+=val;cells.set(p+'\x1f'+d,x);
+   x=dimTotals.get(d)||{kg:0,val:0};x.kg+=kg;x.val+=val;dimTotals.set(d,x);
+  });
+  const allParties=[...partyTotals.keys()].sort((a,b)=>partyTotals.get(b).kg-partyTotals.get(a).kg);
+  const filtered=q?allParties.filter(p=>p.toLowerCase().includes(q)):allParties;
+  const top=q?filtered:allParties.slice(0,10), others=q?[]:allParties.slice(10);
+  let dims=[...dimTotals.keys()];
+  if(cfg.dim==='channel'){const o=['Auction Sale','Direct Export','Local Sale','Local Roast'];dims.sort((a,b)=>(o.indexOf(a)<0?999:o.indexOf(a))-(o.indexOf(b)<0?999:o.indexOf(b)));}
+  else dims.sort((a,b)=>dimTotals.get(b).kg-dimTotals.get(a).kg);
+  current={cfg,allParties,filtered,top,others,dims,partyTotals,cells,q};
+ }
+
+ function row(p,label,cls=''){
+  const {dims,partyTotals,cells}=current,pt=partyTotals.get(p)||{kg:0,val:0};
+  let h=`<tr class="${cls}"><td>${label}</td><td title="${esc(p)}">${esc(p)}</td>`;
+  dims.forEach(d=>{const c=cells.get(p+'\x1f'+d)||{kg:0,val:0};h+=`<td>${fmt(c.kg,3)}</td><td>${fmt(c.val,2)}</td>`});
+  return h+`<td class="pivot-total">${fmt(pt.kg,3)}</td><td class="pivot-total">${fmt(pt.val,2)}</td></tr>`;
+ }
+ function aggregate(parties){
+  const a={kg:0,val:0,by:{}};
+  current.dims.forEach(d=>a.by[d]={kg:0,val:0});
+  parties.forEach(p=>{const pt=current.partyTotals.get(p)||{kg:0,val:0};a.kg+=pt.kg;a.val+=pt.val;current.dims.forEach(d=>{const c=current.cells.get(p+'\x1f'+d)||{kg:0,val:0};a.by[d].kg+=c.kg;a.by[d].val+=c.val})});
+  return a;
+ }
+ function aggRow(name,a,cls=''){
+  let h=`<tr class="${cls}"><td></td><td>${esc(name)}</td>`;
+  current.dims.forEach(d=>h+=`<td>${fmt(a.by[d].kg,3)}</td><td>${fmt(a.by[d].val,2)}</td>`);
+  return h+`<td>${fmt(a.kg,3)}</td><td>${fmt(a.val,2)}</td></tr>`;
+ }
+ function draw(){
+  build();const {cfg,top,others,dims,q,filtered,allParties}=current;
+  let h=`<table id="tcPivotExportTable" class="tc-pivot-table"><thead><tr><th rowspan="2">#</th><th rowspan="2">${esc(cfg.partyLabel)}</th>`;
+  dims.forEach(d=>h+=`<th colspan="2">${esc(d)}</th>`);h+='<th colspan="2">Overall Total</th></tr><tr>';
+  dims.forEach(()=>h+='<th>Kg</th><th>Value (USD)</th>');h+='<th>Kg</th><th>Value (USD)</th></tr></thead><tbody>';
+  top.forEach((p,i)=>h+=row(p,i+1));
+  if(!q&&others.length){
+   const a=aggregate(others);
+   h+=`<tr id="tcOtherToggle" class="tc-other-row"><td>${expanded?'−':'+'}</td><td class="tc-expand">Other (${others.length} ${cfg.partyLabel.toLowerCase()}${others.length===1?'':'s'})</td>`;
+   dims.forEach(d=>h+=`<td>${fmt(a.by[d].kg,3)}</td><td>${fmt(a.by[d].val,2)}</td>`);
+   h+=`<td>${fmt(a.kg,3)}</td><td>${fmt(a.val,2)}</td></tr>`;
+   if(expanded)others.forEach((p,i)=>h+=row(p,11+i,'tc-detail-row'));
+  }
+  if(q&&!filtered.length)h+=`<tr><td colspan="${4+dims.length*2}" style="text-align:center">No matching ${esc(cfg.partyLabel.toLowerCase())} found.</td></tr>`;
+  h+='</tbody><tfoot>'+aggRow(q?`Filtered Total (${filtered.length})`:'Overall Total',aggregate(q?filtered:allParties),'tc-overall-row')+'</tfoot></table>';
+  box.innerHTML=h;
+  status.textContent=q?`${filtered.length} matching ${cfg.partyLabel.toLowerCase()} record(s) · export will use the filtered result.`:`Showing Top ${Math.min(10,allParties.length)} of ${allParties.length} ${cfg.partyLabel.toLowerCase()} records · ${others.length} other${others.length===1?'':'s'}.`;
+  document.getElementById('tcOtherToggle')?.addEventListener('click',()=>{expanded=!expanded;draw()});
+ }
+ sel.addEventListener('change',()=>{expanded=false;if(search)search.value='';draw()});
+ search?.addEventListener('input',()=>{expanded=false;draw()});
+ draw();
+
+ if(exportBtn&&exportMenu){
+  exportBtn.addEventListener('click',e=>{e.stopPropagation();exportMenu.classList.toggle('show')});
+  document.addEventListener('click',()=>exportMenu.classList.remove('show'));
+  const exportTable=()=>document.getElementById('tcPivotExportTable');
+  const fname=ext=>`Clean_Coffee_${sel.value}_${search?.value?'Filtered':'Top10'}_<?=preg_replace('/[^0-9A-Za-z_-]/','_', $season)?>.${ext}`;
+  function xlsx(){
+   const table=exportTable();if(!table||!window.XLSX)return;
+   const wb=XLSX.utils.table_to_book(table,{sheet:'Analysis',raw:true});
+   const ws=wb.Sheets.Analysis,range=XLSX.utils.decode_range(ws['!ref']);
+   for(let r=2;r<=range.e.r;r++)for(let c=2;c<=range.e.c;c++){const a=XLSX.utils.encode_cell({r,c}),cell=ws[a];if(!cell)continue;const n=Number(String(cell.v).replace(/,/g,''));if(Number.isFinite(n)){cell.v=n;cell.t='n';cell.z='#,##0.00####';}}
+   XLSX.writeFile(wb,fname('xlsx'));
+  }
+  function pdf(){
+   const table=exportTable();if(!table||!window.jspdf)return;const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+   doc.setFontSize(11);doc.text('Clean Coffee Buyer / Supplier-Seller Analysis',10,10);
+   doc.setFontSize(7);doc.text(`Sale Season <?=htmlspecialchars($season)?> · ${sel.options[sel.selectedIndex].text}${search?.value?' · Filter: '+search.value:''}`,10,15);
+   doc.autoTable({html:table,startY:19,theme:'grid',styles:{fontSize:4.8,cellPadding:.8},headStyles:{fontStyle:'bold'},footStyles:{fontStyle:'bold'}});
+   doc.save(fname('pdf'));
+  }
+  function word(){
+   const table=exportTable();if(!table)return;const clone=table.cloneNode(true);clone.querySelectorAll('th,td').forEach(c=>c.style.cssText='border:1px solid #555;padding:3px;font-family:Arial;font-size:8pt');clone.style.cssText='border-collapse:collapse;width:100%';
+   const html=`<html><head><meta charset="utf-8"></head><body><h3>Clean Coffee Buyer / Supplier-Seller Analysis</h3><p>Sale Season <?=htmlspecialchars($season)?> · ${esc(sel.options[sel.selectedIndex].text)}${search?.value?' · Filter: '+esc(search.value):''}</p>${clone.outerHTML}</body></html>`;
+   const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=fname('doc');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);
+  }
+  exportMenu.addEventListener('click',e=>{const f=e.target.dataset.format;if(!f)return;e.stopPropagation();exportMenu.classList.remove('show');f==='xlsx'?xlsx():f==='pdf'?pdf():word()});
+ }
 })();
 </script>
 
