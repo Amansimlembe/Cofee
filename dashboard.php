@@ -11,16 +11,15 @@ function pct($a,$b){return $b>0?($a/$b*100):0;}
 
 if($display==='direct'){
  require_once __DIR__.'/Direct_database.php';
- if(function_exists('ensure_direct_table')) ensure_direct_table();
- elseif(function_exists('ensure_direct_sales_table')) ensure_direct_sales_table();
- $db=function_exists('direct_db')?direct_db():$pdo;
+ direct_ensure_table();
+ $db=direct_db();
  function season_bounds($s){if(!preg_match('/^(\d{4})\/(\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
  function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM invoice_date)::int y,EXTRACT(MONTH FROM invoice_date)::int m FROM public.direct_sales WHERE invoice_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
  $channelCase="CASE WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('DE','DIRECT EXPORT') THEN 'Direct Export' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LS','LOCAL SALE') THEN 'Local Sale' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LR','LOCAL ROAST','LOCAL ROAST SALE','SLS') THEN 'Local Roast' ELSE NULL END";
- $valueExpr="COALESCE(net_kg,0)*COALESCE(price_usd_50kgs,0)/50.0";
+ $valueExpr="COALESCE(net_kg,0)*COALESCE(price_usd_50kg,0)/50.0";
  $q=$db->prepare("SELECT $channelCase channel,COALESCE(NULLIF(INITCAP(LOWER(BTRIM(coffee_type))),''),'Unspecified') coffee_type,SUM(COALESCE(net_kg,0)) kgs,SUM($valueExpr) value_usd FROM public.direct_sales WHERE invoice_date BETWEEN :f AND :t AND $channelCase IS NOT NULL GROUP BY 1,2 ORDER BY 1,2");
  $q->execute(['f'=>$from,'t'=>$to]);$directRows=$q->fetchAll();
  $channelTotals=[];$coffeeTotals=[];$grandSold=0;$grandValue=0;
