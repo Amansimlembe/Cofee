@@ -259,7 +259,29 @@ tfoot td{font-weight:700!important}
 @media(max-width:900px){.direct-kpis{grid-template-columns:1fr 1fr}.direct-kpis>.kpi{grid-column:1/-1}}
 @media(max-width:560px){.direct-kpis,.direct-analytics{grid-template-columns:1fr}}
 
-.totalclean-kpis{grid-template-columns:110px repeat(4,minmax(0,1fr))}.totalclean-panel{min-height:0}.totalclean-table{font-size:7.5px!important}.totalclean-table th,.totalclean-table td{padding:3px 3px!important}.totalclean-table th:first-child,.totalclean-table td:first-child{width:auto}.totalclean-table .share-row td{background:#fbf8f6;font-weight:700}.totalclean-table thead th{text-align:center}.totalclean-table tbody td:not(:first-child),.totalclean-table tfoot td:not(:first-child){text-align:right}@media(max-width:1100px){.totalclean-kpis{grid-template-columns:1fr 1fr}.totalclean-kpis>.kpi{grid-column:1/-1}.totalclean-panel .table-box{overflow-x:auto!important}.totalclean-table{min-width:1180px!important}}@media(max-width:560px){.totalclean-kpis{grid-template-columns:1fr}.totalclean-kpis>.kpi{grid-column:auto}}
+.totalclean-kpis{grid-template-columns:110px repeat(4,minmax(0,1fr))}
+.totalclean-panel{min-height:0;width:100%;overflow:hidden}
+.totalclean-panel .table-box{width:100%;overflow-x:hidden!important}
+.totalclean-table{width:100%!important;min-width:0!important;table-layout:fixed!important;font-size:7.2px!important}
+.totalclean-table th,.totalclean-table td{padding:3px 2px!important;line-height:1.05!important;white-space:nowrap!important}
+.totalclean-table thead th{font-size:7px!important;text-align:center!important;white-space:normal!important}
+.totalclean-table th:first-child,.totalclean-table td:first-child{width:8.5%!important;text-align:left!important}
+.totalclean-table tbody td:not(:first-child),.totalclean-table tfoot td:not(:first-child){text-align:right}
+.totalclean-table .share-row td{background:#fbf8f6;font-weight:700}
+@media(max-width:1100px){
+ .totalclean-kpis{grid-template-columns:1fr 1fr}
+ .totalclean-kpis>.kpi{grid-column:1/-1}
+ .totalclean-table th,.totalclean-table td{font-size:6.8px!important;padding:2px 1.5px!important}
+}
+@media(max-width:760px){
+ .totalclean-panel .table-box{overflow-x:auto!important}
+ .totalclean-table{min-width:760px!important}
+}
+@media(max-width:560px){
+ .totalclean-kpis{grid-template-columns:1fr}
+ .totalclean-kpis>.kpi{grid-column:auto}
+ .totalclean-table{min-width:720px!important}
+}
 </style>
 </head>
 <body>
