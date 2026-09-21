@@ -228,10 +228,23 @@ if(isset($_GET['action'])){
            $st->execute(array_merge($p,$deParams));
            $total=$st->fetch();
 
+           $sqlSupplierCoffee="SELECT COALESCE(NULLIF(BTRIM(d.supplier_seller),''),'Unspecified') party,
+               COALESCE(NULLIF(BTRIM(d.coffee_type),''),'Unspecified') coffee_type,
+               COALESCE(SUM($balanceExpr),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
+               FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,coffee_type";
+           $st=direct_db()->prepare($sqlSupplierCoffee); $st->execute(array_merge($p,$deParams)); $supplierCoffee=$st->fetchAll();
+           $sqlBuyerCoffee="SELECT COALESCE(NULLIF(BTRIM(d.buyer),''),'Unspecified') party,
+               COALESCE(NULLIF(BTRIM(d.coffee_type),''),'Unspecified') coffee_type,
+               COALESCE(SUM($balanceExpr),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
+               FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,coffee_type";
+           $st=direct_db()->prepare($sqlBuyerCoffee); $st->execute(array_merge($p,$deParams)); $buyerCoffee=$st->fetchAll();
+
            direct_json(true,'',[
               'is_local_sale'=>true,
               'coffee_type'=>$coffee,
               'regions'=>$regions,
+              'supplier_coffee'=>$supplierCoffee,
+              'buyer_coffee'=>$buyerCoffee,
               'total'=>[
                  'net_kg'=>(float)($total['net_kg']??0),
                  'ls_balance_kg'=>(float)($total['ls_balance_kg']??0),
@@ -261,10 +274,23 @@ if(isset($_GET['action'])){
            FROM public.direct_sales d WHERE $where";
        $st=direct_db()->prepare($sqlTotal); $st->execute($p); $total=$st->fetch();
 
+       $sqlSupplierCoffee="SELECT COALESCE(NULLIF(BTRIM(d.supplier_seller),''),'Unspecified') party,
+           COALESCE(NULLIF(BTRIM(d.coffee_type),''),'Unspecified') coffee_type,
+           COALESCE(SUM(d.net_kg),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
+           FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,coffee_type";
+       $st=direct_db()->prepare($sqlSupplierCoffee); $st->execute($p); $supplierCoffee=$st->fetchAll();
+       $sqlBuyerCoffee="SELECT COALESCE(NULLIF(BTRIM(d.buyer),''),'Unspecified') party,
+           COALESCE(NULLIF(BTRIM(d.coffee_type),''),'Unspecified') coffee_type,
+           COALESCE(SUM(d.net_kg),0) net_kg, COALESCE(SUM($valueExpr),0) value_usd
+           FROM public.direct_sales d WHERE $where GROUP BY 1,2 ORDER BY party,coffee_type";
+       $st=direct_db()->prepare($sqlBuyerCoffee); $st->execute($p); $buyerCoffee=$st->fetchAll();
+
        direct_json(true,'',[
           'is_local_sale'=>false,
           'coffee_type'=>$coffee,
           'regions'=>$regions,
+          'supplier_coffee'=>$supplierCoffee,
+          'buyer_coffee'=>$buyerCoffee,
           'total'=>[
              'net_kg'=>(float)($total['net_kg']??0),
              'value_usd'=>(float)($total['value_usd']??0)
@@ -294,7 +320,7 @@ th,td{padding:7px 8px;border-right:1px solid #e1dcda;border-bottom:1px solid #e1
 th:first-child,td:first-child{text-align:left}td.text{text-align:left}.num{font-variant-numeric:tabular-nums}
 
 .summary{display:none;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
-.summary.show{display:grid}.summary-card{background:#fff;border:1px solid #d9d2cf;border-radius:8px;overflow:hidden}
+.summary.show{display:grid}.summary-wide{grid-column:1/-1}.summary-card{background:#fff;border:1px solid #d9d2cf;border-radius:8px;overflow:hidden}
 .summary-head{padding:8px 10px;font-size:13px;font-weight:700;border-bottom:1px solid #d9d2cf;background:#faf8f7}
 .summary-card table{width:100%;min-width:0;border-collapse:collapse;table-layout:fixed}
 .summary-card th,.summary-card td{padding:6px 7px;border:1px solid #ded8d5}
@@ -336,6 +362,8 @@ th:first-child,td:first-child{text-align:left}td.text{text-align:left}.num{font-
 <div class="summary" id="summary">
  <section class="summary-card"><div class="summary-head">Sales Summary by Coffee Type <span class="summary-note">Value = (USD/50kg ÷ 50) × Net kg</span></div><div id="coffeeSummary"></div></section>
  <section class="summary-card"><div class="summary-head">Sales Summary by Region <span class="summary-note">Share based on Grand Total net weight</span></div><div id="regionSummary"></div></section>
+ <section class="summary-card summary-wide"><div class="summary-head">Sales Summary by Supplier & Coffee Type</div><div id="supplierCoffeeSummary"></div></section>
+ <section class="summary-card summary-wide"><div class="summary-head">Sales Summary by Buyer & Coffee Type</div><div id="buyerCoffeeSummary"></div></section>
 </div>
 </div>
 <script>
@@ -385,12 +413,26 @@ function summaryTable(rows,total,firstTitle,isLocalSale=false){
  <tbody>${body||'<tr><td colspan="4">No data</td></tr>'}</tbody>
  <tfoot><tr><td>Grand Total</td><td>${num(total.net_kg,3)}</td><td>${num(total.value_usd,2)}</td><td>${grand>0?'100%':'0%'}</td></tr></tfoot></table>`;
 }
+
+function partyCoffeeTable(rows,partyTitle){
+ const types=[...new Set(rows.map(r=>r.coffee_type))].sort((a,b)=>String(a).localeCompare(String(b)));
+ const parties=[...new Set(rows.map(r=>r.party))].sort((a,b)=>String(a).localeCompare(String(b)));
+ const m=new Map(rows.map(r=>[`${r.party}\u0000${r.coffee_type}`,r]));
+ const totals=Object.fromEntries(types.map(c=>[c,{kg:0,val:0}])); let gk=0,gv=0;
+ let h=`<thead><tr><th rowspan="2">${partyTitle}</th>${types.map(c=>`<th colspan="2">${esc(c)}</th>`).join('')}<th colspan="2">Grand Total</th></tr><tr>${types.map(()=>'<th>Kg</th><th>Value (USD)</th>').join('')}<th>Kg</th><th>Value (USD)</th></tr></thead><tbody>`;
+ h+=parties.map(p=>{let pk=0,pv=0,cells=types.map(c=>{let r=m.get(`${p}\u0000${c}`),kg=Number(r?.net_kg)||0,v=Number(r?.value_usd)||0;pk+=kg;pv+=v;totals[c].kg+=kg;totals[c].val+=v;return `<td>${num(kg,3)}</td><td>${num(v,2)}</td>`}).join('');gk+=pk;gv+=pv;return `<tr><td>${esc(p)}</td>${cells}<td>${num(pk,3)}</td><td>${num(pv,2)}</td></tr>`}).join('');
+ h+=`</tbody><tfoot><tr><td>Grand Total</td>${types.map(c=>`<td>${num(totals[c].kg,3)}</td><td>${num(totals[c].val,2)}</td>`).join('')}<td>${num(gk,3)}</td><td>${num(gv,2)}</td></tr></tfoot>`;
+ return `<div style="overflow:auto">${h}</table></div>`.replace('<thead>','<table><thead>');
+}
+
 async function loadSummary(){
  try{
    $('status').textContent='Preparing Sale Summary…';
    let d=await api('Direct_sales.php?action=summary&category='+encodeURIComponent(category)+'&season='+encodeURIComponent($('season').value));
    $('coffeeSummary').innerHTML=summaryTable(d.coffee_type,d.total,'Coffee Type',!!d.is_local_sale);
    $('regionSummary').innerHTML=summaryTable(d.regions,d.total,'Region',!!d.is_local_sale);
+   $('supplierCoffeeSummary').innerHTML=partyCoffeeTable(d.supplier_coffee||[],'Supplier / Seller');
+   $('buyerCoffeeSummary').innerHTML=partyCoffeeTable(d.buyer_coffee||[],'Buyer');
    $('status').textContent=category+' Sale Summary'+($('season').value?' · '+$('season').value:' · All Sale Seasons')+(d.is_local_sale?' · Value and share based on remaining LS Balance':'');
  }catch(e){$('status').textContent=e.message}
 }
@@ -499,7 +541,7 @@ function exportExcel(){
  }
 
  if($('display').value==='summary'){
-   [['Coffee Type',$('coffeeSummary').querySelector('table')],['Region',$('regionSummary').querySelector('table')]].forEach(([name,table])=>{
+   [['Coffee Type',$('coffeeSummary').querySelector('table')],['Region',$('regionSummary').querySelector('table')],['Supplier by Coffee',$('supplierCoffeeSummary').querySelector('table')],['Buyer by Coffee',$('buyerCoffeeSummary').querySelector('table')]].forEach(([name,table])=>{
      if(table)XLSX.utils.book_append_sheet(wb,sheetFromTable(table),name);
    });
  }else{
