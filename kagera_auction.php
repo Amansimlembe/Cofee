@@ -2001,73 +2001,6 @@ function handle_kagera_report()
     ], 200);
 }
 
-
-/*
-|--------------------------------------------------------------------------
-| SALES SUMMARY - ALL AUCTIONS EXPORT DATA
-|--------------------------------------------------------------------------
-| Returns auction-by-auction Grade totals for the selected season.
-| The browser converts these rows into one consolidated export table.
-|--------------------------------------------------------------------------
-*/
-function handle_kagera_all_auctions_sales_summary()
-{
-    ensure_kagera_table();
-    ensure_kagera_catalogue_table();
-
-    $db = kagera_db();
-    $season = trim((string)($_GET['season'] ?? ''));
-
-    $catalogueWhere = ["TRIM(CAST(grade AS TEXT)) <> ''"];
-    $resultWhere = ["TRIM(CAST(grade AS TEXT)) <> ''"];
-    $catalogueParams = [];
-    $resultParams = [];
-
-    if ($season !== '' && preg_match('/^(\\d{4})\\/(\\d{4})$/', $season, $m)) {
-        $start = $m[1] . '-06-01';
-        $end = $m[2] . '-05-30';
-        $catalogueWhere[] = 'auction_date BETWEEN :c_start AND :c_end';
-        $catalogueParams['c_start'] = $start;
-        $catalogueParams['c_end'] = $end;
-        $resultWhere[] = 'auction_date BETWEEN :r_start AND :r_end';
-        $resultParams['r_start'] = $start;
-        $resultParams['r_end'] = $end;
-    }
-
-    $catalogueSql = "
-        SELECT TRIM(CAST(auction_no AS TEXT)) AS auction_no,
-               TRIM(CAST(grade AS TEXT)) AS grade,
-               COALESCE(SUM(kgs), 0) AS kilos_offered
-        FROM public.kagera_auction_catalogue
-        WHERE " . implode(' AND ', $catalogueWhere) . "
-          AND TRIM(CAST(auction_no AS TEXT)) <> ''
-        GROUP BY TRIM(CAST(auction_no AS TEXT)), TRIM(CAST(grade AS TEXT))
-    ";
-    $stmt = $db->prepare($catalogueSql);
-    $stmt->execute($catalogueParams);
-    $catalogueRows = $stmt->fetchAll();
-
-    $resultSql = "
-        SELECT TRIM(CAST(auction_no AS TEXT)) AS auction_no,
-               TRIM(CAST(grade AS TEXT)) AS grade,
-               COALESCE(SUM(kgs), 0) AS kilos_sold,
-               COALESCE(SUM(kgs * COALESCE(price, 0)), 0) AS total_value
-        FROM public.kagera_auction_results
-        WHERE " . implode(' AND ', $resultWhere) . "
-          AND TRIM(CAST(auction_no AS TEXT)) <> ''
-        GROUP BY TRIM(CAST(auction_no AS TEXT)), TRIM(CAST(grade AS TEXT))
-    ";
-    $stmt = $db->prepare($resultSql);
-    $stmt->execute($resultParams);
-    $resultRows = $stmt->fetchAll();
-
-    kagera_json(true, 'All-auctions Sales Summary data loaded.', [
-        'season' => $season,
-        'catalogue' => $catalogueRows,
-        'results' => $resultRows
-    ], 200);
-}
-
 /*
 |--------------------------------------------------------------------------
 | REQUEST ROUTING
@@ -2120,12 +2053,6 @@ try {
         ($_GET['action'] ?? '') === 'report'
     ) {
         handle_kagera_report();
-    }
-
-    if (
-        ($_GET['action'] ?? '') === 'report_all_auctions'
-    ) {
-        handle_kagera_all_auctions_sales_summary();
     }
 
     if (
@@ -3461,16 +3388,9 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
         <span>Export</span>
     </button>
     <div class="kagera-export-menu" id="kageraHighLowExportMenu" style="display:none;">
-        <div class="kagera-export-selected-options">
-            <button type="button" data-kagera-export="pdf">Selected Auction - PDF</button>
-            <button type="button" data-kagera-export="excel">Selected Auction - Excel</button>
-            <button type="button" data-kagera-export="word">Selected Auction - Word</button>
-        </div>
-        <div class="kagera-export-all-auctions-options" style="display:none;border-top:1px solid #d1d5db;margin-top:4px;padding-top:4px;">
-            <button type="button" data-kagera-export-all="pdf">All Auctions Summary - PDF</button>
-            <button type="button" data-kagera-export-all="excel">All Auctions Summary - Excel</button>
-            <button type="button" data-kagera-export-all="word">All Auctions Summary - Word</button>
-        </div>
+        <button type="button" data-kagera-export="pdf">Download PDF</button>
+        <button type="button" data-kagera-export="excel">Download Excel</button>
+        <button type="button" data-kagera-export="word">Download Word</button>
     </div>
 </div>
 
@@ -4980,6 +4900,40 @@ async function kageraExportReportPdf()
 async function kageraExportHighLow(format)
 {
     try {
+        /*
+         * IMPORTANT FOR SALES SUMMARY EXPORT:
+         * Before exporting, rebuild the report from the Auction No. that is
+         * CURRENTLY selected in the Auction No dropdown. This prevents an
+         * already-rendered summary from a previous auction being exported
+         * after the user changes the filter and immediately clicks Export.
+         */
+        const mode = kageraCurrentReportMode();
+        const auction = String(document.getElementById("kageraAuctionFilter")?.value || "").trim();
+        const season = String(document.getElementById("kageraSeasonFilter")?.value || "").trim();
+
+        if (mode !== "high_low" && mode !== "sales_summary") {
+            throw new Error("Select High & Low or Sales Summary before exporting.");
+        }
+
+        if (!auction) {
+            throw new Error("Select an Auction No. before exporting the report.");
+        }
+
+        // Force a fresh report for this exact Season + Auction selection.
+        // This is especially important for Sales Summary after database edits/uploads.
+        kageraReportCache.delete(season + "|" + auction);
+
+        const reportReady = await kageraShowReport();
+        if (reportReady === false) {
+            throw new Error("Unable to prepare the selected Auction report for export.");
+        }
+
+        // Confirm the user did not change Auction No. while the report was loading.
+        const auctionAfterLoad = String(document.getElementById("kageraAuctionFilter")?.value || "").trim();
+        if (auctionAfterLoad !== auction) {
+            throw new Error("Auction No. changed while preparing the export. Please export again.");
+        }
+
         if (format === "pdf") await kageraExportReportPdf();
         else if (format === "excel") kageraExportReportExcel();
         else if (format === "word") kageraExportReportWord();
@@ -4988,148 +4942,6 @@ async function kageraExportHighLow(format)
         console.error("Kagera report export:", error);
         alert(error.message || "Unable to export the selected report.");
     } finally {
-        kageraCloseHighLowExportMenu();
-    }
-}
-
-
-function kageraNormalizeSummaryGrade(value)
-{
-    const parts = String(value || "").trim().replace(/[\s_]+/g, "_").replace(/^_+|_+$/g, "").split("_").filter(Boolean);
-    const out = [];
-    for (let i = 0; i < parts.length; i++) {
-        const p = String(parts[i]).toLowerCase();
-        if (p === "robu" && parts[i + 1] && String(parts[i + 1]).toLowerCase() === "ta") {
-            out.push("Robusta"); i++; continue;
-        }
-        if (p === "arabica") out.push("Arabica");
-        else if (p === "robusta" || p === "robuta" || p === "robu-ta") out.push("Robusta");
-        else if (p === "clean") out.push("Clean");
-        else if (p === "certified") out.push("Certified");
-        else out.push(p.charAt(0).toUpperCase() + p.slice(1));
-    }
-    return out.join("_");
-}
-
-function kageraAuctionSortValue(value)
-{
-    const text = String(value || "").trim();
-    const m = text.match(/^\d+(?:\.\d+)?/);
-    return m ? Number(m[0]) : -Infinity;
-}
-
-async function kageraBuildAllAuctionsSalesSummaryExport()
-{
-    if (kageraCurrentReportMode() !== "sales_summary") {
-        throw new Error("All Auctions Summary is available only when Sales Summary is selected.");
-    }
-
-    const season = String(document.getElementById("kageraSeasonFilter")?.value || "").trim();
-    const response = await fetch(
-        "kagera_auction.php?action=report_all_auctions&season=" + encodeURIComponent(season),
-        {cache:"no-store", credentials:"same-origin"}
-    );
-    const payload = await response.json();
-    if (!response.ok || !payload.success) throw new Error(payload.message || "Unable to load all-auctions Sales Summary.");
-
-    const auctions = {};
-    function ensure(auction, grade) {
-        auction = String(auction || "").trim();
-        grade = kageraNormalizeSummaryGrade(grade);
-        if (!auction || !grade) return null;
-        if (!auctions[auction]) auctions[auction] = {};
-        if (!auctions[auction][grade]) auctions[auction][grade] = {offered:0, sold:0, value:0};
-        return auctions[auction][grade];
-    }
-
-    (payload.data?.catalogue || []).forEach(function(row){
-        const g = ensure(row.auction_no, row.grade); if (g) g.offered += kageraNumber(row.kilos_offered);
-    });
-    (payload.data?.results || []).forEach(function(row){
-        const g = ensure(row.auction_no, row.grade); if (g) { g.sold += kageraNumber(row.kilos_sold); g.value += kageraNumber(row.total_value); }
-    });
-
-    const auctionNos = Object.keys(auctions).sort(function(a,b){
-        const d = kageraAuctionSortValue(b) - kageraAuctionSortValue(a);
-        return d || String(b).localeCompare(String(a), undefined, {numeric:true});
-    });
-    if (!auctionNos.length) throw new Error("No Sales Summary data is available for the selected season.");
-
-    const wrapper = document.createElement("div");
-    wrapper.className = "kagera-export-sheet";
-    wrapper.style.cssText = "background:#fff;color:#000;font-family:Arial,sans-serif";
-    const heading = document.createElement("div");
-    heading.innerHTML = '<div style="text-align:center;font-weight:800;font-size:14px;margin-bottom:3px">KAGERA COFFEE EXCHANGE</div>' +
-        '<div style="text-align:center;font-weight:700;font-size:12px;margin-bottom:3px">SALES SUMMARY - ALL AUCTIONS</div>' +
-        '<div style="text-align:center;font-size:10px;margin-bottom:9px">Season: ' + escapeKageraHtml(season || "All Seasons") + '</div>';
-    wrapper.appendChild(heading);
-
-    const table = document.createElement("table");
-    table.innerHTML = '<thead><tr><th>Auction No.</th><th>Type of Coffee</th><th>Kilos Offered</th><th>Kilos Sold</th><th>Total Value (TZS)</th><th>Percentage Sold</th></tr></thead><tbody></tbody>';
-    const tbody = table.querySelector("tbody");
-    let grandOffered=0, grandSold=0, grandValue=0;
-
-    auctionNos.forEach(function(auction){
-        const grades = Object.keys(auctions[auction]).sort(function(a,b){return a.localeCompare(b);});
-        let aOffered=0, aSold=0, aValue=0;
-        grades.forEach(function(grade){
-            const g=auctions[auction][grade]; aOffered+=g.offered; aSold+=g.sold; aValue+=g.value;
-            const pct=g.offered>0 ? (g.sold/g.offered)*100 : 0;
-            tbody.insertAdjacentHTML("beforeend", '<tr><td>'+escapeKageraHtml(auction)+'</td><td>'+escapeKageraHtml(grade)+'</td><td>'+kageraReportKg(g.offered)+'</td><td>'+kageraReportKg(g.sold)+'</td><td>'+kageraReportMoney(g.value)+'</td><td>'+pct.toFixed(2)+'%</td></tr>');
-        });
-        const apct=aOffered>0 ? (aSold/aOffered)*100 : 0;
-        tbody.insertAdjacentHTML("beforeend", '<tr class="kagera-high-low-total-row"><td>'+escapeKageraHtml(auction)+'</td><td>Auction Total</td><td>'+kageraReportKg(aOffered)+'</td><td>'+kageraReportKg(aSold)+'</td><td>'+kageraReportMoney(aValue)+'</td><td>'+apct.toFixed(2)+'%</td></tr>');
-        grandOffered+=aOffered; grandSold+=aSold; grandValue+=aValue;
-    });
-    const gpct=grandOffered>0 ? (grandSold/grandOffered)*100 : 0;
-    tbody.insertAdjacentHTML("beforeend", '<tr class="kagera-high-low-total-row"><td colspan="2">GRAND TOTAL</td><td>'+kageraReportKg(grandOffered)+'</td><td>'+kageraReportKg(grandSold)+'</td><td>'+kageraReportMoney(grandValue)+'</td><td>'+gpct.toFixed(2)+'%</td></tr>');
-    wrapper.appendChild(table);
-
-    wrapper.querySelectorAll("table").forEach(function(t){t.style.cssText="width:100%;border-collapse:collapse;border:3px solid #000;background:#fff;color:#000";});
-    wrapper.querySelectorAll("th,td").forEach(function(c){c.style.cssText="border:1px solid #000;padding:5px;text-align:center;background:#fff;color:#000";});
-    wrapper.querySelectorAll("th").forEach(function(c){c.style.fontWeight="800";});
-    wrapper.querySelectorAll(".kagera-high-low-total-row td").forEach(function(c){c.style.fontWeight="800";c.style.borderTop="2px solid #000";});
-    return wrapper;
-}
-
-function kageraAllAuctionsSalesSummaryFileBase()
-{
-    const season = String(document.getElementById("kageraSeasonFilter")?.value || "").trim().replace(/[^A-Za-z0-9_-]+/g,"_") || "All_Seasons";
-    return "Kagera_Sales_Summary_All_Auctions_" + season;
-}
-
-async function kageraExportAllAuctionsSalesSummary(format)
-{
-    const button = document.getElementById("kageraHighLowExportBtn");
-    const original = button ? button.innerHTML : "";
-    try {
-        if (button) {button.disabled=true;button.textContent="Preparing export…";}
-        const wrapper = await kageraBuildAllAuctionsSalesSummaryExport();
-        const base = kageraAllAuctionsSalesSummaryFileBase();
-        const html = '<!doctype html><html><head><meta charset="utf-8"><style>@page{margin:10mm;size:A4 landscape}body{font-family:Arial,sans-serif;color:#000;background:#fff}table{border-collapse:collapse;width:100%;border:3px solid #000}th,td{border:1px solid #000;padding:5px;text-align:center}.kagera-high-low-total-row td{font-weight:bold;border-top:2px solid #000}</style></head><body>'+wrapper.innerHTML+'</body></html>';
-
-        if (format === "excel") {
-            kageraDownloadBlob(new Blob(['\ufeff',html],{type:'application/vnd.ms-excel;charset=utf-8'}),base+'.xls');
-        } else if (format === "word") {
-            kageraDownloadBlob(new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),base+'.doc');
-        } else if (format === "pdf") {
-            await kageraEnsurePdfLibrary();
-            wrapper.style.width="1120px"; wrapper.style.padding="10px";
-            const stage=document.createElement("div"); stage.style.cssText="position:fixed;left:-12000px;top:0;width:1140px;background:#fff"; stage.appendChild(wrapper); document.body.appendChild(stage);
-            try {
-                const canvas=await window.html2canvas(wrapper,{scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false});
-                const JsPDF=window.jspdf.jsPDF; const pdf=new JsPDF({orientation:'landscape',unit:'mm',format:'a4',compress:true});
-                const pageW=pdf.internal.pageSize.getWidth(), pageH=pdf.internal.pageSize.getHeight(), margin=7, usableW=pageW-margin*2;
-                const pxPerMm=canvas.width/usableW, pagePx=Math.floor((pageH-margin*2)*pxPerMm); let y=0,page=0;
-                while(y<canvas.height){const h=Math.min(pagePx,canvas.height-y),part=document.createElement('canvas');part.width=canvas.width;part.height=h;part.getContext('2d').drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);if(page>0)pdf.addPage();pdf.addImage(part.toDataURL('image/jpeg',0.96),'JPEG',margin,margin,usableW,h/pxPerMm,undefined,'FAST');y+=h;page++;}
-                pdf.save(base+'.pdf');
-            } finally {stage.remove();}
-        } else throw new Error("Unsupported export format.");
-    } catch(error) {
-        console.error("Kagera all-auctions Sales Summary export:",error);
-        alert(error.message || "Unable to export all-auctions Sales Summary.");
-    } finally {
-        if (button) {button.disabled=false;button.innerHTML=original;}
         kageraCloseHighLowExportMenu();
     }
 }
@@ -5148,12 +4960,6 @@ function kageraSetupHighLowExport()
         item.addEventListener("click", async function(event){
             event.preventDefault(); event.stopPropagation();
             await kageraExportHighLow(this.getAttribute("data-kagera-export"));
-        });
-    });
-    menu.querySelectorAll("button[data-kagera-export-all]").forEach(function(item){
-        item.addEventListener("click", async function(event){
-            event.preventDefault(); event.stopPropagation();
-            await kageraExportAllAuctionsSalesSummary(this.getAttribute("data-kagera-export-all"));
         });
     });
     document.addEventListener("click", function(event){
@@ -5224,11 +5030,6 @@ async function kageraShowReport()
         const reportName = selectedReport === "sales_summary" ? "Sales Summary" : "High & Low";
         exportButton.setAttribute("title", "Export " + reportName);
         exportButton.setAttribute("aria-label", "Export " + reportName);
-    }
-
-    const allAuctionsExportOptions = document.querySelector(".kagera-export-all-auctions-options");
-    if (allAuctionsExportOptions) {
-        allAuctionsExportOptions.style.display = selectedReport === "sales_summary" ? "block" : "none";
     }
     if (!isReportView) kageraCloseHighLowExportMenu();
 
@@ -5581,8 +5382,11 @@ async function kageraShowReport()
             }
         }
 
+        // Report DOM now represents the currently selected Season + Auction No.
+        return true;
+
     } catch (error) {
-        if (error && error.name === "AbortError") return;
+        if (error && error.name === "AbortError") return false;
 
         const body =
             selectedReport === "high_low"
@@ -5597,6 +5401,8 @@ async function kageraShowReport()
                 escapeKageraHtml(error.message || "Unable to generate report.") +
                 "</td></tr>";
         }
+
+        return false;
     }
 }
 
