@@ -4717,11 +4717,19 @@ function kageraCurrentReportMode()
 
 function kageraReportFileBase()
 {
-    const auction = String(document.getElementById("kageraAuctionFilter")?.value || "").trim() || "Selected_Auction";
+    const mode = kageraCurrentReportMode();
+    const auction = String(document.getElementById("kageraAuctionFilter")?.value || "").trim();
     const season = String(document.getElementById("kageraSeasonFilter")?.value || "").trim()
         .replace(/[^A-Za-z0-9_-]+/g, "_") || "Season";
-    const mode = kageraCurrentReportMode() === "sales_summary" ? "Sales_Summary" : "High_and_Low";
-    return "Kagera_" + mode + "_Auction_" + auction + "_" + season;
+    const reportName = mode === "sales_summary" ? "Sales_Summary" : "High_and_Low";
+
+    // Sales Summary may legitimately display all auctions when Auction No. is blank.
+    // The export filename must describe exactly what is currently displayed.
+    const auctionPart = auction
+        ? "Auction_" + auction.replace(/[^A-Za-z0-9_-]+/g, "_")
+        : (mode === "sales_summary" ? "All_Auctions" : "Selected_Auction");
+
+    return "Kagera_" + reportName + "_" + auctionPart + "_" + season;
 }
 
 function kageraDownloadBlob(blob, filename)
@@ -4740,7 +4748,12 @@ function kageraExportSourceClone()
 {
     const mode = kageraCurrentReportMode();
     const auction = String(document.getElementById("kageraAuctionFilter")?.value || "").trim();
-    if (!auction) throw new Error("Select an Auction No. before exporting the report.");
+
+    // High & Low is an auction-specific report, so it still requires an Auction No.
+    // Sales Summary does NOT require an Auction No.: export the table exactly as displayed.
+    if (mode === "high_low" && !auction) {
+        throw new Error("Select an Auction No. before exporting the High & Low report.");
+    }
 
     const wrapper = document.createElement("div");
     wrapper.className = "kagera-export-sheet";
@@ -4756,9 +4769,14 @@ function kageraExportSourceClone()
         const table = document.getElementById("kageraSalesSummaryTable");
         if (!table || table.style.display === "none") throw new Error("Sales Summary is not ready yet.");
         const heading = document.createElement("div");
+        const salesSummaryScope = auction
+            ? "SALES SUMMARY FOR AUCTION NO. " +
+                String(auction).replace(/[&<>"']/g, function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c];})
+            : "SALES SUMMARY FOR ALL DISPLAYED AUCTIONS";
+
         heading.innerHTML = '<div style="text-align:center;font-weight:800;font-size:13px;margin-bottom:3px">KAGERA COFFEE EXCHANGE</div>' +
-            '<div style="text-align:center;font-weight:700;font-size:11px;margin-bottom:8px">SALES SUMMARY FOR AUCTION NO. ' +
-            String(auction).replace(/[&<>"']/g, function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c];}) + '</div>';
+            '<div style="text-align:center;font-weight:700;font-size:11px;margin-bottom:8px">' +
+            salesSummaryScope + '</div>';
         wrapper.appendChild(heading);
         wrapper.appendChild(table.cloneNode(true));
     } else {
@@ -4900,40 +4918,6 @@ async function kageraExportReportPdf()
 async function kageraExportHighLow(format)
 {
     try {
-        /*
-         * IMPORTANT FOR SALES SUMMARY EXPORT:
-         * Before exporting, rebuild the report from the Auction No. that is
-         * CURRENTLY selected in the Auction No dropdown. This prevents an
-         * already-rendered summary from a previous auction being exported
-         * after the user changes the filter and immediately clicks Export.
-         */
-        const mode = kageraCurrentReportMode();
-        const auction = String(document.getElementById("kageraAuctionFilter")?.value || "").trim();
-        const season = String(document.getElementById("kageraSeasonFilter")?.value || "").trim();
-
-        if (mode !== "high_low" && mode !== "sales_summary") {
-            throw new Error("Select High & Low or Sales Summary before exporting.");
-        }
-
-        if (!auction) {
-            throw new Error("Select an Auction No. before exporting the report.");
-        }
-
-        // Force a fresh report for this exact Season + Auction selection.
-        // This is especially important for Sales Summary after database edits/uploads.
-        kageraReportCache.delete(season + "|" + auction);
-
-        const reportReady = await kageraShowReport();
-        if (reportReady === false) {
-            throw new Error("Unable to prepare the selected Auction report for export.");
-        }
-
-        // Confirm the user did not change Auction No. while the report was loading.
-        const auctionAfterLoad = String(document.getElementById("kageraAuctionFilter")?.value || "").trim();
-        if (auctionAfterLoad !== auction) {
-            throw new Error("Auction No. changed while preparing the export. Please export again.");
-        }
-
         if (format === "pdf") await kageraExportReportPdf();
         else if (format === "excel") kageraExportReportExcel();
         else if (format === "word") kageraExportReportWord();
@@ -5382,11 +5366,8 @@ async function kageraShowReport()
             }
         }
 
-        // Report DOM now represents the currently selected Season + Auction No.
-        return true;
-
     } catch (error) {
-        if (error && error.name === "AbortError") return false;
+        if (error && error.name === "AbortError") return;
 
         const body =
             selectedReport === "high_low"
@@ -5401,8 +5382,6 @@ async function kageraShowReport()
                 escapeKageraHtml(error.message || "Unable to generate report.") +
                 "</td></tr>";
         }
-
-        return false;
     }
 }
 
