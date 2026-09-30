@@ -15,8 +15,9 @@ if($display==='preauction'){
  require_once __DIR__.'/kagera_database.php';
  require_once __DIR__.'/clean_database.php';
  require_once __DIR__.'/Direct_database.php';
- ensure_kagera_table(); ensure_kagera_catalogue_table(); ensure_clean_table(); direct_ensure_table();
- $kdb=kagera_db(); $cdb=clean_db(); $ddb=direct_db();
+ require_once __DIR__.'/farm_gate_database.php';
+ ensure_kagera_table(); ensure_kagera_catalogue_table(); ensure_clean_table(); direct_ensure_table(); ensure_farm_gate_table();
+ $kdb=kagera_db(); $cdb=clean_db(); $ddb=direct_db(); $fdb=farm_db();
  function season_bounds($s){if(!preg_match('/^(\\d{4})\\/(\\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
  function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
  $dr=$ddb->query("SELECT invoice_date d FROM public.direct_sales WHERE invoice_date IS NOT NULL UNION SELECT auction_date FROM public.clean_auction_results WHERE auction_date IS NOT NULL")->fetchAll();
@@ -48,6 +49,12 @@ if($display==='preauction'){
  $q=$kdb->prepare("SELECT COALESCE(NULLIF(REPLACE(BTRIM(grade),'_',' '),''),'Unspecified') type,SUM(COALESCE(kgs,0)) kg,SUM(COALESCE(kgs,0)*COALESCE(price,0)) val FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1 ORDER BY kg DESC");$q->execute(['f'=>$kfrom,'t'=>$kto]);$preKTypes=$q->fetchAll();
  $q=$kdb->prepare("SELECT COALESCE(NULLIF(INITCAP(LOWER(BTRIM(buyer))),''),'Unspecified') name,SUM(COALESCE(kgs,0)) kg,SUM(COALESCE(kgs,0)*COALESCE(price,0)) val FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1 ORDER BY kg DESC");$q->execute(['f'=>$kfrom,'t'=>$kto]);$preKBuyers=$q->fetchAll();
  $preEnd=max(array_filter([$preLatest,$ddb->query("SELECT MAX(invoice_date) FROM public.direct_sales")->fetchColumn(),$kdb->query("SELECT MAX(auction_date) FROM public.kagera_auction_results")->fetchColumn()]));
+ /* Farmgate section: selected trade season, sourced from registered farm-gate contracts. */
+ $fq=$fdb->prepare("SELECT COUNT(*) contracts,COUNT(DISTINCT NULLIF(BTRIM(buyer_name),'')) buyers,COALESCE(SUM(kilos_to_be_sold),0) kg,COALESCE(SUM(kilos_to_be_sold*price_per_kilo_tzs),0) val,MAX(contract_date) end_date FROM public.farm_gate_contracts WHERE contract_date BETWEEN :f AND :t");
+ $fq->execute(['f'=>$from,'t'=>$to]);$preFarm=$fq->fetch()?:[];
+ $fq=$fdb->prepare("SELECT COALESCE(NULLIF(BTRIM(buyer_name),''),'Unspecified') name,SUM(COALESCE(kilos_to_be_sold,0)) kg,SUM(COALESCE(kilos_to_be_sold,0)*COALESCE(price_per_kilo_tzs,0)) val FROM public.farm_gate_contracts WHERE contract_date BETWEEN :f AND :t GROUP BY 1 HAVING SUM(COALESCE(kilos_to_be_sold,0))>0 ORDER BY kg DESC,val DESC");
+ $fq->execute(['f'=>$from,'t'=>$to]);$preFarmBuyers=$fq->fetchAll();
+ $preFarmEnd=$preFarm['end_date']??$preEnd;
  $dashboardTitle='Pre Auction Report';$dashboardSub='Coffee sales performance report';
 }else
 if($display==='sales'){
@@ -656,6 +663,20 @@ tfoot td{font-weight:700!important}
   }
 }
 
+
+/* PRE-AUCTION REPORT — content-aware responsive tables */
+.pre-paper .pre-main-title{margin-top:4px;text-decoration:none;font-size:clamp(14px,2vw,18px);line-height:1.3}
+.pre-paper table{table-layout:auto!important;width:100%!important;max-width:100%!important}
+.pre-paper th,.pre-paper td{width:auto!important;max-width:none!important;vertical-align:middle}
+.pre-paper th:first-child,.pre-paper td:first-child{width:1%;white-space:nowrap!important}
+.pre-paper th:nth-child(2),.pre-paper td:nth-child(2){min-width:min(210px,32vw)}
+.pre-paper td:not(:nth-child(2)),.pre-paper th:not(:nth-child(2)){white-space:nowrap!important}
+.pre-paper .pre-scroll{max-width:100%;overflow-x:auto;scrollbar-width:thin}
+.pre-paper .pre-scroll table{min-width:max-content!important}
+.pre-paper .pre-farm-table th:nth-child(2),.pre-paper .pre-farm-table td:nth-child(2){min-width:min(260px,38vw);white-space:normal!important}
+@media(min-width:900px){.pre-paper .pre-scroll table{min-width:100%!important}.pre-paper th,.pre-paper td{white-space:normal!important}.pre-paper th:first-child,.pre-paper td:first-child{white-space:nowrap!important}}
+@media(max-width:700px){.pre-paper{width:100%!important;max-width:100%!important;overflow:visible!important}.pre-paper .pre-scroll{margin:0 -2px;padding-bottom:3px}.pre-paper .pre-scroll table{min-width:max-content!important}.pre-paper th,.pre-paper td{font-size:clamp(8px,2.4vw,10px)!important;padding:4px 5px!important}}
+
 </style>
 </head>
 <body>
@@ -681,6 +702,9 @@ tfoot td{font-weight:700!important}
             <?php if($display==='preauction'): ?>
 <section class="pre-report">
  <div class="pre-paper">
+  <h1 class="pre-main-title">COFFEE SALES OVERVIEW TRADE SEASON ENDING 09TH SEPTEMBER 2026</h1>
+  <h2>1.0 MARKET SITUATION TODAY</h2>
+  <p>Today’s closing price for New York Arabica Coffee Futures is <b>292.05 US cents per pound</b>, equivalent to <b>USD 321.93 per 50 Kgs</b>. This indicates a decline in the terminal market of <b>3.3 US cents per pound</b>, equivalent to <b>USD 3.63 per 50 Kgs</b>, compared with the last auction terminal market price recorded on <b>27th August 2026</b>, when the price was <b>295.35 US cents per pound</b>, equivalent to <b>USD 325.56 per 50 Kgs</b>.</p>
   <h2>1.1 Summary of the Last Clean Auction Conducted On <?= $preLatest?date('dS F Y',strtotime($preLatest)):'—' ?></h2>
   <p>During the last auction, <b><?=nf($lastOff)?> Kgs</b> of coffee were offered, of which <b><?=nf($lastSold)?> Kgs (<?=nf($lastPct,2)?>%)</b> were sold, generating a total value of <b>USD <?=nf($lastVal,2)?></b>. The average price achieved was <b><?=nf($lastAvg,2)?> per 50 Kgs</b>.</p>
   <div class="pre-scroll"><table><thead><tr><th>Grade</th><th>Kgs Offered</th><th>Kgs Sold</th><th>% Sold</th><th>Value (USD)</th><th>Max Price/50kg</th><th>Average Price/50kg</th><th>Min Price/50kg</th></tr></thead><tbody>
@@ -707,7 +731,12 @@ tfoot td{font-weight:700!important}
 
   <h1>5.0 KAGERA CHERRY AUCTION</h1><p>As of <?=date('dS F Y',strtotime($preEnd))?>, <b><?=nf($preK['auctions']??0)?> auctions</b> have been conducted in Kagera Region involving <b><?=nf($preK['buyers']??0)?> buyers</b>. Out of <b><?=nf($preKOff)?> Kgs offered</b>, <b><?=nf($preK['sold']??0)?> Kgs (<?=nf(pct($preK['sold']??0,$preKOff),2)?>%)</b> were sold. This included <b><?=nf($preK['drykg']??0)?> Kgs</b> of coffee cherry, valued at <b>TZS <?=nf($preK['dryval']??0,2)?></b> and <b><?=nf($preK['cleankg']??0)?> Kgs</b> of clean coffee, valued at <b>TZS <?=nf($preK['cleanval']??0,2)?></b>.</p>
   <h2>5.1 Coffee Cherry Sales Summary</h2><h3>5.1.1: Table 9: Cherry Coffee Sales by Type Season <?=htmlspecialchars($season)?> Up to <?=date('dS F Y',strtotime($preEnd))?>.</h3><table><thead><tr><th>S/N</th><th>Type</th><th>Weight (Kgs)</th><th>Value (TZS)</th><th>% Share</th></tr></thead><tbody><?php $i=1;$kt=array_sum(array_column($preKTypes,'kg'));$kv=array_sum(array_column($preKTypes,'val'));foreach($preKTypes as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['type'])?></td><td><?=nf($r['kg'])?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$kt),2)?></td></tr><?php endforeach;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($kt)?></td><td><?=nf($kv,2)?></td><td>100</td></tr></tbody></table>
-  <h3>5.1.1: Table 10: Cherry Coffee Sales per Buyers Season <?=htmlspecialchars($season)?> Up to <?=date('dS F Y',strtotime($preEnd))?></h3><table><thead><tr><th>No.</th><th>Buyer</th><th>Weight (Kgs)</th><th>Value (TZS)</th><th>% Share</th></tr></thead><tbody><?php $i=1;$kbkg=array_sum(array_column($preKBuyers,'kg'));$kbv=array_sum(array_column($preKBuyers,'val'));foreach($preKBuyers as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['kg'])?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$kbkg),2)?></td></tr><?php endforeach;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($kbkg)?></td><td><?=nf($kbv,2)?></td><td>100</td></tr></tbody></table>
+  <h3>5.1.1: Table 10: Cherry Coffee Sales per Buyers Season <?=htmlspecialchars($season)?> Up to <?=date('dS F Y',strtotime($preEnd))?></h3><div class="pre-scroll"><table><thead><tr><th>No.</th><th>Buyer</th><th>Weight (Kgs)</th><th>Value (TZS)</th><th>% Share</th></tr></thead><tbody><?php $i=1;$kbkg=array_sum(array_column($preKBuyers,'kg'));$kbv=array_sum(array_column($preKBuyers,'val'));foreach($preKBuyers as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['kg'])?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$kbkg),2)?></td></tr><?php endforeach;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($kbkg)?></td><td><?=nf($kbv,2)?></td><td>100</td></tr></tbody></table></div>
+
+  <h1>6.0 COFFEE SALES AT FARMGATE MARKET</h1>
+  <p>As of <b><?= $preFarmEnd?date('dS F Y',strtotime($preFarmEnd)):'—' ?></b>, <b><?=nf($preFarm['contracts']??0)?> contracts</b> of parchment coffee have been registered, and <b><?=nf($preFarm['buyers']??0)?> parchment coffee buyers</b> have been involved in consuming about <b><?=nf($preFarm['kg']??0)?> Kgs</b> equivalent to <b>TZS <?=nf($preFarm['val']??0,2)?></b>.</p>
+  <h3>6.1.1: Table 11: Coffee Buyers at Farmgate Market Season <?=htmlspecialchars($season)?> Ending <?= $preFarmEnd?date('dS F Y',strtotime($preFarmEnd)):'—' ?>.</h3>
+  <div class="pre-scroll"><table class="pre-farm-table"><thead><tr><th>S/N</th><th>Buyer</th><th>Kgs Sold</th><th>Value (TZS)</th><th>% Share</th></tr></thead><tbody><?php $i=1;$farmKg=(float)($preFarm['kg']??0);$farmVal=(float)($preFarm['val']??0);foreach($preFarmBuyers as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['kg'])?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$farmKg),2)?></td></tr><?php endforeach;?><?php if(!$preFarmBuyers):?><tr><td colspan="5" class="empty">No farmgate contracts found for this season.</td></tr><?php endif;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($farmKg)?></td><td><?=nf($farmVal,2)?></td><td><?=$farmKg>0?'100':'0'?></td></tr></tbody></table></div>
  </div>
 </section>
 <?php elseif($display==='sales'): ?>
