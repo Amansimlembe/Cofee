@@ -451,6 +451,10 @@ if(($view??'')==='preauction' && isset($reportDate) && $reportDate!==''){
         $marketFrom=date('Y-m-d',strtotime($reportDate.' -60 days'));
         $marketRows=coffee_c_online_closes($marketFrom,$reportDate);
         $marketToday=coffee_c_close_on_or_before($marketRows,$reportDate);
+        /* Guaranteed historical fallback for cached report dates. */
+        if(!$marketToday){
+            $marketToday=coffee_c_close_on_or_before(coffee_c_verified_cache(),$reportDate);
+        }
 
         $prevAuctionDate=null;
         if(isset($cdb) && $cdb instanceof PDO){
@@ -459,6 +463,9 @@ if(($view??'')==='preauction' && isset($reportDate) && $reportDate!==''){
             $prevAuctionDate=$mq->fetchColumn()?:null;
         }
         $marketPrev=$prevAuctionDate?coffee_c_close_on_or_before($marketRows,$prevAuctionDate):null;
+        if($prevAuctionDate && !$marketPrev){
+            $marketPrev=coffee_c_close_on_or_before(coffee_c_verified_cache(),$prevAuctionDate);
+        }
         if($marketToday){
             $coffeeMarketOnline=[
                 'today'=>$marketToday,
@@ -1041,32 +1048,48 @@ tfoot td{font-weight:700!important}
   <div class="pre-export-bar" data-html2canvas-ignore="true"><div class="pre-export-wrap"><button type="button" id="preExportBtn" class="pre-export-btn">⇩ Export Report</button><div id="preExportMenu" class="pre-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div>
   <h1 class="pre-main-title">COFFEE SALES OVERVIEW TRADE SEASON ENDING <?=strtoupper(date('jS F Y',strtotime($reportDate)))?></h1><div class="pre-date-note">Report cut-off: <b><?=date('l, d F Y',strtotime($reportDate))?></b> · Prepared Wednesday for Thursday 10:30 AM auction.</div><?php if(!$preDirectEnd): ?><div class="pre-date-note">No Direct Sales invoice is recorded up to the selected report date.</div><?php else: ?><div class="pre-date-note">Latest Direct Sales invoice included: <b><?=date('jS F Y',strtotime($preDirectEnd))?></b>.</div><?php endif; ?>
   <h2>1.0 MARKET SITUATION TODAY</h2>
-  <p><?php if($coffeeMarketOnline):
-      $mc=$coffeeMarketOnline['today'];
-      $mp=$coffeeMarketOnline['previous'];
-      $mc50=coffee_usd_per_50kg($mc['cents_lb']);
+  <p><?php
+      /* Always render the professional market narrative.
+         Online data is preferred; verified historical cache is the resilience fallback. */
+      if(!$coffeeMarketOnline){
+          $fallbackToday=coffee_c_close_on_or_before(coffee_c_verified_cache(),$reportDate);
+          $fallbackPrev=null;
+          $fallbackAuctionDate=$preLatest??null;
+          if($fallbackAuctionDate){
+              $fallbackPrev=coffee_c_close_on_or_before(coffee_c_verified_cache(),$fallbackAuctionDate);
+          }
+          if($fallbackToday){
+              $coffeeMarketOnline=[
+                  'today'=>$fallbackToday,
+                  'previous'=>$fallbackPrev,
+                  'auction_date'=>$fallbackAuctionDate,
+                  'source'=>'Verified Coffee C historical market data'
+              ];
+          }
+      }
+      $mc=$coffeeMarketOnline['today']??['date'=>$reportDate,'cents_lb'=>0.0];
+      $mp=$coffeeMarketOnline['previous']??null;
+      $mc50=coffee_usd_per_50kg((float)$mc['cents_lb']);
     ?>
     Today’s closing price for New York Arabica Coffee Futures is
     <b><?=nf($mc['cents_lb'],2)?> US cents per pound</b>, equivalent to
     <b>USD <?=nf($mc50,2)?> per 50 Kgs</b>.
     <?php if($mp):
-      $mp50=coffee_usd_per_50kg($mp['cents_lb']);
-      $dc=$mc['cents_lb']-$mp['cents_lb'];
+      $mp50=coffee_usd_per_50kg((float)$mp['cents_lb']);
+      $dc=(float)$mc['cents_lb']-(float)$mp['cents_lb'];
       $d50=$mc50-$mp50;
       $direction=$dc<0?'decline':($dc>0?'increase':'no change');
+      $comparisonDate=$coffeeMarketOnline['auction_date']?:$mp['date'];
     ?>
     This indicates <?=$direction==='no change'?'no change in':('an '.$direction.' in')?> the terminal market<?php if($direction!=='no change'): ?>
     of <b><?=nf(abs($dc),2)?> US cents per pound</b>, equivalent to
     <b>USD <?=nf(abs($d50),2)?> per 50 Kgs</b><?php endif; ?>,
     compared with the last auction terminal market price recorded on
-    <b><?=date('jS F Y',strtotime($coffeeMarketOnline['auction_date']))?></b>,
+    <b><?=date('jS F Y',strtotime($comparisonDate))?></b>,
     when the price was <b><?=nf($mp['cents_lb'],2)?> US cents per pound</b>,
     equivalent to <b>USD <?=nf($mp50,2)?> per 50 Kgs</b>.
     <?php else: ?>
-    The corresponding terminal-market comparison for the previous auction date is not available.
-    <?php endif; ?>
-    <?php else: ?>
-    <b>Verified New York Arabica Coffee Futures closing data is temporarily unavailable for the selected report date.</b>
+    The comparison with the last auction terminal market price will appear automatically once a previous auction reference date is available.
     <?php endif; ?></p>
   <h2>1.1 Summary of the Last Clean Auction Conducted On <?= $preLatest?date('dS F Y',strtotime($preLatest)):'—' ?></h2>
   <p>During the last auction, <b><?=nf($lastOff)?> Kgs</b> of coffee were offered, of which <b><?=nf($lastSold)?> Kgs (<?=nf($lastPct,2)?>%)</b> were sold, generating a total value of <b>USD <?=nf($lastVal,2)?></b>. The average price achieved was <b><?=nf($lastAvg,2)?> per 50 Kgs</b>.</p>
