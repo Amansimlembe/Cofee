@@ -343,44 +343,58 @@ function coffee_c_online_closes(string $fromDate,string $toDate):array{
     static $memo=[];
     $key=$fromDate.'|'.$toDate;
     if(isset($memo[$key])) return $memo[$key];
-
-    $p1=strtotime($fromDate.' 00:00:00 UTC');
-    $p2=strtotime($toDate.' +2 days 00:00:00 UTC');
     $rows=[];
 
-    /* Primary feeds: Yahoo Finance Coffee C continuous futures (KC=F). */
-    foreach(['query1.finance.yahoo.com','query2.finance.yahoo.com'] as $host){
-        $url='https://'.$host.'/v8/finance/chart/KC=F?period1='.$p1.'&period2='.$p2.'&interval=1d&events=history&includeAdjustedClose=true';
-        $body=coffee_http_get($url);
+    /* Public US Coffee C historical-data pages. Use the continuous/front
+       Coffee C page, not an arbitrary deferred contract CID. */
+    $urls=[
+      'https://uk.investing.com/commodities/us-coffee-c-historical-data',
+      'https://www.investing.com/commodities/us-coffee-c-historical-data',
+      'https://ng.investing.com/commodities/us-coffee-c-historical-data'
+    ];
+    foreach($urls as $url){
+        $body=coffee_http_get($url,10);
         if(!$body) continue;
-        $j=json_decode($body,true);
-        $r=$j['chart']['result'][0]??null;
-        if(!$r) continue;
-        $ts=$r['timestamp']??[];
-        $cl=$r['indicators']['quote'][0]['close']??[];
-        foreach($ts as $i=>$stamp){
-            $v=$cl[$i]??null;
-            if($v===null||!is_numeric($v)) continue;
-            $d=gmdate('Y-m-d',(int)$stamp);
-            if($d>=$fromDate && $d<=$toDate) $rows[$d]=(float)$v;
+        $plain=html_entity_decode(strip_tags(str_replace(['</tr>','</td>'],["\n","\t"],$body)),ENT_QUOTES|ENT_HTML5,'UTF-8');
+        $plain=preg_replace('/[ \x{00A0}]+/u',' ',$plain);
+
+        /* e.g. 29/09/2026 289.45 ... */
+        if(preg_match_all('/\b(\d{2})\/(\d{2})\/(\d{4})\s+([0-9]{2,3}(?:[.,][0-9]+)?)/u',$plain,$mm,PREG_SET_ORDER)){
+            foreach($mm as $m){
+                $d=sprintf('%04d-%02d-%02d',(int)$m[3],(int)$m[2],(int)$m[1]);
+                if($d>=$fromDate && $d<=$toDate) $rows[$d]=(float)str_replace(',','.',$m[4]);
+            }
+        }
+        /* e.g. Sep 29, 2026 289.45 ... */
+        if(preg_match_all('/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),\s+(\d{4})\s+([0-9]{2,3}(?:\.[0-9]+)?)/i',$plain,$mm,PREG_SET_ORDER)){
+            foreach($mm as $m){
+                $d=date('Y-m-d',strtotime($m[1].' '.$m[2].' '.$m[3]));
+                if($d>=$fromDate && $d<=$toDate) $rows[$d]=(float)$m[4];
+            }
         }
         if($rows) break;
     }
 
-    /* Fallback: public US Coffee C historical page. This is deliberately
-       best-effort; if the provider blocks server requests we show unavailable
-       rather than inventing a market price. */
+    /* Secondary feed: Yahoo continuous Coffee C futures. */
     if(!$rows){
-        $body=coffee_http_get('https://www.investing.com/commodities/us-coffee-c-historical-data');
-        if($body){
-            $plain=html_entity_decode(strip_tags($body),ENT_QUOTES|ENT_HTML5,'UTF-8');
-            $months='Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec';
-            if(preg_match_all('/\b('.$months.')\s+(\d{1,2}),\s+(\d{4})\s+([0-9]{2,3}(?:\.[0-9]+)?)/i',$plain,$mm,PREG_SET_ORDER)){
-                foreach($mm as $m){
-                    $d=date('Y-m-d',strtotime($m[1].' '.$m[2].' '.$m[3]));
-                    if($d>=$fromDate && $d<=$toDate) $rows[$d]=(float)$m[4];
-                }
+        $p1=strtotime($fromDate.' 00:00:00 UTC');
+        $p2=strtotime($toDate.' +2 days 00:00:00 UTC');
+        foreach(['query1.finance.yahoo.com','query2.finance.yahoo.com'] as $host){
+            $url='https://'.$host.'/v8/finance/chart/KC=F?period1='.$p1.'&period2='.$p2.'&interval=1d&events=history&includeAdjustedClose=true';
+            $body=coffee_http_get($url,8);
+            if(!$body) continue;
+            $j=json_decode($body,true);
+            $r=$j['chart']['result'][0]??null;
+            if(!$r) continue;
+            $ts=$r['timestamp']??[];
+            $cl=$r['indicators']['quote'][0]['close']??[];
+            foreach($ts as $i=>$stamp){
+                $v=$cl[$i]??null;
+                if($v===null||!is_numeric($v)) continue;
+                $d=gmdate('Y-m-d',(int)$stamp);
+                if($d>=$fromDate && $d<=$toDate) $rows[$d]=(float)$v;
             }
+            if($rows) break;
         }
     }
     ksort($rows);
@@ -956,7 +970,7 @@ tfoot td{font-weight:700!important}
       $mc=$coffeeMarketOnline['today']; $mp=$coffeeMarketOnline['previous'];
       $mc50=coffee_usd_per_50kg($mc['cents_lb']);
     ?>
-    The latest available New York Arabica Coffee C Futures closing price on or before the selected report date is
+    The latest verified New York Arabica Coffee C Futures closing price available on or before the selected report date is
     <b><?=nf($mc['cents_lb'],2)?> US cents per pound</b>, equivalent to <b>USD <?=nf($mc50,2)?> per 50 Kgs</b>,
     recorded on <b><?=date('jS F Y',strtotime($mc['date']))?></b>.
     <?php if($mp):
