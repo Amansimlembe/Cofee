@@ -1042,23 +1042,31 @@ tfoot td{font-weight:700!important}
   <h1 class="pre-main-title">COFFEE SALES OVERVIEW TRADE SEASON ENDING <?=strtoupper(date('jS F Y',strtotime($reportDate)))?></h1><div class="pre-date-note">Report cut-off: <b><?=date('l, d F Y',strtotime($reportDate))?></b> · Prepared Wednesday for Thursday 10:30 AM auction.</div><?php if(!$preDirectEnd): ?><div class="pre-date-note">No Direct Sales invoice is recorded up to the selected report date.</div><?php else: ?><div class="pre-date-note">Latest Direct Sales invoice included: <b><?=date('jS F Y',strtotime($preDirectEnd))?></b>.</div><?php endif; ?>
   <h2>1.0 MARKET SITUATION TODAY</h2>
   <p><?php if($coffeeMarketOnline):
-      $mc=$coffeeMarketOnline['today']; $mp=$coffeeMarketOnline['previous'];
+      $mc=$coffeeMarketOnline['today'];
+      $mp=$coffeeMarketOnline['previous'];
       $mc50=coffee_usd_per_50kg($mc['cents_lb']);
     ?>
-    The latest verified New York Arabica Coffee C Futures closing price available on or before the selected report date is
-    <b><?=nf($mc['cents_lb'],2)?> US cents per pound</b>, equivalent to <b>USD <?=nf($mc50,2)?> per 50 Kgs</b>,
-    recorded on <b><?=date('jS F Y',strtotime($mc['date']))?></b>.
+    Today’s closing price for New York Arabica Coffee Futures is
+    <b><?=nf($mc['cents_lb'],2)?> US cents per pound</b>, equivalent to
+    <b>USD <?=nf($mc50,2)?> per 50 Kgs</b>.
     <?php if($mp):
       $mp50=coffee_usd_per_50kg($mp['cents_lb']);
-      $dc=$mc['cents_lb']-$mp['cents_lb']; $d50=$mc50-$mp50;
+      $dc=$mc['cents_lb']-$mp['cents_lb'];
+      $d50=$mc50-$mp50;
+      $direction=$dc<0?'decline':($dc>0?'increase':'no change');
     ?>
-    This represents a <b><?=$dc<0?'decline':'increase'?> of <?=nf(abs($dc),2)?> US cents per pound</b>,
-    equivalent to <b>USD <?=nf(abs($d50),2)?> per 50 Kgs</b>, compared with the terminal-market close associated with the previous clean auction
-    (<b><?=date('jS F Y',strtotime($coffeeMarketOnline['auction_date']))?></b>), when the nearest available market close was
-    <b><?=nf($mp['cents_lb'],2)?> US cents per pound</b>, equivalent to <b>USD <?=nf($mp50,2)?> per 50 Kgs</b>.
+    This indicates <?=$direction==='no change'?'no change in':('an '.$direction.' in')?> the terminal market<?php if($direction!=='no change'): ?>
+    of <b><?=nf(abs($dc),2)?> US cents per pound</b>, equivalent to
+    <b>USD <?=nf(abs($d50),2)?> per 50 Kgs</b><?php endif; ?>,
+    compared with the last auction terminal market price recorded on
+    <b><?=date('jS F Y',strtotime($coffeeMarketOnline['auction_date']))?></b>,
+    when the price was <b><?=nf($mp['cents_lb'],2)?> US cents per pound</b>,
+    equivalent to <b>USD <?=nf($mp50,2)?> per 50 Kgs</b>.
+    <?php else: ?>
+    The corresponding terminal-market comparison for the previous auction date is not available.
     <?php endif; ?>
     <?php else: ?>
-    <b>Verified New York Arabica Coffee C Futures closing data is temporarily unavailable for the selected report date.</b>
+    <b>Verified New York Arabica Coffee Futures closing data is temporarily unavailable for the selected report date.</b>
     <?php endif; ?></p>
   <h2>1.1 Summary of the Last Clean Auction Conducted On <?= $preLatest?date('dS F Y',strtotime($preLatest)):'—' ?></h2>
   <p>During the last auction, <b><?=nf($lastOff)?> Kgs</b> of coffee were offered, of which <b><?=nf($lastSold)?> Kgs (<?=nf($lastPct,2)?>%)</b> were sold, generating a total value of <b>USD <?=nf($lastVal,2)?></b>. The average price achieved was <b><?=nf($lastAvg,2)?> per 50 Kgs</b>.</p>
