@@ -298,6 +298,15 @@ if($display==='clean'){
  $q->execute(['f'=>$from,'t'=>$to]);$auctionTrend=$q->fetchAll();
  $dashboardTitle='Kagera Auction — Season Performance';$dashboardSub='Compact analytical summary';$priceUnit='TZS/kg';$rank2='Top 5 AMCOS / Warehouses';$rank2First='AMCOS / Warehouse';
 }
+
+function farm_display_name(string $name):string{
+    $name=trim(preg_replace('/\s+/u',' ',$name));
+    if($name==='') return '—';
+    if(function_exists('mb_convert_case')){
+        return mb_convert_case(mb_strtolower($name,'UTF-8'),MB_CASE_TITLE,'UTF-8');
+    }
+    return ucwords(strtolower($name));
+}
 ?><!doctype html>
 <html>
 <head>
@@ -792,7 +801,7 @@ tfoot td{font-weight:700!important}
 
   <h3>2.3: Table 3: Clean Coffee Sales by Sales Category</h3>
   <div class="pre-date-note">Auction Sale data: cumulative clean-auction sales up to <b><?=date('jS F Y',strtotime($reportDate))?></b><?php if($preLatest): ?> · Latest clean auction held on <b><?=date('jS F Y',strtotime($preLatest))?></b><?php else: ?> · No clean auction recorded up to this report date<?php endif; ?>.</div>
-  <div class="pre-scroll"><table class="pre-category-table"><thead><tr><th>Sales Channel</th><th>Quantity Sold (MT)</th><th>% of Total</th><th>Sales Value (USD)</th><th>Avg. Price (USD/50 kg)</th></tr></thead><tbody><?php foreach(['Auction Sale','Local Sale','Direct Export','Local Roast'] as$ch):$r=$preChannels[$ch];$avg=$r['kg']>0?$r['val']*50/$r['kg']:0;?><tr><td><?=htmlspecialchars($ch)?></td><td><?=nf($r['kg'])?></td><td><?=nf(pct($r['kg'],$preChannelKg),2)?>%</td><td><?=nf($r['val'],2)?></td><td><?=$r['kg']>0?nf($avg,2):'—'?></td></tr><?php endforeach;?><tr class="gt"><td>Grand Total</td><td><?=nf($preChannelKg)?></td><td><?=$preChannelKg>0?'100.00%':'0.00%'?></td><td><?=nf($preChannelVal,2)?></td><td>—</td></tr></tbody></table></div>
+  <div class="pre-scroll"><table class="pre-category-table"><thead><tr><th>Sales Channel</th><th>Quantity Sold (MT)</th><th>% of Total</th><th>Sales Value (USD)</th><th>Avg. Price (USD/50 kg)</th></tr></thead><tbody><?php foreach(['Auction Sale','Local Sale','Direct Export','Local Roast'] as$ch):$r=$preChannels[$ch];$avg=$r['kg']>0?$r['val']*50/$r['kg']:0;?><tr><td><?=htmlspecialchars($ch)?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf(pct($r['kg'],$preChannelKg),2)?>%</td><td><?=nf($r['val'],2)?></td><td><?=$r['kg']>0?nf($avg,2):'—'?></td></tr><?php endforeach;?><tr class="gt"><td>Grand Total</td><td><?=nf($preChannelKg/1000,3)?></td><td><?=$preChannelKg>0?'100.00%':'0.00%'?></td><td><?=nf($preChannelVal,2)?></td><td>—</td></tr></tbody></table></div>
 
   <h1>3.0 REGIONAL COFFEE SALES</h1><h3>3.1: Table 4: Coffee Sales Per Region</h3>
   <div class="pre-scroll"><table class="pre-region-table"><thead><tr><th>No.</th><th>Region</th><th>Net Weight (MT)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php $i=1;foreach($preRegions as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['region'])?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$preRegionKg),2)?></td></tr><?php endforeach;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($preRegionKg/1000,3)?></td><td><?=nf($preRegionVal,2)?></td><td><?=$preRegionKg>0?'100':'0'?></td></tr></tbody></table></div>
@@ -812,7 +821,7 @@ tfoot td{font-weight:700!important}
   <h1>6.0 COFFEE SALES AT FARMGATE MARKET</h1>
   <p>As of <b><?= date('jS F Y',strtotime($reportDate)) ?></b>, <b><?=nf($preFarm['contracts']??0)?> contracts</b> of parchment coffee have been registered, and <b><?=nf($preFarm['buyers']??0)?> parchment coffee buyers</b> have been involved in consuming about <b><?=nf(($preFarm['kg']??0)/1000,3)?> MT</b> equivalent to <b>TZS <?=nf($preFarm['val']??0,2)?></b>.</p>
   <h3>6.1.1: Table 11: Coffee Buyers at Farmgate Market Season <?=htmlspecialchars($season)?> Ending <?= date('jS F Y',strtotime($reportDate)) ?>.</h3>
-  <div class="pre-scroll"><table class="pre-farm-table"><thead><tr><th>S/N</th><th>Buyer</th><th>Quantity Sold (MT)</th><th>Value (TZS)</th><th>% Share</th></tr></thead><tbody><?php $i=1;$farmKg=(float)($preFarm['kg']??0);$farmVal=(float)($preFarm['val']??0);foreach($preFarmBuyers as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$farmKg),2)?></td></tr><?php endforeach;?><?php if(!$preFarmBuyers):?><tr><td colspan="5" class="empty">No farmgate contracts found for this season.</td></tr><?php endif;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($farmKg/1000,3)?></td><td><?=nf($farmVal,2)?></td><td><?=$farmKg>0?'100':'0'?></td></tr></tbody></table></div>
+  <div class="pre-scroll"><table class="pre-farm-table"><thead><tr><th>S/N</th><th>Buyer</th><th>Quantity Sold (MT)</th><th>Value (TZS)</th><th>% Share</th></tr></thead><tbody><?php $i=1;$farmKg=(float)($preFarm['kg']??0);$farmVal=(float)($preFarm['val']??0);foreach($preFarmBuyers as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars(farm_display_name((string)$r['name']))?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$farmKg),2)?></td></tr><?php endforeach;?><?php if(!$preFarmBuyers):?><tr><td colspan="5" class="empty">No farmgate contracts found for this season.</td></tr><?php endif;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($farmKg/1000,3)?></td><td><?=nf($farmVal,2)?></td><td><?=$farmKg>0?'100':'0'?></td></tr></tbody></table></div>
  </div>
 </section>
 <?php elseif($display==='sales'): ?>
