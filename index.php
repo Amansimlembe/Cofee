@@ -810,14 +810,14 @@ submenu names.
    KAGERA AUCTION PAGE
 ========================================================= */
 
-.kagera-page-section, .clean-page-section, .direct-page-section {
+.kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section {
     width: 100%;
     min-height: calc(100vh - 130px);
     padding: 0;
     overflow: hidden;
 }
 
-.kagera-auction-frame, .clean-auction-frame, .direct-sales-frame {
+.kagera-auction-frame, .clean-auction-frame, .direct-sales-frame, .farm-gate-frame {
     display: block;
     width: 100%;
     min-height: calc(100vh - 130px);
@@ -831,11 +831,11 @@ submenu names.
 @media (max-width: 700px) {
 
 
-    .kagera-page-section, .clean-page-section, .direct-page-section {
+    .kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section {
         min-height: calc(100vh - 110px);
     }
 
-    .kagera-auction-frame, .clean-auction-frame, .direct-sales-frame {
+    .kagera-auction-frame, .clean-auction-frame, .direct-sales-frame, .farm-gate-frame {
         min-height: calc(100vh - 110px);
         height: calc(100vh - 110px);
     }
@@ -1248,8 +1248,8 @@ submenu names.
 .user-name { font-size: 11px; }
 .logout { font-size: 10px; }
 .content { padding: 8px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; }
-.kagera-page-section, .clean-page-section, .direct-page-section { min-height: calc(100dvh - var(--shell-topbar) - 16px); height: calc(100dvh - var(--shell-topbar) - 16px); }
-.kagera-auction-frame, .clean-auction-frame, .direct-sales-frame { min-height: 100%; height: 100%; width: 100%; }
+.kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section { min-height: calc(100dvh - var(--shell-topbar) - 16px); height: calc(100dvh - var(--shell-topbar) - 16px); }
+.kagera-auction-frame, .clean-auction-frame, .direct-sales-frame, .farm-gate-frame { min-height: 100%; height: 100%; width: 100%; }
 
 @media (max-width: 1100px) {
     :root { --shell-sidebar: 190px; }
@@ -1272,7 +1272,7 @@ submenu names.
     .topbar { padding: 0 10px; }
     .topbar-right { display: none; }
     .content { padding: 4px; }
-    .kagera-page-section, .clean-page-section, .direct-page-section { min-height: calc(100dvh - var(--shell-topbar) - 8px); height: calc(100dvh - var(--shell-topbar) - 8px); }
+    .kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section { min-height: calc(100dvh - var(--shell-topbar) - 8px); height: calc(100dvh - var(--shell-topbar) - 8px); }
 }
 
 @media (max-width: 600px) {
@@ -1289,7 +1289,7 @@ submenu names.
     .topbar-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .topbar-subtitle { display: none; }
     .content { padding: 2px; }
-    .kagera-page-section, .clean-page-section, .direct-page-section { min-height: calc(100dvh - var(--shell-topbar) - 4px); height: calc(100dvh - var(--shell-topbar) - 4px); }
+    .kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section { min-height: calc(100dvh - var(--shell-topbar) - 4px); height: calc(100dvh - var(--shell-topbar) - 4px); }
 }
 
 @media (max-width: 400px) {
@@ -1541,7 +1541,7 @@ submenu names.
 
             <div
                 class="menu-link"
-                onclick="showSection('farm-gate', this)">
+                onclick="openFarmGate(this)">
 
                 <div class="menu-left">
 
@@ -1751,24 +1751,8 @@ submenu names.
 
 
         <!-- FARM GATE -->
-
-        <section
-            id="farm-gate"
-            class="section">
-
-            <div class="section-box">
-
-                <h2>
-                    Farm Gate Contract (Kahawa Ghafi)
-                </h2>
-
-                <p>
-                    Farm Gate Contract data and analysis
-                    will appear here.
-                </p>
-
-            </div>
-
+        <section id="farm-gate" class="section farm-page-section">
+            <iframe id="farmGateFrame" src="about:blank" title="Mikataba ya Kahawa Ghafi" class="farm-gate-frame"></iframe>
         </section>
 
 
@@ -2014,6 +1998,26 @@ function openCleanAuction(clickedElement) {
     if (topbarTitle) {
         topbarTitle.textContent = "Clean Auction";
     }
+}
+
+/* =========================================================
+   FARM GATE CONTRACT NAVIGATION
+========================================================= */
+function openFarmGate(clickedElement) {
+    document.querySelectorAll(".menu-item.mobile-open").forEach(function(item){
+        item.classList.remove("mobile-open");
+        const tip=item.querySelector(".collapsed-tooltip");
+        if(tip) tip.style.display="";
+    });
+    document.querySelectorAll(".section").forEach(function(section){ section.classList.remove("active"); });
+    const section=document.getElementById("farm-gate");
+    if(section) section.classList.add("active");
+    const frame=document.getElementById("farmGateFrame");
+    if(frame && frame.getAttribute("src")==="about:blank") frame.src="farm_gate_contract.php";
+    document.querySelectorAll(".menu-link, .submenu a").forEach(function(link){link.classList.remove("active");});
+    if(clickedElement) clickedElement.classList.add("active");
+    const topbarTitle=document.getElementById("topbarTitle");
+    if(topbarTitle) topbarTitle.textContent="Mikataba ya Kahawa Ghafi";
 }
 
 /* =========================================================
