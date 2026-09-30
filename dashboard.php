@@ -466,6 +466,196 @@ tfoot td{font-weight:700!important}
 @media(max-width:720px){.topbar{display:block}.topbar .title{margin-bottom:6px}.season{display:grid!important;grid-template-columns:auto minmax(0,1fr);gap:4px 6px!important;width:100%;align-items:center}.season label{margin:0!important}.season select,.totalclean-view-select{width:100%!important;max-width:none!important;min-width:0!important}}
 
 .pre-report{min-height:0;overflow:auto;padding:4px 0 14px}.pre-paper{max-width:980px;margin:0 auto;background:#fff;padding:26px 30px 40px;color:#111;font-family:Arial,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.08)}.pre-paper h1{text-align:center;font-size:15px;margin:28px 0 12px;text-decoration:underline}.pre-paper h2{font-size:14px;margin:20px 0 8px}.pre-paper h3{font-size:13px;font-style:italic;margin:18px 0 7px}.pre-paper p{font-size:13px;line-height:1.55;margin:7px 0 14px}.pre-paper table{width:100%;height:auto;table-layout:auto;border-collapse:collapse;margin:6px 0 20px}.pre-paper th,.pre-paper td{border:1px solid #555;padding:4px 7px;font-size:12px;line-height:1.2;white-space:normal;overflow:visible;text-overflow:clip}.pre-paper th{background:#d9e8f6;color:#111;text-align:center;font-weight:700}.pre-paper td{text-align:right;color:#111}.pre-paper td:nth-child(1),.pre-paper td:nth-child(2){text-align:left}.pre-paper .gt td{font-weight:700}.pre-scroll{width:100%;overflow-x:auto}@media(max-width:720px){.pre-paper{padding:16px 12px}.pre-paper h1{font-size:14px}.pre-paper h2{font-size:13px}.pre-paper h3,.pre-paper p{font-size:11px}.pre-paper table{min-width:620px}.pre-paper th,.pre-paper td{font-size:10px;padding:3px 4px}.pre-report{overflow:auto}}
+
+/* RESPONSIVE SALES DASHBOARD + PRE AUCTION REPORT */
+.sales-ppt,.pre-report{width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+.sales-ppt{height:auto!important;min-height:0;overflow:visible!important;border:1px solid #b78a62;background:#f6eee5}
+.sales-ppt-header{width:100%;min-height:92px;height:clamp(92px,12vw,120px);background:url('sales_dashboard_header.jpg') center 28%/cover no-repeat;padding:6px 12px 0;box-sizing:border-box}
+.sales-ppt-title{font-size:clamp(18px,2.4vw,26px);line-height:1.1;margin:4px 0}
+.sales-ppt-body{width:100%;max-width:100%;padding:0 2px;box-sizing:border-box;overflow-x:auto}
+.sales-ppt .sales-meta,.sales-ppt .sales-table{width:100%!important;min-width:0!important;height:auto!important;table-layout:fixed!important;border-collapse:collapse}
+.sales-ppt .sales-meta th,.sales-ppt .sales-meta td,.sales-ppt .sales-table th,.sales-ppt .sales-table td{padding:clamp(2px,.35vw,5px)!important;font-size:clamp(7px,.82vw,10px)!important;line-height:1.15!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere}
+.sales-ppt .sales-table th:first-child,.sales-ppt .sales-table td:first-child{width:29%!important}
+.sales-ppt .sales-table th:not(:first-child),.sales-ppt .sales-table td:not(:first-child){width:17.75%!important}
+.sales-ppt-footer{width:100%;aspect-ratio:1533/946;height:auto!important;min-height:0!important;background:url('sales_dashboard_footer_responsive.png') center/100% 100% no-repeat!important;position:relative;margin:0}
+.sales-ppt-footer .contact,.sales-ppt-footer .social{display:none!important}
+
+.pre-report{overflow:visible!important;padding:4px 0 14px}
+.pre-paper{width:min(100%,980px);max-width:980px;min-width:0;margin:0 auto;padding:clamp(12px,2.5vw,30px);box-sizing:border-box;overflow:hidden}
+.pre-paper h1{font-size:clamp(13px,1.5vw,15px);margin:clamp(18px,3vw,28px) 0 10px}
+.pre-paper h2{font-size:clamp(12px,1.4vw,14px)}
+.pre-paper h3{font-size:clamp(11px,1.3vw,13px)}
+.pre-paper p{font-size:clamp(10px,1.25vw,13px);line-height:1.45}
+.pre-paper .pre-scroll{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.pre-paper table{width:100%!important;min-width:0!important;height:auto!important;table-layout:auto!important;margin:6px 0 18px}
+.pre-paper th,.pre-paper td{padding:clamp(3px,.55vw,7px)!important;font-size:clamp(8px,1.05vw,12px)!important;line-height:1.18!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere}
+
+@media(max-width:700px){
+ .dashboard{padding:4px!important}
+ .sales-ppt{border-radius:6px}
+ .sales-ppt-header{min-height:78px;height:88px}
+ .sales-ppt-header .gov-title{font-size:clamp(9px,2.5vw,12px)!important;line-height:1.35}
+ .sales-ppt-title{font-size:18px}
+ .sales-ppt-body{padding:0}
+ .sales-ppt .sales-meta,.sales-ppt .sales-table{min-width:560px!important}
+ .sales-ppt-footer{min-width:0!important}
+ .pre-paper{padding:12px 8px;box-shadow:none}
+ .pre-paper table{min-width:0!important}
+ .pre-paper .pre-scroll table{min-width:680px!important}
+}
+@media(max-width:430px){
+ .sales-ppt .sales-meta,.sales-ppt .sales-table{min-width:520px!important}
+ .sales-ppt-header{height:78px}
+ .sales-ppt-title{font-size:16px}
+ .pre-paper{padding:10px 6px}
+}
+
+
+/* =========================================================
+   DASHBOARD HEADER / DISPLAY CONTROLS — RESPONSIVE ALL VIEWS
+   ========================================================= */
+.dashboard .topbar{
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+  box-sizing:border-box!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:10px!important;
+}
+.dashboard .topbar .title{
+  flex:0 1 auto!important;
+  min-width:0!important;
+}
+.dashboard .dashboard-view-controls,
+.dashboard .topbar form{
+  margin-left:auto!important;
+  min-width:0!important;
+  max-width:100%!important;
+  display:flex!important;
+  flex-direction:row!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  flex-wrap:wrap!important;
+  gap:5px 7px!important;
+  box-sizing:border-box!important;
+}
+.dashboard .dashboard-view-controls label,
+.dashboard .topbar form label{
+  flex:0 0 auto!important;
+  white-space:nowrap!important;
+  margin:0!important;
+}
+.dashboard .dashboard-view-controls select,
+.dashboard .topbar form select{
+  width:auto!important;
+  min-width:145px!important;
+  max-width:260px!important;
+  height:32px!important;
+  padding:4px 28px 4px 8px!important;
+  box-sizing:border-box!important;
+  white-space:nowrap!important;
+  text-overflow:ellipsis!important;
+}
+
+/* Report views must use exactly the same available content width as
+   Kagera/Clean Auction. Do not constrain them to a pseudo-slide width. */
+.dashboard:has(.sales-ppt),
+.dashboard:has(.pre-report){
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+}
+.sales-ppt,.pre-report{
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+  margin:0!important;
+  box-sizing:border-box!important;
+}
+.pre-paper{
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+  margin:0!important;
+  box-sizing:border-box!important;
+}
+.sales-ppt-body{
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+}
+.sales-ppt .sales-meta,
+.sales-ppt .sales-table{
+  width:100%!important;
+  max-width:100%!important;
+}
+
+/* Large screens: keep Season + Display compact on one professional row. */
+@media(min-width:1100px){
+  .dashboard .topbar{
+    flex-wrap:nowrap!important;
+  }
+  .dashboard .dashboard-view-controls,
+  .dashboard .topbar form{
+    flex-wrap:nowrap!important;
+  }
+  .dashboard .dashboard-view-controls select[name="season"],
+  .dashboard .topbar form select[name="season"]{
+    min-width:125px!important;
+    max-width:150px!important;
+  }
+  .dashboard .dashboard-view-controls select[name="display"],
+  .dashboard .topbar form select[name="display"]{
+    min-width:210px!important;
+    max-width:245px!important;
+  }
+}
+
+/* Medium screens: controls wrap as a unit rather than becoming a long
+   concatenated Season/Display line. */
+@media(max-width:1099px){
+  .dashboard .topbar{
+    align-items:flex-start!important;
+    flex-wrap:wrap!important;
+  }
+  .dashboard .dashboard-view-controls,
+  .dashboard .topbar form{
+    flex:1 1 520px!important;
+    justify-content:flex-end!important;
+  }
+}
+
+/* Phones/tablets: readable two-column label/control layout. */
+@media(max-width:700px){
+  .dashboard .topbar{
+    display:block!important;
+  }
+  .dashboard .topbar .title{
+    width:100%!important;
+    margin:0 0 6px!important;
+  }
+  .dashboard .dashboard-view-controls,
+  .dashboard .topbar form{
+    width:100%!important;
+    display:grid!important;
+    grid-template-columns:max-content minmax(0,1fr)!important;
+    gap:5px 7px!important;
+    margin:0!important;
+  }
+  .dashboard .dashboard-view-controls select,
+  .dashboard .topbar form select{
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+  }
+  .sales-ppt,.pre-report,.pre-paper{
+    width:100%!important;
+    max-width:100%!important;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -543,7 +733,7 @@ tfoot td{font-weight:700!important}
    <tr class="sales-production"><td colspan="3">Percentage Achieved</td><td colspan="2" class="sales-num"><?=nf($productionPct,2)?>%</td></tr>
   </table>
  </div>
- <div class="sales-ppt-footer"><div class="contact">www.coffee.go.tz<br>info@coffee.go.tz<br>+255 27 2752324</div><div class="social">coffeeboardtz</div></div>
+ <div class="sales-ppt-footer" role="img" aria-label="Tanzania Coffee Board coffee footer artwork"></div>
 </section>
 <?php endif; ?>
     </div>
