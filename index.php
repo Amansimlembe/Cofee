@@ -810,14 +810,14 @@ submenu names.
    KAGERA AUCTION PAGE
 ========================================================= */
 
-.kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section {
+.kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section, .license-page-section {
     width: 100%;
     min-height: calc(100vh - 130px);
     padding: 0;
     overflow: hidden;
 }
 
-.kagera-auction-frame, .clean-auction-frame, .direct-sales-frame, .farm-gate-frame {
+.kagera-auction-frame, .clean-auction-frame, .direct-sales-frame, .farm-gate-frame, .license-frame {
     display: block;
     width: 100%;
     min-height: calc(100vh - 130px);
@@ -831,11 +831,11 @@ submenu names.
 @media (max-width: 700px) {
 
 
-    .kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section {
+    .kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section, .license-page-section {
         min-height: calc(100vh - 110px);
     }
 
-    .kagera-auction-frame, .clean-auction-frame, .direct-sales-frame, .farm-gate-frame {
+    .kagera-auction-frame, .clean-auction-frame, .direct-sales-frame, .farm-gate-frame, .license-frame {
         min-height: calc(100vh - 110px);
         height: calc(100vh - 110px);
     }
@@ -1248,8 +1248,8 @@ submenu names.
 .user-name { font-size: 11px; }
 .logout { font-size: 10px; }
 .content { padding: 8px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; }
-.kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section { min-height: calc(100dvh - var(--shell-topbar) - 16px); height: calc(100dvh - var(--shell-topbar) - 16px); }
-.kagera-auction-frame, .clean-auction-frame, .direct-sales-frame, .farm-gate-frame { min-height: 100%; height: 100%; width: 100%; }
+.kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section, .license-page-section { min-height: calc(100dvh - var(--shell-topbar) - 16px); height: calc(100dvh - var(--shell-topbar) - 16px); }
+.kagera-auction-frame, .clean-auction-frame, .direct-sales-frame, .farm-gate-frame, .license-frame { min-height: 100%; height: 100%; width: 100%; }
 
 @media (max-width: 1100px) {
     :root { --shell-sidebar: 190px; }
@@ -1272,7 +1272,7 @@ submenu names.
     .topbar { padding: 0 10px; }
     .topbar-right { display: none; }
     .content { padding: 4px; }
-    .kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section { min-height: calc(100dvh - var(--shell-topbar) - 8px); height: calc(100dvh - var(--shell-topbar) - 8px); }
+    .kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section, .license-page-section { min-height: calc(100dvh - var(--shell-topbar) - 8px); height: calc(100dvh - var(--shell-topbar) - 8px); }
 }
 
 @media (max-width: 600px) {
@@ -1289,7 +1289,7 @@ submenu names.
     .topbar-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .topbar-subtitle { display: none; }
     .content { padding: 2px; }
-    .kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section { min-height: calc(100dvh - var(--shell-topbar) - 4px); height: calc(100dvh - var(--shell-topbar) - 4px); }
+    .kagera-page-section, .clean-page-section, .direct-page-section, .farm-page-section, .license-page-section { min-height: calc(100dvh - var(--shell-topbar) - 4px); height: calc(100dvh - var(--shell-topbar) - 4px); }
 }
 
 @media (max-width: 400px) {
@@ -1566,7 +1566,7 @@ submenu names.
 
             <div
                 class="menu-link"
-                onclick="showSection('coffee-licenses', this)">
+                onclick="openLicenses(this)">
 
                 <div class="menu-left">
 
@@ -1758,23 +1758,8 @@ submenu names.
 
         <!-- COFFEE LICENSES -->
 
-        <section
-            id="coffee-licenses"
-            class="section">
-
-            <div class="section-box">
-
-                <h2>
-                    Coffee Licenses
-                </h2>
-
-                <p>
-                    Coffee license data and analysis
-                    will appear here.
-                </p>
-
-            </div>
-
+        <section id="coffee-licenses" class="section license-page-section">
+            <iframe id="licensesFrame" src="about:blank" title="Coffee Licences" class="license-frame"></iframe>
         </section>
 
 
@@ -2105,6 +2090,21 @@ function openDirectSales(category, clickedElement) {
     const labels = {"Direct Export":"Direct Export (DE)","Local Sale":"Local Sale (LS)","Local Roast":"Local Roast (LR)"};
     const topbarTitle = document.getElementById("topbarTitle");
     if (topbarTitle) topbarTitle.textContent = labels[category] || category;
+}
+
+/* =========================================================
+   COFFEE LICENCES NAVIGATION
+========================================================= */
+function openLicenses(clickedElement) {
+    document.querySelectorAll(".section").forEach(function(section){ section.classList.remove("active"); });
+    const section=document.getElementById("coffee-licenses");
+    if(section) section.classList.add("active");
+    const frame=document.getElementById("licensesFrame");
+    if(frame && frame.getAttribute("src")==="about:blank") frame.src="licenses.php";
+    document.querySelectorAll(".menu-link, .submenu a").forEach(function(link){link.classList.remove("active");});
+    if(clickedElement) clickedElement.classList.add("active");
+    const title=document.getElementById("topbarTitle");
+    if(title) title.textContent="Coffee Licences";
 }
 
 /* =========================================================
