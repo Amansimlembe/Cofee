@@ -43,7 +43,18 @@ if($display==='preauction'){
  $dr=$ddb->query("SELECT invoice_date d FROM public.direct_sales WHERE invoice_date IS NOT NULL UNION SELECT auction_date FROM public.clean_auction_results WHERE auction_date IS NOT NULL")->fetchAll();
  $seasons=[];foreach($dr as$r){$d=$r['d']??null;if(!$d)continue;$y=(int)substr($d,0,4);$m=(int)substr($d,5,2);$sy=$m>=7?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}
  $kr=$kdb->query("SELECT auction_date d FROM public.kagera_auction_results WHERE auction_date IS NOT NULL UNION SELECT auction_date FROM public.kagera_auction_catalogue WHERE auction_date IS NOT NULL")->fetchAll();foreach($kr as$r){$d=$r['d']??null;if(!$d)continue;$y=(int)substr($d,0,4);$m=(int)substr($d,5,2);$sy=$m>=6?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
- $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$seasonTo]=season_bounds($season);
+ /* Pre-auction report cut-off: every report is prepared on Wednesday for Thursday's 10:30 AM auction. */
+ $wednesdayDates=[];
+ try{
+   $wd=new DateTime($from); while((int)$wd->format('N')!==3)$wd->modify('+1 day');
+   $limit=new DateTime($seasonTo);$today=new DateTime('today');if($today<$limit)$limit=$today;
+   while($wd<=$limit){$wednesdayDates[]=$wd->format('Y-m-d');$wd->modify('+7 days');}
+ }catch(Throwable $e){$wednesdayDates=[];}
+ $requestedReportDate=trim((string)($_GET['report_date']??''));
+ $reportDate=(in_array($requestedReportDate,$wednesdayDates,true)?$requestedReportDate:($wednesdayDates?end($wednesdayDates):$seasonTo));
+ /* All Pre Auction figures are cumulative only up to the selected Wednesday. */
+ $to=$reportDate;
  $preDirectEndQ=$ddb->prepare("SELECT MAX(invoice_date) FROM public.direct_sales WHERE invoice_date BETWEEN :f AND :t");$preDirectEndQ->execute(['f'=>$from,'t'=>$to]);$preDirectEnd=$preDirectEndQ->fetchColumn();
  $latestQ=$cdb->prepare("SELECT MAX(auction_date) FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t");$latestQ->execute(['f'=>$from,'t'=>$to]);$preLatest=$latestQ->fetchColumn();
  $preGrades=['AAA','AA','A','AB','B','PB','C','Lower Grades'];$preGradeRows=[];$lastOff=$lastSold=$lastVal=0;
@@ -739,6 +750,12 @@ tfoot td{font-weight:700!important}
             <select name="season" onchange="this.form.submit()"><?php foreach($seasons ?: [$season] as $s): ?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach ?></select>
             <label>Display</label>
             <select name="display" onchange="this.form.submit()"><option value="sales" <?=$display==='sales'?'selected':''?>>Sales Dashboard</option><option value="preauction" <?=$display==='preauction'?'selected':''?>>Pre Auction Report</option><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option><option value="direct" <?=$display==='direct'?'selected':''?>>Direct Sales Summary</option><option value="totalclean" <?=$display==='totalclean'?'selected':''?>>Total Clean Coffee Summary</option></select>
+            <?php if($display==='preauction'): ?>
+            <label>Report Date</label>
+            <select name="report_date" onchange="this.form.submit()" title="Wednesday cut-off for the Pre Auction Report used at Thursday's 10:30 AM auction">
+              <?php foreach(array_reverse($wednesdayDates) as $wd): ?><option value="<?=htmlspecialchars($wd)?>" <?=$wd===$reportDate?'selected':''?>><?=date('D, d M Y',strtotime($wd))?></option><?php endforeach; ?>
+            </select>
+            <?php endif; ?>
             <?php if($display==='totalclean'): ?>
             <label>View</label>
             <select name="totalclean_view" class="totalclean-view-select" onchange="this.form.submit()">
@@ -751,7 +768,7 @@ tfoot td{font-weight:700!important}
 <section class="pre-report">
  <div class="pre-paper" id="preAuctionReportPaper">
   <div class="pre-export-bar" data-html2canvas-ignore="true"><div class="pre-export-wrap"><button type="button" id="preExportBtn" class="pre-export-btn">⇩ Export Report</button><div id="preExportMenu" class="pre-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div>
-  <h1 class="pre-main-title">COFFEE SALES OVERVIEW TRADE SEASON<?= $preDirectEnd ? ' ENDING '.strtoupper(date('jS F Y',strtotime($preDirectEnd))) : '' ?></h1><?php if(!$preDirectEnd): ?><div class="pre-date-note">No Direct Sales invoice date is available for <?=htmlspecialchars($season)?>.</div><?php endif; ?>
+  <h1 class="pre-main-title">COFFEE SALES OVERVIEW TRADE SEASON<?= $preDirectEnd ? ' ENDING '.strtoupper(date('jS F Y',strtotime($preDirectEnd))) : '' ?></h1><div class="pre-date-note">Report cut-off: <b><?=date('l, d F Y',strtotime($reportDate))?></b> · Prepared Wednesday for Thursday 10:30 AM auction.</div><?php if(!$preDirectEnd): ?><div class="pre-date-note">No Direct Sales invoice date is available for <?=htmlspecialchars($season)?>.</div><?php endif; ?>
   <h2>1.0 MARKET SITUATION TODAY</h2>
   <p>Today’s closing price for New York Arabica Coffee Futures is <b>292.05 US cents per pound</b>, equivalent to <b>USD 321.93 per 50 Kgs</b>. This indicates a decline in the terminal market of <b>3.3 US cents per pound</b>, equivalent to <b>USD 3.63 per 50 Kgs</b>, compared with the last auction terminal market price recorded on <b>27th August 2026</b>, when the price was <b>295.35 US cents per pound</b>, equivalent to <b>USD 325.56 per 50 Kgs</b>.</p>
   <h2>1.1 Summary of the Last Clean Auction Conducted On <?= $preLatest?date('dS F Y',strtotime($preLatest)):'—' ?></h2>
