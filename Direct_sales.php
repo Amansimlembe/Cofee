@@ -365,6 +365,55 @@ if(isset($_GET['action'])){
           ]
        ]);
    }
+   if($a==='update' && ($_SERVER['REQUEST_METHOD']??'')==='POST'){
+       $in=json_decode(file_get_contents('php://input'),true)?:[];
+       $id=(int)($in['id']??0);
+       if($id<=0) direct_json(false,'Invalid database row.',[],400);
+       $fields=['sale_category','invoice_number','source_invoice_number','invoice_date','contract_number','grade_name','coffee_type','net_kg','price_usd_50kg','exchange_rate','warehouse_name','warehouse_location','region','supplier_seller','buyer'];
+       $set=[];$p=['id'=>$id];
+       foreach($fields as $f){
+           if(!array_key_exists($f,$in)) continue;
+           $v=$in[$f];
+           if($f==='invoice_date'){
+               $v=direct_date($v);
+               if(!$v) direct_json(false,'A valid Invoice Date is required.',[],400);
+               $set[]='invoice_date=:invoice_date';$p['invoice_date']=$v;
+               $set[]='crop_season=:crop_season';$p['crop_season']=direct_sale_season($v);
+               continue;
+           }
+           if($f==='sale_category'){
+               $v=direct_category((string)$v);
+               if(!in_array($v,['Direct Export','Local Sale','Local Roast'],true)) direct_json(false,'Invalid Sale Category.',[],400);
+           }
+           if(in_array($f,['net_kg','price_usd_50kg','exchange_rate'],true)){
+               $v=direct_num($v);
+               if($f==='net_kg' && ($v===null || $v<=0)) direct_json(false,'Net Kg must be greater than zero.',[],400);
+           }else{
+               $v=trim((string)$v);
+               if($v==='') $v=null;
+           }
+           $set[]="$f=:$f";$p[$f]=$v;
+       }
+       if(!$set) direct_json(false,'No changes were supplied.',[],400);
+       $st=direct_db()->prepare('UPDATE public.direct_sales SET '.implode(',',$set).' WHERE id=:id');
+       $st->execute($p);
+       if(!$st->rowCount()) direct_json(false,'The Direct Sales row was not found or no value changed.',[],404);
+       direct_json(true,'Row updated successfully.');
+   }
+   if($a==='delete' && ($_SERVER['REQUEST_METHOD']??'')==='POST'){
+       $in=json_decode(file_get_contents('php://input'),true)?:[];
+       $id=(int)($in['id']??0);
+       if($id<=0) direct_json(false,'Invalid database row.',[],400);
+       $st=direct_db()->prepare('DELETE FROM public.direct_sales WHERE id=:id');
+       $st->execute(['id'=>$id]);
+       if(!$st->rowCount()) direct_json(false,'The Direct Sales row was not found.',[],404);
+       direct_json(true,'Row deleted successfully.');
+   }
+   if($a==='delete_all' && ($_SERVER['REQUEST_METHOD']??'')==='POST'){
+       $st=direct_db()->prepare('DELETE FROM public.direct_sales WHERE sale_category=:c');
+       $st->execute(['c'=>$cat]);
+       direct_json(true,'All '.$cat.' records were deleted.',['deleted'=>$st->rowCount()]);
+   }
  }catch(Throwable $e){direct_json(false,$e->getMessage(),[],500);}
 }
 $category=direct_category($_GET['category']??'Direct Export'); if(!in_array($category,['Direct Export','Local Sale','Local Roast'],true))$category='Direct Export';
@@ -383,7 +432,7 @@ body{overflow:hidden}.app{height:100vh;padding:8px;display:grid;grid-template-ro
 select,button,input{height:30px;border:1px solid #d9cfca;border-radius:6px;background:#fff;padding:0 9px;font-size:11px;color:#4b342c}button{cursor:pointer;font-weight:700}.primary{background:#5d4037;color:#fff;border-color:#5d4037}
 .export-wrap,.settings{position:relative}.export-menu,.menu{display:none;position:absolute;right:0;top:34px;background:#fff;border:1px solid #ddd2cd;border-radius:7px;padding:5px;z-index:30;box-shadow:0 8px 22px #0002}.export-menu{min-width:110px}.menu{min-width:175px}.export-menu.show,.menu.open{display:block}.export-menu button,.menu button{display:block;width:100%;text-align:left;border:0;background:#fff}.export-menu button:hover,.menu button:hover{background:#f5f1ef}
 .uploadbox{display:none;align-items:center;gap:5px}.uploadbox.open{display:flex}.upload{display:flex;gap:5px;align-items:center}.status{font-size:10px;padding:2px 2px;color:#6d4c41;min-height:14px}
-.tablewrap{min-height:0;background:#fff;border:1px solid #e6ddd9;border-radius:8px;overflow:auto;height:auto}table{width:max-content;min-width:100%;border-collapse:separate;border-spacing:0;font-size:10px}th{position:sticky;top:0;z-index:2;background:#4b342c;color:#fff;white-space:nowrap}th,td{padding:5px 6px;border-right:1px solid #eee7e4;border-bottom:1px solid #eee7e4;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}td.text{text-align:left}.num{font-variant-numeric:tabular-nums}
+.tablewrap{min-height:0;background:#fff;border:1px solid #e6ddd9;border-radius:8px;overflow:auto;height:auto}table{width:max-content;min-width:100%;border-collapse:separate;border-spacing:0;font-size:10px}th{position:sticky;top:0;z-index:2;background:#4b342c;color:#fff;white-space:nowrap}th,td{padding:5px 6px;border-right:1px solid #eee7e4;border-bottom:1px solid #eee7e4;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}td.text{text-align:left}.num{font-variant-numeric:tabular-nums}.actions{display:none}.editmode .actions{display:table-cell}.rowbtn{height:23px;padding:0 5px;font-size:9px}.danger{color:#8a3029}
 .summary{display:none}.summary.show{display:block;min-height:0;overflow:auto}.summary-card{background:#fff;border:1px solid #d9d2cf;border-radius:8px;overflow:auto}.summary-head{padding:7px 9px;font-size:12px;font-weight:700;border-bottom:1px solid #d9d2cf;background:#faf8f7}.summary-card table{width:100%;min-width:650px;border-collapse:collapse;table-layout:fixed}.summary-card th,.summary-card td{padding:5px 6px;border:1px solid #ded8d5}.summary-card th{position:static;background:#4b342c;color:#fff}.summary-card th:first-child,.summary-card td:first-child{text-align:left;width:34%}.summary-card tfoot td{font-weight:800;border-top:2px solid #4e342e;background:#faf8f7}.summary-note{font-size:10px;font-weight:400;color:#795548;margin-left:5px}
 .summary-toolbar{display:none;justify-content:space-between;align-items:center;padding:6px 8px;background:#fff;border:1px solid #d9d2cf;border-radius:8px}.summary-toolbar.show{display:flex}.summary-toolbar select{min-width:230px}.summary-view{display:none!important}.summary-view.active{display:block!important;width:100%}
 @media(max-width:900px){body{overflow:auto}.app{height:auto;min-height:100vh;overflow:visible}.toolbar{align-items:flex-start}.controls,.filters{width:100%}.tablewrap{min-height:65vh}.summary.show{overflow:visible}}
@@ -407,7 +456,7 @@ select,button,input{height:30px;border:1px solid #d9cfca;border-radius:6px;backg
    </div>
    <div class="settings">
      <button type="button" onclick="toggleSettings(event)">⚙ Settings</button>
-     <div class="menu" id="settingsMenu"><button type="button" onclick="showUpload()">↑ Upload Direct Sales</button></div>
+     <div class="menu" id="settingsMenu"><button type="button" onclick="showUpload()">↑ Upload Direct Sales</button><button type="button" onclick="toggleEdit()">✎ Edit selected display</button><button type="button" class="danger" onclick="deleteAll()">⌫ Delete all <?=htmlspecialchars($category)?> data</button></div>
    </div>
  </div>
 </div>
@@ -436,6 +485,7 @@ const category=<?=json_encode($category)?>;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=(v,d=4)=>v===null||v===''?'':Number(v).toLocaleString(undefined,{maximumFractionDigits:d});
+let rows=[],editMode=false;
 const cols=[['sale_season','Sale Season'],['sale_category','Sale Category'],['invoice_number','Invoice Number'],['source_invoice_number','Source Invoice Number'],['invoice_date','Invoice Date'],['contract_number','Contract Number'],['grade_name','Grade Name'],['coffee_type','Coffee Type'],['net_kg','Net Kg'],...(category==='Local Sale'?[['local_sale_balance_kg','Local Sale Balance (kg)']]:[]),['price_usd_50kg','Price (USD/50kgs)'],['exchange_rate','Exchange Rate'],['warehouse_name','Warehouse Name'],['warehouse_location','Warehouse Location'],['region','Region'],['supplier_seller','Supplier/Seller'],['buyer','Buyer']];
 
 async function api(url,opt){let r=await fetch(url,opt),j=await r.json();if(!r.ok||!j.success)throw Error(j.message||'Request failed');return j}
@@ -450,8 +500,9 @@ async function loadRows(){
  try{
   $('status').textContent='Loading…';
   let d=await api('Direct_sales.php?action=rows&category='+encodeURIComponent(category)+'&season='+encodeURIComponent($('season').value));
-  let h='<thead><tr>'+cols.map(c=>`<th>${c[1]}</th>`).join('')+'</tr></thead><tbody>';
-  h+=d.rows.map(r=>'<tr>'+cols.map(c=>`<td class="${['net_kg','local_sale_balance_kg','price_usd_50kg','exchange_rate'].includes(c[0])?'num':'text'}">${esc(['net_kg','local_sale_balance_kg','price_usd_50kg','exchange_rate'].includes(c[0])?num(r[c[0]]):r[c[0]])}</td>`).join('')+'</tr>').join('');
+  rows=d.rows||[];
+  let h='<thead><tr>'+cols.map(c=>`<th>${c[1]}</th>`).join('')+'<th class="actions">Actions</th></tr></thead><tbody>';
+  h+=rows.map(r=>'<tr>'+cols.map(c=>`<td class="${['net_kg','local_sale_balance_kg','price_usd_50kg','exchange_rate'].includes(c[0])?'num':'text'}">${esc(['net_kg','local_sale_balance_kg','price_usd_50kg','exchange_rate'].includes(c[0])?num(r[c[0]]):r[c[0]])}</td>`).join('')+`<td class="actions"><button class="rowbtn" onclick="editRow(${r.id})">✎</button> <button class="rowbtn danger" onclick="deleteRow(${r.id})">⌫</button></td></tr>`).join('');
   $('table').innerHTML=h+'</tbody>';
   $('status').textContent=d.rows.length.toLocaleString()+' '+category+' rows';
  }catch(e){$('status').textContent=e.message}
@@ -539,6 +590,47 @@ function toggleSettings(e){
 function showUpload(){
  $('uploadbox')?.classList.toggle('open');
  $('settingsMenu')?.classList.remove('open');
+}
+function toggleEdit(){
+ if($('display').value!=='sales'){
+   $('status').textContent='Edit is available for the All '+category+' Sales table.';
+   $('settingsMenu')?.classList.remove('open');
+   return;
+ }
+ editMode=!editMode;
+ $('tablewrap').classList.toggle('editmode',editMode);
+ $('settingsMenu')?.classList.remove('open');
+ loadRows();
+}
+async function deleteRow(id){
+ if(!confirm('Delete this row permanently?'))return;
+ try{
+   let d=await api('Direct_sales.php?action=delete&category='+encodeURIComponent(category),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+   $('status').textContent=d.message;
+   await loadFilters();await refreshCurrent();
+ }catch(e){$('status').textContent=e.message}
+}
+async function deleteAll(){
+ $('settingsMenu')?.classList.remove('open');
+ if(!confirm('Delete ALL '+category+' records permanently?'))return;
+ try{
+   let d=await api('Direct_sales.php?action=delete_all&category='+encodeURIComponent(category),{method:'POST'});
+   $('status').textContent=d.message;
+   await loadFilters();await refreshCurrent();
+ }catch(e){$('status').textContent=e.message}
+}
+async function editRow(id){
+ const r=rows.find(x=>Number(x.id)===Number(id));if(!r)return;
+ const editable=cols.filter(([k])=>!['sale_season','local_sale_balance_kg'].includes(k));
+ const p={id};
+ for(const [k,label] of editable){
+   let v=prompt(label,r[k]??'');if(v===null)return;p[k]=v;
+ }
+ try{
+   let d=await api('Direct_sales.php?action=update&category='+encodeURIComponent(category),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+   $('status').textContent=d.message;
+   await loadFilters();await refreshCurrent();
+ }catch(e){$('status').textContent=e.message}
 }
 document.addEventListener('click',()=>{ $('exportMenu')?.classList.remove('show'); $('settingsMenu')?.classList.remove('open'); });
 
