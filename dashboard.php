@@ -1,3 +1,5 @@
+   if(expanded)others.forEach((p,i)=>h+=row(p,11+i,'tc-detail-row'));
+  }
   if(q&&!filtered.length)h+=`<tr><td colspan="${4+dims.length*2}" style="text-align:center">No matching ${esc(cfg.partyLabel.toLowerCase())} found.</td></tr>`;
   h+='</tbody><tfoot>'+aggRow(q?`Filtered Total (${filtered.length})`:'Overall Total',aggregate(q?filtered:allParties),'tc-overall-row')+'</tfoot></table>';
   box.innerHTML=h;
@@ -101,7 +103,7 @@
 </script>
 
 <script>
-const auctionTrend=<?=json_encode(in_array($display,['sales','direct','totalclean'],true)?[]:$auctionTrend,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>,cleanMode=<?=json_encode($display==='clean')?>,ctx=document.getElementById('auctionTrendChart');
+const auctionTrend=<?=json_encode(in_array($display,['sales','preauction','direct','totalclean'],true)?[]:$auctionTrend,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>,cleanMode=<?=json_encode($display==='clean')?>,ctx=document.getElementById('auctionTrendChart');
 if(ctx&&window.Chart){const datasets=cleanMode?[
 {type:'bar',label:'Quantity Sold (kg)',data:auctionTrend.map(r=>Number(r.qty)||0),yAxisID:'yQty',borderWidth:0,maxBarThickness:24},
 {type:'line',label:'Weighted Avg Price (USD/50kg)',data:auctionTrend.map(r=>r.avg_price===null?null:Number(r.avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25}
