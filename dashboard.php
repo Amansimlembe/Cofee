@@ -1029,6 +1029,23 @@ tfoot td{font-weight:700!important}
   border-color:#333 !important;
 }
 .pre-paper.pdf-exporting{background:#fff !important;color:#111 !important}
+
+/* Pre-Auction semantic table alignment — identical on screen and in exports */
+.pre-report table th,
+.pre-report table td.pre-header-cell{
+  text-align:center !important;
+  vertical-align:middle !important;
+}
+.pre-report table td.pre-number-cell{
+  text-align:center !important;
+  vertical-align:middle !important;
+  white-space:nowrap;
+}
+.pre-report table td.pre-text-cell{
+  text-align:left !important;
+  vertical-align:middle !important;
+}
+/* Percentage headers already declare the unit; values therefore display as plain numbers. */
 </style>
 </head>
 <body>
@@ -1107,7 +1124,7 @@ tfoot td{font-weight:700!important}
     The comparison with the last auction terminal market price will appear automatically once a previous auction reference date is available.
     <?php endif; ?></p>
   <h2>1.1 Summary of the Last Clean Auction Conducted On <?= $preLatest?date('dS F Y',strtotime($preLatest)):'—' ?></h2>
-  <p>During the last auction, <b><?=nf($lastOff)?> Kgs</b> of coffee were offered, of which <b><?=nf($lastSold)?> Kgs (<?=nf($lastPct,2)?>%)</b> were sold, generating a total value of <b>USD <?=nf($lastVal,2)?></b>. The average price achieved was <b><?=nf($lastAvg,2)?> per 50 Kgs</b>.</p>
+  <p>During the last auction, <b><?=nf($lastOff)?> Kgs</b> of coffee were offered, of which <b><?=nf($lastSold)?> Kgs (<?=nf($lastPct,2)?>)</b> were sold, generating a total value of <b>USD <?=nf($lastVal,2)?></b>. The average price achieved was <b><?=nf($lastAvg,2)?> per 50 Kgs</b>.</p>
   <div class="pre-scroll"><table><thead><tr><th>Grade</th><th>Kgs Offered</th><th>Kgs Sold</th><th>% Sold</th><th>Value (USD)</th><th>Max Price/50kg</th><th>Average Price/50kg</th><th>Min Price/50kg</th></tr></thead><tbody>
   <?php foreach($preGrades as$g):$r=$preGradeRows[$g]??null;$o=(float)($r['offered']??0);$so=(float)($r['sold']??0);?><tr><td><?=htmlspecialchars($g)?></td><td><?=$o?nf($o):'—'?></td><td><?=$so?nf($so):'—'?></td><td><?=$so?nf(pct($so,$o),2):'—'?></td><td><?=$so?nf($r['val'],2):'—'?></td><td><?=$so?nf($r['mx'],2):'—'?></td><td><?=$so?nf($r['av'],2):'—'?></td><td><?=$so?nf($r['mn'],2):'—'?></td></tr><?php endforeach;?>
   <tr class="gt"><td>Total</td><td><?=nf($lastOff)?></td><td><?=nf($lastSold)?></td><td><?=nf($lastPct,2)?></td><td><?=nf($lastVal,2)?></td><td colspan="1"></td><td><?=nf($lastAvg,2)?></td><td></td></tr></tbody></table></div>
@@ -1120,7 +1137,7 @@ tfoot td{font-weight:700!important}
   <table><thead><tr><th>Coffee Type</th><th>Quantity (MT)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php foreach(['Mild Arabica','Hard Arabica'] as$ct):?><tr><td><?=$ct?></td><td><?=nf($preCoffee[$ct]['kg']/1000,2)?></td><td><?=nf($preCoffee[$ct]['val'],2)?></td><td><?=nf(pct($preCoffee[$ct]['kg'],$preTotalKg),2)?></td></tr><?php endforeach;?><tr class="gt"><td>Total Arabica</td><td><?=nf($preArabicaKg/1000,2)?></td><td><?=nf($preArabicaVal,2)?></td><td><?=nf(pct($preArabicaKg,$preTotalKg),2)?></td></tr><tr><td>Robusta</td><td><?=nf($preRobustaKg/1000,2)?></td><td><?=nf($preRobustaVal,2)?></td><td><?=nf(pct($preRobustaKg,$preTotalKg),2)?></td></tr><tr class="gt"><td>Grand Total</td><td><?=nf($preTotalKg/1000,2)?></td><td><?=nf($preTotalVal,2)?></td><td>100</td></tr></tbody></table>
 
   <h3>2.3: Table 3: Clean Coffee Sales by Sales Category</h3>
-  <div class="pre-scroll"><table class="pre-category-table"><thead><tr><th>Sales Channel</th><th>Quantity Sold (MT)</th><th>% of Total</th><th>Sales Value (USD)</th><th>Avg. Price (USD/50 kg)</th></tr></thead><tbody><?php foreach(['Auction Sale','Local Sale','Direct Export','Local Roast'] as$ch):$r=$preChannels[$ch];$avg=$r['kg']>0?$r['val']*50/$r['kg']:0;?><tr><td><?=htmlspecialchars($ch)?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf(pct($r['kg'],$preChannelKg),2)?>%</td><td><?=nf($r['val'],2)?></td><td><?=$r['kg']>0?nf($avg,2):'—'?></td></tr><?php endforeach;?><tr class="gt"><td>Grand Total</td><td><?=nf($preChannelKg/1000,3)?></td><td><?=$preChannelKg>0?'100.00%':'0.00%'?></td><td><?=nf($preChannelVal,2)?></td><td>—</td></tr></tbody></table></div>
+  <div class="pre-scroll"><table class="pre-category-table"><thead><tr><th>Sales Channel</th><th>Quantity Sold (MT)</th><th>% of Total</th><th>Sales Value (USD)</th><th>Avg. Price (USD/50 kg)</th></tr></thead><tbody><?php foreach(['Auction Sale','Local Sale','Direct Export','Local Roast'] as$ch):$r=$preChannels[$ch];$avg=$r['kg']>0?$r['val']*50/$r['kg']:0;?><tr><td><?=htmlspecialchars($ch)?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf(pct($r['kg'],$preChannelKg),2)?></td><td><?=nf($r['val'],2)?></td><td><?=$r['kg']>0?nf($avg,2):'—'?></td></tr><?php endforeach;?><tr class="gt"><td>Grand Total</td><td><?=nf($preChannelKg/1000,3)?></td><td><?=$preChannelKg>0?'100.00%':'0.00%'?></td><td><?=nf($preChannelVal,2)?></td><td>—</td></tr></tbody></table></div>
 
   <h1>3.0 REGIONAL COFFEE SALES</h1><h3>3.1: Table 4: Coffee Sales Per Region</h3>
   <div class="pre-scroll"><table class="pre-region-table"><thead><tr><th>No.</th><th>Region</th><th>Net Weight (MT)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php $i=1;foreach($preRegions as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['region'])?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$preRegionKg),2)?></td></tr><?php endforeach;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($preRegionKg/1000,3)?></td><td><?=nf($preRegionVal,2)?></td><td><?=$preRegionKg>0?'100':'0'?></td></tr></tbody></table></div>
@@ -1131,7 +1148,7 @@ tfoot td{font-weight:700!important}
   <h3>4.1.3: Table 7: Top 10 Direct Export Coffee Buyers.</h3><?php $top=array_slice($preDEBuyers,0,10);$oth=array_slice($preDEBuyers,10);?><table><thead><tr><th>S/N</th><th>Buyer</th><th>Net Weight (MT)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php $i=1;foreach($top as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['kg']/1000,2)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$preDE['kg']??0),2)?></td></tr><?php endforeach;if($oth):$ok=array_sum(array_column($oth,'kg'));$ov=array_sum(array_column($oth,'val'));?><tr><td></td><td>Others</td><td><?=nf($ok/1000,2)?></td><td><?=nf($ov,2)?></td><td><?=nf(pct($ok,$preDE['kg']??0),2)?></td></tr><?php endif;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf(($preDE['kg']??0)/1000,2)?></td><td><?=nf($preDE['val']??0,2)?></td><td>100</td></tr></tbody></table>
 
   <h2>4.2. Clean Coffee Auction Market</h2><p>As of <?=date('jS F Y',strtotime($reportDate))?>, <b><?=nf($preClean['auctions']??0)?> clean coffee auctions</b> have been conducted whereby about <b><?=nf(($preClean['offered']??0)/1000,3)?> MT</b> were offered and <b><?=nf(($preClean['sold']??0)/1000,3)?> MT (<?=nf(pct($preClean['sold']??0,$preClean['offered']??0),2)?>%)</b> were sold corresponding to a value of <b>USD <?=nf($preClean['val']??0,2)?></b>.</p>
-  <h3>4.2.2: Table 8: Coffee Clean Auction Buyers Season <?=htmlspecialchars($season)?> Ending <?=date('jS F Y',strtotime($reportDate))?>.</h3><table><thead><tr><th>S/No</th><th>Buyer</th><th>Net Weight (MT)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php $i=1;$cbkg=array_sum(array_column($preCleanBuyers,'kg'));$cbv=array_sum(array_column($preCleanBuyers,'val'));foreach($preCleanBuyers as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$cbkg),2)?>%</td></tr><?php endforeach;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($cbkg/1000,3)?></td><td><?=nf($cbv,2)?></td><td>100%</td></tr></tbody></table>
+  <h3>4.2.2: Table 8: Coffee Clean Auction Buyers Season <?=htmlspecialchars($season)?> Ending <?=date('jS F Y',strtotime($reportDate))?>.</h3><table><thead><tr><th>S/No</th><th>Buyer</th><th>Net Weight (MT)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php $i=1;$cbkg=array_sum(array_column($preCleanBuyers,'kg'));$cbv=array_sum(array_column($preCleanBuyers,'val'));foreach($preCleanBuyers as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$cbkg),2)?></td></tr><?php endforeach;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($cbkg/1000,3)?></td><td><?=nf($cbv,2)?></td><td>100</td></tr></tbody></table>
 
   <h1>5.0 KAGERA CHERRY AUCTION</h1><p>As of <?=date('jS F Y',strtotime($reportDate))?>, <b><?=nf($preK['auctions']??0)?> auctions</b> have been conducted in Kagera Region involving <b><?=nf($preK['buyers']??0)?> buyers</b>. Out of <b><?=nf($preKOff/1000,3)?> MT offered</b>, <b><?=nf(($preK['sold']??0)/1000,3)?> MT (<?=nf(pct($preK['sold']??0,$preKOff),2)?>%)</b> were sold. This included <b><?=nf(($preK['drykg']??0)/1000,3)?> MT</b> of coffee cherry, valued at <b>TZS <?=nf($preK['dryval']??0,2)?></b> and <b><?=nf(($preK['cleankg']??0)/1000,3)?> MT</b> of clean coffee, valued at <b>TZS <?=nf($preK['cleanval']??0,2)?></b>.</p>
   <h2>5.1 Coffee Cherry Sales Summary</h2><h3>5.1.1: Table 9: Cherry Coffee Sales by Type Season <?=htmlspecialchars($season)?> Up to <?=date('jS F Y',strtotime($reportDate))?>.</h3><table><thead><tr><th>S/N</th><th>Type</th><th>Weight (MT)</th><th>Value (TZS)</th><th>% Share</th></tr></thead><tbody><?php $i=1;$kt=array_sum(array_column($preKTypes,'kg'));$kv=array_sum(array_column($preKTypes,'val'));foreach($preKTypes as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['type'])?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$kt),2)?></td></tr><?php endforeach;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($kt/1000,3)?></td><td><?=nf($kv,2)?></td><td>100</td></tr></tbody></table>
@@ -1163,7 +1180,7 @@ tfoot td{font-weight:700!important}
    <tr class="sales-grand"><td colspan="3">Grand Total (Clean Auctions, Direct Export, Local Roast and Local Sale)</td><td class="sales-num"><?=nf($salesGrandKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandVal,2)?></td></tr>
    <tr class="sales-band"><td colspan="5">Production</td></tr>
    <tr class="sales-production"><td colspan="3">Estimated Production (MT)</td><td colspan="2" class="sales-num"><?=nf($estimatedProduction,2)?></td></tr>
-   <tr class="sales-production"><td colspan="3">Percentage Achieved</td><td colspan="2" class="sales-num"><?=nf($productionPct,2)?>%</td></tr>
+   <tr class="sales-production"><td colspan="3">Percentage Achieved</td><td colspan="2" class="sales-num"><?=nf($productionPct,2)?></td></tr>
   </table>
  </div>
  <div class="sales-ppt-footer" role="img" aria-label="Tanzania Coffee Board coffee footer artwork"></div>
@@ -1175,13 +1192,13 @@ tfoot td{font-weight:700!important}
 <?php if($display==='totalclean'): ?>
 <div class="kpis totalclean-kpis">
  <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
- <?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><div class="metric-group"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small><?=nf(pct($x['kgs'],$tcGrandKg),2)?>% of total</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small>USD/50kg</small></div></div><?php endforeach;?>
+ <?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><div class="metric-group"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small><?=nf(pct($x['kgs'],$tcGrandKg),2)?> of total</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small>USD/50kg</small></div></div><?php endforeach;?>
 </div>
 <?php if($totalCleanView==='summary'): ?>
 <section class="panel totalclean-panel"><div class="panel-head totalclean-head"><div><strong>Coffee Sales Summary</strong><span>Clean coffee · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></span></div><div class="tc-export"><button type="button" id="tcExportBtn" class="tc-export-btn" title="Export Coffee Sales Summary">⇩ Export</button><div id="tcExportMenu" class="tc-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div><div class="table-box"><table id="totalCleanSalesTable" class="totalclean-table">
 <thead><tr><th rowspan="2">Type of Coffee</th><?php foreach($channels as$ch):?><th colspan="3"><?=htmlspecialchars($ch)?></th><?php endforeach;?><th colspan="3">Total</th></tr><tr><?php foreach($channels as$ch):?><th>Kg</th><th>USD</th><th>$/50kg</th><?php endforeach;?><th>Kg</th><th>USD</th><th>%</th></tr></thead><tbody>
-<?php foreach($types as$ct):$rk=$rv=0;foreach($channels as$ch){$rk+=$totalClean[$ct][$ch]['kgs'];$rv+=$totalClean[$ct][$ch]['value'];}?><tr><td><?=htmlspecialchars($ct)?></td><?php foreach($channels as$ch):$x=$totalClean[$ct][$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($rk,2)?></td><td><?=nf($rv,2)?></td><td><?=nf(pct($rk,$tcGrandKg),2)?>%</td></tr><?php endforeach;?>
-</tbody><tfoot><tr><td>Grand Total</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($tcGrandKg,2)?></td><td><?=nf($tcGrandValue,2)?></td><td><?=$tcGrandKg>0?'100%':'0%'?></td></tr><tr class="share-row"><td>Channel Share</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf(pct($x['kgs'],$tcGrandKg),2)?>%</td><td colspan="2"></td><?php endforeach;?><td colspan="3"></td></tr></tfoot>
+<?php foreach($types as$ct):$rk=$rv=0;foreach($channels as$ch){$rk+=$totalClean[$ct][$ch]['kgs'];$rv+=$totalClean[$ct][$ch]['value'];}?><tr><td><?=htmlspecialchars($ct)?></td><?php foreach($channels as$ch):$x=$totalClean[$ct][$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($rk,2)?></td><td><?=nf($rv,2)?></td><td><?=nf(pct($rk,$tcGrandKg),2)?></td></tr><?php endforeach;?>
+</tbody><tfoot><tr><td>Grand Total</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($tcGrandKg,2)?></td><td><?=nf($tcGrandValue,2)?></td><td><?=$tcGrandKg>0?'100%':'0%'?></td></tr><tr class="share-row"><td>Channel Share</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf(pct($x['kgs'],$tcGrandKg),2)?></td><td colspan="2"></td><?php endforeach;?><td colspan="3"></td></tr></tfoot>
 </table></div></section>
 <?php else: ?>
 <section class="panel tc-analysis-panel">
@@ -1208,32 +1225,32 @@ tfoot td{font-weight:700!important}
 <div class="kpis direct-kpis">
  <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
  <?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?>
- <div class="metric-group <?=$ch==='Direct Export'?'dry':'clean'?>"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small>Net weight</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Qty Share</span><strong><?=nf(pct($x['kgs'],$grandSold),2)?>%</strong><small>of total</small></div></div>
+ <div class="metric-group <?=$ch==='Direct Export'?'dry':'clean'?>"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small>Net weight</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Qty Share</span><strong><?=nf(pct($x['kgs'],$grandSold),2)?></strong><small>of total</small></div></div>
  <?php endforeach;?>
 </div>
 <div class="analytics direct-analytics">
 <section class="panel"><div class="panel-head"><strong>Sales Channels Summary</strong><span>Quantity & value</span></div><div class="table-box"><table>
 <thead><tr><th>Sales Channel</th><th>Net Weight (kg)</th><th>Value USD</th><th>Qty Share</th></tr></thead><tbody>
-<?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?><tr><td><?=htmlspecialchars($ch)?></td><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf(pct($x['kgs'],$grandSold),2)?>%</td></tr><?php endforeach;?>
+<?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?><tr><td><?=htmlspecialchars($ch)?></td><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf(pct($x['kgs'],$grandSold),2)?></td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td>Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <section class="panel"><div class="panel-head"><strong>Sales by Coffee Type</strong><span>All direct sales channels</span></div><div class="table-box"><table>
 <thead><tr><th>Coffee Type</th><th>Net Weight (kg)</th><th>Value USD</th><th>Qty Share</th></tr></thead><tbody>
-<?php foreach($coffeeTotals as $ct=>$x):?><tr><td><?=htmlspecialchars($ct)?></td><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf(pct($x['kgs'],$grandSold),2)?>%</td></tr><?php endforeach;?>
+<?php foreach($coffeeTotals as $ct=>$x):?><tr><td><?=htmlspecialchars($ct)?></td><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf(pct($x['kgs'],$grandSold),2)?></td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td>Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 </div>
 <section class="trend-panel"><div class="trend-head"><strong>Sales Channel × Coffee Type</strong><span>Net weight (kg) and value (USD)</span></div><div class="table-box"><table>
 <thead><tr><th>Sales Channel</th><th>Coffee Type</th><th>Net Weight (kg)</th><th>Value USD</th><th>Qty Share</th></tr></thead><tbody>
-<?php foreach($directRows as$r):?><tr><td><?=htmlspecialchars($r['channel'])?></td><td><?=htmlspecialchars($r['coffee_type'])?></td><td><?=nf($r['kgs'],2)?></td><td><?=nf($r['value_usd'],2)?></td><td><?=nf(pct((float)$r['kgs'],$grandSold),2)?>%</td></tr><?php endforeach;?>
+<?php foreach($directRows as$r):?><tr><td><?=htmlspecialchars($r['channel'])?></td><td><?=htmlspecialchars($r['coffee_type'])?></td><td><?=nf($r['kgs'],2)?></td><td><?=nf($r['value_usd'],2)?></td><td><?=nf(pct((float)$r['kgs'],$grandSold),2)?></td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td colspan="2">Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php elseif(in_array($display,['clean','kagera'],true)): ?>
     <div class="kpis">
  <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
  <div class="kpi"><span class="label">Auctions</span><strong><?=nf($auctions)?></strong><div class="sub">Held</div></div>
  <?php if($display==='clean'): ?>
- <div class="metric-group dry"><div class="metric"><span class="m-label coffee-name">Clean Coffee · Offered</span><strong><?=nf($offered)?> kg</strong><small>All lots</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($grandSold)?> kg</strong><small><?=nf($soldPct,2)?>% of offered</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($avgPrice,2)?></strong><small><?=$priceUnit?></small></div></div>
- <div class="metric-group clean"><div class="metric"><span class="m-label coffee-name">Sales Value</span><strong><?=nf($grandValue,2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Unsold</span><strong><?=nf(max(0,$offered-$grandSold))?> kg</strong><small><?=nf(max(0,100-$soldPct),2)?>%</small></div><div class="metric"><span class="m-label">Sale Rate</span><strong><?=nf($soldPct,2)?>%</strong><small>Season</small></div></div>
+ <div class="metric-group dry"><div class="metric"><span class="m-label coffee-name">Clean Coffee · Offered</span><strong><?=nf($offered)?> kg</strong><small>All lots</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($grandSold)?> kg</strong><small><?=nf($soldPct,2)?> of offered</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($avgPrice,2)?></strong><small><?=$priceUnit?></small></div></div>
+ <div class="metric-group clean"><div class="metric"><span class="m-label coffee-name">Sales Value</span><strong><?=nf($grandValue,2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Unsold</span><strong><?=nf(max(0,$offered-$grandSold))?> kg</strong><small><?=nf(max(0,100-$soldPct),2)?></small></div><div class="metric"><span class="m-label">Sale Rate</span><strong><?=nf($soldPct,2)?></strong><small>Season</small></div></div>
  <?php else: foreach(['Dry Cherry Coffee','Clean Coffee'] as $type):$x=$summary[$type];$cls=$type==='Dry Cherry Coffee'?'dry':'clean'; ?>
- <div class="metric-group <?=$cls?>"><div class="metric"><span class="m-label coffee-name"><?=$type==='Dry Cherry Coffee'?'Dry Cherry':'Clean Coffee'?> · Offered</span><strong><?=nf($x['offered'])?> kg</strong><small>Catalogue</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($x['sold'])?> kg</strong><small><?=nf($x['pct'],2)?>%</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small><?=$priceUnit?></small></div></div>
+ <div class="metric-group <?=$cls?>"><div class="metric"><span class="m-label coffee-name"><?=$type==='Dry Cherry Coffee'?'Dry Cherry':'Clean Coffee'?> · Offered</span><strong><?=nf($x['offered'])?> kg</strong><small>Catalogue</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($x['sold'])?> kg</strong><small><?=nf($x['pct'],2)?></small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small><?=$priceUnit?></small></div></div>
  <?php endforeach;endif;?>
  </div>
  <div class="analytics">
@@ -1241,10 +1258,10 @@ tfoot td{font-weight:700!important}
  <section class="panel"><div class="panel-head"><strong><?=$heading?></strong><span>Ranked by sold quantity</span></div><div class="table-box"><table>
  <?php if($display==='clean'):?>
  <thead><tr><th><?=$firstLabel?></th><th>Sold Qty<br>(kg)</th><th>Value<br>(USD)</th><th>Share<br>(%)</th></tr></thead><tbody>
- <?php if(!$rows):?><tr><td colspan="4" class="empty">No sold data for this season</td></tr><?php endif;foreach($rows as$i=>$r):?><tr><td title="<?=htmlspecialchars($r['name'])?>"><?php if(empty($r['_other'])):?><span class="rank"><?=$i+1?></span><?php endif;?><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['total_qty'],2)?></td><td><?=nf($r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?>%</td></tr><?php endforeach;?></tbody><tfoot><tr><td>Season Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot>
+ <?php if(!$rows):?><tr><td colspan="4" class="empty">No sold data for this season</td></tr><?php endif;foreach($rows as$i=>$r):?><tr><td title="<?=htmlspecialchars($r['name'])?>"><?php if(empty($r['_other'])):?><span class="rank"><?=$i+1?></span><?php endif;?><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['total_qty'],2)?></td><td><?=nf($r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?></td></tr><?php endforeach;?></tbody><tfoot><tr><td>Season Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot>
  <?php else:?>
  <thead><tr><th><?=$firstLabel?></th><th>Dry Cherry<br>(kg)</th><th>Clean<br>(kg)</th><th>Total<br>(kg)</th><th>Value<br>(TZS)</th><th>Share<br>(%)</th></tr></thead><tbody>
- <?php if(!$rows):?><tr><td colspan="6" class="empty">No sales data for this season</td></tr><?php endif;foreach($rows as$i=>$r):?><tr><td title="<?=htmlspecialchars($r['name'])?>"><?php if(empty($r['_other'])):?><span class="rank"><?=$i+1?></span><?php endif;?><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['cherry_qty'],2)?></td><td><?=nf($r['clean_qty'],2)?></td><td><?=nf($r['total_qty'],2)?></td><td><?=nf($r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?>%</td></tr><?php endforeach;?></tbody><tfoot><tr><td>Season Grand Total</td><td><?=nf($kageraDrySold,2)?></td><td><?=nf($kageraCleanSold,2)?></td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot>
+ <?php if(!$rows):?><tr><td colspan="6" class="empty">No sales data for this season</td></tr><?php endif;foreach($rows as$i=>$r):?><tr><td title="<?=htmlspecialchars($r['name'])?>"><?php if(empty($r['_other'])):?><span class="rank"><?=$i+1?></span><?php endif;?><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['cherry_qty'],2)?></td><td><?=nf($r['clean_qty'],2)?></td><td><?=nf($r['total_qty'],2)?></td><td><?=nf($r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?></td></tr><?php endforeach;?></tbody><tfoot><tr><td>Season Grand Total</td><td><?=nf($kageraDrySold,2)?></td><td><?=nf($kageraCleanSold,2)?></td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot>
  <?php endif;?></table></div></section><?php endforeach;?></div>
 <section class="trend-panel">
  <div class="trend-head">
@@ -1457,6 +1474,7 @@ new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},opti
   if(!window.html2canvas||!window.jspdf){alert('PDF export library is not available.');return}
   menu.classList.remove('show');
   const oldWidth=paper.style.width,oldMax=paper.style.maxWidth,oldShadow=paper.style.boxShadow;
+  preApplyTableAlignment(paper);
   paper.classList.add('pdf-exporting');
   paper.style.width='794px';
   paper.style.maxWidth='794px';
@@ -1521,6 +1539,25 @@ new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},opti
  }
  menu.addEventListener('click',e=>{const f=e.target.dataset.format;if(!f)return;e.stopPropagation();menu.classList.remove('show');if(f==='pdf')pdf();else if(f==='xlsx')excel();else word()});
 })();
+
+function preApplyTableAlignment(root){
+  root=root||document;
+  root.querySelectorAll('.pre-report table').forEach(table=>{
+    table.querySelectorAll('th').forEach(cell=>{
+      cell.classList.remove('pre-text-cell','pre-number-cell');
+      cell.classList.add('pre-header-cell');
+    });
+    table.querySelectorAll('td').forEach(cell=>{
+      cell.classList.remove('pre-text-cell','pre-number-cell','pre-header-cell');
+      const raw=(cell.textContent||'').replace(/\u00a0/g,' ').trim();
+      const cleaned=raw.replace(/,/g,'').replace(/\s+/g,' ');
+      // Numeric if cell consists of a number/currency-number/ dash only.
+      const numeric=/^(?:[-–—]|(?:USD|TZS|\$)?\s*[-+]?\d+(?:\.\d+)?(?:\s*(?:kg|kgs|mt|usd|tzs))?)$/i.test(cleaned);
+      cell.classList.add(numeric?'pre-number-cell':'pre-text-cell');
+    });
+  });
+}
+document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document));
 </script>
 </body>
 </html>
