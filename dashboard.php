@@ -307,6 +307,85 @@ function farm_display_name(string $name):string{
     }
     return ucwords(strtolower($name));
 }
+
+function coffee_c_online_closes(string $fromDate,string $toDate):array{
+    static $memo=[];
+    $key=$fromDate.'|'.$toDate;
+    if(isset($memo[$key])) return $memo[$key];
+    $p1=strtotime($fromDate.' 00:00:00 UTC');
+    $p2=strtotime($toDate.' +2 days 00:00:00 UTC');
+    $url='https://query1.finance.yahoo.com/v8/finance/chart/KC=F?period1='.$p1.'&period2='.$p2.'&interval=1d&events=history';
+    $body=false;
+    if(function_exists('curl_init')){
+        $ch=curl_init($url);
+        curl_setopt_array($ch,[
+            CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,
+            CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>7,
+            CURLOPT_USERAGENT=>'TCB Coffee Market Dashboard/1.0',
+            CURLOPT_HTTPHEADER=>['Accept: application/json']
+        ]);
+        $body=curl_exec($ch);
+        $code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if($code<200||$code>=300) $body=false;
+    }elseif(ini_get('allow_url_fopen')){
+        $ctx=stream_context_create(['http'=>['timeout'=>7,'header'=>"User-Agent: TCB Coffee Market Dashboard/1.0\r\nAccept: application/json\r\n"]]);
+        $body=@file_get_contents($url,false,$ctx);
+    }
+    if(!$body) return $memo[$key]=[];
+    $j=json_decode($body,true);
+    $r=$j['chart']['result'][0]??null;
+    if(!$r) return $memo[$key]=[];
+    $ts=$r['timestamp']??[];
+    $cl=$r['indicators']['quote'][0]['close']??[];
+    $rows=[];
+    foreach($ts as $i=>$stamp){
+        $v=$cl[$i]??null;
+        if($v===null||!is_numeric($v)) continue;
+        $rows[gmdate('Y-m-d',(int)$stamp)]=(float)$v;
+    }
+    ksort($rows);
+    return $memo[$key]=$rows;
+}
+function coffee_c_close_on_or_before(array $rows,string $date):?array{
+    $found=null;
+    foreach($rows as $d=>$v){
+        if($d>$date) break;
+        $found=['date'=>$d,'cents_lb'=>(float)$v];
+    }
+    return $found;
+}
+function coffee_usd_per_50kg(float $centsLb):float{
+    /* cents/lb -> USD/50 kg */
+    return ($centsLb/100.0)*(50.0/0.45359237);
+}
+
+/* Online New York Arabica Coffee C market data for the selected report cut-off.
+   Current = latest available trading close on/before selected Wednesday.
+   Comparison = latest available trading close on/before the previous clean-auction date. */
+$coffeeMarketOnline=null;
+try{
+    $marketFrom=date('Y-m-d',strtotime($reportDate.' -45 days'));
+    $marketRows=coffee_c_online_closes($marketFrom,$reportDate);
+    $marketToday=coffee_c_close_on_or_before($marketRows,$reportDate);
+
+    $prevAuctionDate=null;
+    if(isset($cdb) && $cdb instanceof PDO){
+        $mq=$cdb->prepare("SELECT MAX(auction_date) FROM public.clean_auction_results WHERE auction_date < :cutoff");
+        $mq->execute(['cutoff'=>$reportDate]);
+        $prevAuctionDate=$mq->fetchColumn()?:null;
+    }
+    $marketPrev=$prevAuctionDate?coffee_c_close_on_or_before($marketRows,$prevAuctionDate):null;
+    if($marketToday){
+        $coffeeMarketOnline=[
+            'today'=>$marketToday,
+            'previous'=>$marketPrev,
+            'auction_date'=>$prevAuctionDate
+        ];
+    }
+}catch(Throwable $marketError){
+    error_log('Coffee market online fetch: '.$marketError->getMessage());
+}
 ?><!doctype html>
 <html>
 <head>
@@ -751,6 +830,50 @@ tfoot td{font-weight:700!important}
 .pre-paper .pre-category-table,.pre-paper .pre-region-table{table-layout:auto!important;width:100%!important;min-width:0!important}.pre-category-table th:first-child,.pre-category-table td:first-child,.pre-region-table th:nth-child(2),.pre-region-table td:nth-child(2){width:30%;text-align:left}.pre-category-table th:not(:first-child),.pre-category-table td:not(:first-child),.pre-region-table th:not(:nth-child(2)),.pre-region-table td:not(:nth-child(2)){width:auto;white-space:nowrap!important}
 @media(max-width:700px){.pre-export-bar{position:sticky;top:0;z-index:20;background:#fff;padding:3px 0}.pre-paper .pre-category-table,.pre-paper .pre-region-table{min-width:560px!important}}
 @media print{.pre-export-bar{display:none!important}.pre-paper{box-shadow:none!important;max-width:none!important;padding:0!important}}
+
+/* Pre-Auction report tables: complete outer frame + content-aware sizing */
+.pre-report .pre-scroll{width:100%;overflow-x:auto;overflow-y:visible;padding:0 0 1px;margin:0 0 10px}
+.pre-report .pre-scroll>table,
+.pre-report table.pre-table,
+.pre-report table.pre-farm-table{
+  width:100%;
+  border-collapse:collapse !important;
+  border-spacing:0 !important;
+  table-layout:auto;
+  border:2px solid #1f1f1f !important;
+  border-bottom:2px solid #1f1f1f !important;
+  box-sizing:border-box;
+}
+.pre-report .pre-scroll>table th,
+.pre-report .pre-scroll>table td,
+.pre-report table.pre-table th,
+.pre-report table.pre-table td,
+.pre-report table.pre-farm-table th,
+.pre-report table.pre-farm-table td{
+  border:1px solid #555 !important;
+  padding:4px 6px;
+  height:auto;
+  line-height:1.2;
+  vertical-align:middle;
+}
+.pre-report .pre-scroll>table tr:last-child>td,
+.pre-report .pre-scroll>table tr:last-child>th,
+.pre-report table.pre-table tr:last-child>td,
+.pre-report table.pre-table tr:last-child>th,
+.pre-report table.pre-farm-table tr:last-child>td,
+.pre-report table.pre-farm-table tr:last-child>th{
+  border-bottom:2px solid #1f1f1f !important;
+}
+.pre-report .pre-scroll>table tr>*:first-child,
+.pre-report table.pre-table tr>*:first-child,
+.pre-report table.pre-farm-table tr>*:first-child{border-left:2px solid #1f1f1f !important}
+.pre-report .pre-scroll>table tr>*:last-child,
+.pre-report table.pre-table tr>*:last-child,
+.pre-report table.pre-farm-table tr>*:last-child{border-right:2px solid #1f1f1f !important}
+@media(max-width:700px){
+ .pre-report .pre-scroll>table{min-width:max-content}
+ .pre-report .pre-scroll>table th,.pre-report .pre-scroll>table td{white-space:nowrap;padding:3px 5px}
+}
 </style>
 </head>
 <body>
@@ -785,7 +908,25 @@ tfoot td{font-weight:700!important}
   <div class="pre-export-bar" data-html2canvas-ignore="true"><div class="pre-export-wrap"><button type="button" id="preExportBtn" class="pre-export-btn">⇩ Export Report</button><div id="preExportMenu" class="pre-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div>
   <h1 class="pre-main-title">COFFEE SALES OVERVIEW TRADE SEASON ENDING <?=strtoupper(date('jS F Y',strtotime($reportDate)))?></h1><div class="pre-date-note">Report cut-off: <b><?=date('l, d F Y',strtotime($reportDate))?></b> · Prepared Wednesday for Thursday 10:30 AM auction.</div><?php if(!$preDirectEnd): ?><div class="pre-date-note">No Direct Sales invoice is recorded up to the selected report date.</div><?php else: ?><div class="pre-date-note">Latest Direct Sales invoice included: <b><?=date('jS F Y',strtotime($preDirectEnd))?></b>.</div><?php endif; ?>
   <h2>1.0 MARKET SITUATION TODAY</h2>
-  <p>Today’s closing price for New York Arabica Coffee Futures is <b>292.05 US cents per pound</b>, equivalent to <b>USD 321.93 per 50 Kgs</b>. This indicates a decline in the terminal market of <b>3.3 US cents per pound</b>, equivalent to <b>USD 3.63 per 50 Kgs</b>, compared with the last auction terminal market price recorded on <b>27th August 2026</b>, when the price was <b>295.35 US cents per pound</b>, equivalent to <b>USD 325.56 per 50 Kgs</b>.</p>
+  <p><?php if($coffeeMarketOnline):
+      $mc=$coffeeMarketOnline['today']; $mp=$coffeeMarketOnline['previous'];
+      $mc50=coffee_usd_per_50kg($mc['cents_lb']);
+    ?>
+    The latest available New York Arabica Coffee C Futures closing price on or before the selected report date is
+    <b><?=nf($mc['cents_lb'],2)?> US cents per pound</b>, equivalent to <b>USD <?=nf($mc50,2)?> per 50 Kgs</b>,
+    recorded on <b><?=date('jS F Y',strtotime($mc['date']))?></b>.
+    <?php if($mp):
+      $mp50=coffee_usd_per_50kg($mp['cents_lb']);
+      $dc=$mc['cents_lb']-$mp['cents_lb']; $d50=$mc50-$mp50;
+    ?>
+    This represents a <b><?=$dc<0?'decline':'increase'?> of <?=nf(abs($dc),2)?> US cents per pound</b>,
+    equivalent to <b>USD <?=nf(abs($d50),2)?> per 50 Kgs</b>, compared with the terminal-market close associated with the previous clean auction
+    (<b><?=date('jS F Y',strtotime($coffeeMarketOnline['auction_date']))?></b>), when the nearest available market close was
+    <b><?=nf($mp['cents_lb'],2)?> US cents per pound</b>, equivalent to <b>USD <?=nf($mp50,2)?> per 50 Kgs</b>.
+    <?php endif; ?>
+    <?php else: ?>
+    <b>New York Arabica Coffee C Futures closing data could not be retrieved online for the selected report date.</b>
+    <?php endif; ?></p>
   <h2>1.1 Summary of the Last Clean Auction Conducted On <?= $preLatest?date('dS F Y',strtotime($preLatest)):'—' ?></h2>
   <p>During the last auction, <b><?=nf($lastOff)?> Kgs</b> of coffee were offered, of which <b><?=nf($lastSold)?> Kgs (<?=nf($lastPct,2)?>%)</b> were sold, generating a total value of <b>USD <?=nf($lastVal,2)?></b>. The average price achieved was <b><?=nf($lastAvg,2)?> per 50 Kgs</b>.</p>
   <div class="pre-scroll"><table><thead><tr><th>Grade</th><th>Kgs Offered</th><th>Kgs Sold</th><th>% Sold</th><th>Value (USD)</th><th>Max Price/50kg</th><th>Average Price/50kg</th><th>Min Price/50kg</th></tr></thead><tbody>
