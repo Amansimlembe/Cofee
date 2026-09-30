@@ -56,7 +56,28 @@ if($display==='preauction'){
  $act="CASE WHEN LOWER(COALESCE(grade2,'')||' '||COALESCE(grade,'')) LIKE '%robusta%' OR UPPER(BTRIM(COALESCE(grade,''))) LIKE 'R%' THEN 'Robusta' WHEN UPPER(BTRIM(COALESCE(grade,''))) LIKE 'H%' OR LOWER(COALESCE(grade2,'')) LIKE '%hard%' THEN 'Hard Arabica' ELSE 'Mild Arabica' END";$sold="UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
  $q=$cdb->prepare("SELECT $act ct,SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END) kg,SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0)*COALESCE(price_per_50kg,0)/50.0 ELSE 0 END) val FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['f'=>$from,'t'=>$to]);foreach($q as$r)if(isset($preCoffee[$r['ct']])){$preCoffee[$r['ct']]['kg']+=(float)$r['kg'];$preCoffee[$r['ct']]['val']+=(float)$r['val'];}
  $preArabicaKg=$preCoffee['Mild Arabica']['kg']+$preCoffee['Hard Arabica']['kg'];$preArabicaVal=$preCoffee['Mild Arabica']['val']+$preCoffee['Hard Arabica']['val'];$preRobustaKg=$preCoffee['Robusta']['kg'];$preRobustaVal=$preCoffee['Robusta']['val'];$preTotalKg=$preArabicaKg+$preRobustaKg;$preTotalVal=$preArabicaVal+$preRobustaVal;
- $nr="COALESCE(NULLIF(INITCAP(LOWER(REGEXP_REPLACE(BTRIM(COALESCE(d.region,'')),'\\s+',' ','g'))),''),'Unspecified')";$q=$ddb->prepare("SELECT $nr region,SUM($qty) kg,SUM(($qty)*COALESCE(d.price_usd_50kg,0)/50.0) val FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['f'=>$from,'t'=>$to,'lf'=>$from,'lt'=>$to]);$preRegions=$q->fetchAll();
+ $nr="COALESCE(NULLIF(INITCAP(LOWER(REGEXP_REPLACE(BTRIM(COALESCE(d.region,'')),'\\s+',' ','g'))),''),'Unspecified')";
+ /* Clean-coffee sales by channel. Local Sale always uses the remaining LS balance. */
+ $preChannels=['Auction Sale'=>['kg'=>0.0,'val'=>0.0],'Local Sale'=>['kg'=>0.0,'val'=>0.0],'Direct Export'=>['kg'=>0.0,'val'=>0.0],'Local Roast'=>['kg'=>0.0,'val'=>0.0]];
+ $channelCase="CASE WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('DE','DIRECT EXPORT') THEN 'Direct Export' WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('LS','LOCAL SALE') THEN 'Local Sale' WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('LR','LOCAL ROAST','LOCAL ROAST SALE','SLS') THEN 'Local Roast' END";
+ $q=$ddb->prepare("SELECT $channelCase channel,SUM($qty) kg,SUM(($qty)*COALESCE(d.price_usd_50kg,0)/50.0) val FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channelCase IS NOT NULL GROUP BY 1");
+ $q->execute(['f'=>$from,'t'=>$to,'lf'=>$from,'lt'=>$to]);foreach($q as$r)if(isset($preChannels[$r['channel']])){$preChannels[$r['channel']]=['kg'=>(float)$r['kg'],'val'=>(float)$r['val']];}
+ $preChannels['Auction Sale']=['kg'=>(float)($preClean['sold']??0),'val'=>(float)($preClean['val']??0)];
+ $preChannelKg=array_sum(array_column($preChannels,'kg'));$preChannelVal=array_sum(array_column($preChannels,'val'));
+
+ /* Regional clean-coffee sales: Clean Auction + Direct Export + Local Roast + Local Sale balance. */
+ $regionAgg=[];
+ $q=$ddb->prepare("SELECT $nr region,SUM($qty) kg,SUM(($qty)*COALESCE(d.price_usd_50kg,0)/50.0) val FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channelCase IS NOT NULL GROUP BY 1");
+ $q->execute(['f'=>$from,'t'=>$to,'lf'=>$from,'lt'=>$to]);foreach($q as$r){$key=$r['region'];$regionAgg[$key]=['region'=>$key,'kg'=>(float)$r['kg'],'val'=>(float)$r['val']];}
+ $cleanCols=$cdb->query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='clean_auction_results'")->fetchAll(PDO::FETCH_COLUMN);
+ $cleanRegionCol=null;foreach(['region','warehouse_location','district','location'] as$cc){if(in_array($cc,$cleanCols,true)){$cleanRegionCol=$cc;break;}}
+ if($cleanRegionCol){
+   $cr="COALESCE(NULLIF(INITCAP(LOWER(REGEXP_REPLACE(BTRIM(COALESCE($cleanRegionCol,'')),'\\s+',' ','g'))),''),'Unspecified')";
+   $q=$cdb->prepare("SELECT $cr region,SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END) kg,SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0)*COALESCE(price_per_50kg,0)/50.0 ELSE 0 END) val FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1");
+   $q->execute(['f'=>$from,'t'=>$to]);foreach($q as$r){$key=$r['region'];if(!isset($regionAgg[$key]))$regionAgg[$key]=['region'=>$key,'kg'=>0.0,'val'=>0.0];$regionAgg[$key]['kg']+=(float)$r['kg'];$regionAgg[$key]['val']+=(float)$r['val'];}
+ }
+ $preRegions=array_values($regionAgg);usort($preRegions,fn($a,$b)=>$b['kg']<=>$a['kg']);
+ $preRegionKg=array_sum(array_column($preRegions,'kg'));$preRegionVal=array_sum(array_column($preRegions,'val'));
  $dewhere="UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('DE','DIRECT EXPORT')";$q=$ddb->prepare("SELECT COUNT(DISTINCT NULLIF(BTRIM(d.supplier_seller),'')) active,COUNT(DISTINCT NULLIF(BTRIM(d.buyer),'')) buyers,SUM(COALESCE(d.net_kg,0)) kg,SUM(COALESCE(d.net_kg,0)*COALESCE(d.price_usd_50kg,0)/50.0) val FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $dewhere");$q->execute(['f'=>$from,'t'=>$to]);$preDE=$q->fetch()?:[];
  $partyNorm=function($f){return "COALESCE(NULLIF(INITCAP(LOWER(REGEXP_REPLACE(BTRIM(COALESCE($f,'')),'\\s+',' ','g'))),''),'Unspecified')";};$ns=$partyNorm('d.supplier_seller');$nb=$partyNorm('d.buyer');
  $q=$ddb->prepare("SELECT $ns name,SUM(COALESCE(d.net_kg,0)) kg,SUM(COALESCE(d.net_kg,0)*COALESCE(d.price_usd_50kg,0)/50.0) val FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $dewhere GROUP BY 1 ORDER BY kg DESC");$q->execute(['f'=>$from,'t'=>$to]);$preDESellers=$q->fetchAll();
@@ -697,6 +718,11 @@ tfoot td{font-weight:700!important}
 @media(min-width:900px){.pre-paper .pre-scroll table{min-width:100%!important}.pre-paper th,.pre-paper td{white-space:normal!important}.pre-paper th:first-child,.pre-paper td:first-child{white-space:nowrap!important}}
 @media(max-width:700px){.pre-paper{width:100%!important;max-width:100%!important;overflow:visible!important}.pre-paper .pre-scroll{margin:0 -2px;padding-bottom:3px}.pre-paper .pre-scroll table{min-width:max-content!important}.pre-paper th,.pre-paper td{font-size:clamp(8px,2.4vw,10px)!important;padding:4px 5px!important}}
 
+
+.pre-export-bar{display:flex;justify-content:flex-end;margin:0 0 6px}.pre-export-wrap{position:relative}.pre-export-btn{border:1px solid #6f4e37;background:#fff;color:#4b2e20;border-radius:6px;padding:6px 10px;font-size:10px;font-weight:800;cursor:pointer}.pre-export-menu{display:none;position:absolute;right:0;top:calc(100% + 3px);z-index:50;min-width:100px;background:#fff;border:1px solid #d8cec8;border-radius:6px;box-shadow:0 7px 20px rgba(0,0,0,.14);padding:3px}.pre-export-menu.show{display:block}.pre-export-menu button{display:block;width:100%;border:0;background:#fff;text-align:left;padding:6px 8px;font-size:10px;cursor:pointer}.pre-export-menu button:hover{background:#f4eee9}
+.pre-paper .pre-category-table,.pre-paper .pre-region-table{table-layout:auto!important;width:100%!important;min-width:0!important}.pre-category-table th:first-child,.pre-category-table td:first-child,.pre-region-table th:nth-child(2),.pre-region-table td:nth-child(2){width:30%;text-align:left}.pre-category-table th:not(:first-child),.pre-category-table td:not(:first-child),.pre-region-table th:not(:nth-child(2)),.pre-region-table td:not(:nth-child(2)){width:auto;white-space:nowrap!important}
+@media(max-width:700px){.pre-export-bar{position:sticky;top:0;z-index:20;background:#fff;padding:3px 0}.pre-paper .pre-category-table,.pre-paper .pre-region-table{min-width:560px!important}}
+@media print{.pre-export-bar{display:none!important}.pre-paper{box-shadow:none!important;max-width:none!important;padding:0!important}}
 </style>
 </head>
 <body>
@@ -721,7 +747,8 @@ tfoot td{font-weight:700!important}
         </form>
             <?php if($display==='preauction'): ?>
 <section class="pre-report">
- <div class="pre-paper">
+ <div class="pre-paper" id="preAuctionReportPaper">
+  <div class="pre-export-bar" data-html2canvas-ignore="true"><div class="pre-export-wrap"><button type="button" id="preExportBtn" class="pre-export-btn">⇩ Export Report</button><div id="preExportMenu" class="pre-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div>
   <h1 class="pre-main-title">COFFEE SALES OVERVIEW TRADE SEASON ENDING 09TH SEPTEMBER 2026</h1>
   <h2>1.0 MARKET SITUATION TODAY</h2>
   <p>Today’s closing price for New York Arabica Coffee Futures is <b>292.05 US cents per pound</b>, equivalent to <b>USD 321.93 per 50 Kgs</b>. This indicates a decline in the terminal market of <b>3.3 US cents per pound</b>, equivalent to <b>USD 3.63 per 50 Kgs</b>, compared with the last auction terminal market price recorded on <b>27th August 2026</b>, when the price was <b>295.35 US cents per pound</b>, equivalent to <b>USD 325.56 per 50 Kgs</b>.</p>
@@ -738,8 +765,11 @@ tfoot td{font-weight:700!important}
   <h3>2.2: Table 2: Breakdown of Sales by Coffee Type</h3>
   <table><thead><tr><th>Coffee Type</th><th>Quantity (MT)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php foreach(['Mild Arabica','Hard Arabica'] as$ct):?><tr><td><?=$ct?></td><td><?=nf($preCoffee[$ct]['kg']/1000,2)?></td><td><?=nf($preCoffee[$ct]['val'],2)?></td><td><?=nf(pct($preCoffee[$ct]['kg'],$preTotalKg),2)?></td></tr><?php endforeach;?><tr class="gt"><td>Total Arabica</td><td><?=nf($preArabicaKg/1000,2)?></td><td><?=nf($preArabicaVal,2)?></td><td><?=nf(pct($preArabicaKg,$preTotalKg),2)?></td></tr><tr><td>Robusta</td><td><?=nf($preRobustaKg/1000,2)?></td><td><?=nf($preRobustaVal,2)?></td><td><?=nf(pct($preRobustaKg,$preTotalKg),2)?></td></tr><tr class="gt"><td>Grand Total</td><td><?=nf($preTotalKg/1000,2)?></td><td><?=nf($preTotalVal,2)?></td><td>100</td></tr></tbody></table>
 
+  <h3>2.3: Table 3: Clean Coffee Sales by Sales Category</h3>
+  <div class="pre-scroll"><table class="pre-category-table"><thead><tr><th>Sales Channel</th><th>Quantity Sold (kg)</th><th>% of Total</th><th>Sales Value (USD)</th><th>Avg. Price (USD/50 kg)</th></tr></thead><tbody><?php foreach(['Auction Sale','Local Sale','Direct Export','Local Roast'] as$ch):$r=$preChannels[$ch];$avg=$r['kg']>0?$r['val']*50/$r['kg']:0;?><tr><td><?=htmlspecialchars($ch)?></td><td><?=nf($r['kg'])?></td><td><?=nf(pct($r['kg'],$preChannelKg),2)?>%</td><td><?=nf($r['val'],2)?></td><td><?=$r['kg']>0?nf($avg,2):'—'?></td></tr><?php endforeach;?><tr class="gt"><td>Grand Total</td><td><?=nf($preChannelKg)?></td><td><?=$preChannelKg>0?'100.00%':'0.00%'?></td><td><?=nf($preChannelVal,2)?></td><td>—</td></tr></tbody></table></div>
+
   <h1>3.0 REGIONAL COFFEE SALES</h1><h3>3.1: Table 4: Coffee Sales Per Region</h3>
-  <table><thead><tr><th>No.</th><th>Region</th><th>Net Weight (Kgs)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php $i=1;foreach($preRegions as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['region'])?></td><td><?=nf($r['kg'])?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$preTotalKg),2)?></td></tr><?php endforeach;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf(array_sum(array_column($preRegions,'kg')))?></td><td><?=nf(array_sum(array_column($preRegions,'val')),2)?></td><td>100</td></tr></tbody></table>
+  <div class="pre-scroll"><table class="pre-region-table"><thead><tr><th>No.</th><th>Region</th><th>Net Weight (Kgs)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php $i=1;foreach($preRegions as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['region'])?></td><td><?=nf($r['kg'])?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$preRegionKg),2)?></td></tr><?php endforeach;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($preRegionKg)?></td><td><?=nf($preRegionVal,2)?></td><td><?=$preRegionKg>0?'100':'0'?></td></tr></tbody></table></div>
 
   <h1>4.0: CLEAN COFFEE MARKET</h1><h2>4.1: Direct Export Market</h2><h3>4.1.1: Table 5: Direct Export Market Summary</h3>
   <table><thead><tr><th>Indicator</th><th>Performance</th></tr></thead><tbody><tr><td>Licensed Direct Export Companies</td><td>—</td></tr><tr><td>Active Participants/Exporters</td><td><?=nf($preDE['active']??0)?></td></tr><tr><td>Overseas Buyers</td><td><?=nf($preDE['buyers']??0)?></td></tr><tr><td>Total DE sold</td><td><?=nf(($preDE['kg']??0)/1000,2)?> MT</td></tr><tr><td>Contribution to Total Coffee Sold</td><td><?=nf(pct($preDE['kg']??0,$preTotalKg),2)?>%</td></tr><tr><td>Total Export Value</td><td>USD <?=nf($preDE['val']??0,2)?></td></tr></tbody></table>
@@ -873,6 +903,7 @@ tfoot td{font-weight:700!important}
 <?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -1056,6 +1087,21 @@ if(ctx&&window.Chart){const datasets=cleanMode?[
 {type:'line',label:'Dry Cherry Avg Price',data:auctionTrend.map(r=>r.dry_avg_price===null?null:Number(r.dry_avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25},
 {type:'line',label:'Clean Coffee Avg Price',data:auctionTrend.map(r=>r.clean_avg_price===null?null:Number(r.clean_avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25}];
 new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'top',labels:{boxWidth:9,boxHeight:9,font:{size:8},padding:8}}},scales:{x:{grid:{display:false},ticks:{font:{size:8},autoSkip:false},title:{display:true,text:'Auction No.',font:{size:8}}},yQty:{position:'left',beginAtZero:true,title:{display:true,text:'Quantity sold (kg)',font:{size:8}},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}},yPrice:{position:'right',title:{display:true,text:cleanMode?'Avg. price (USD/50kg)':'Avg. price (TZS/kg)',font:{size:8}},grid:{drawOnChartArea:false},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}}}}});}
+</script>
+
+<script>
+(function(){
+ const btn=document.getElementById('preExportBtn'),menu=document.getElementById('preExportMenu'),paper=document.getElementById('preAuctionReportPaper');
+ if(!btn||!menu||!paper)return;
+ btn.addEventListener('click',e=>{e.stopPropagation();menu.classList.toggle('show')});
+ document.addEventListener('click',()=>menu.classList.remove('show'));
+ const season=<?=json_encode($season??'')?>;
+ const base='Pre_Auction_Report_'+String(season||'').replace('/','-');
+ function word(){const html='<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial;font-size:10pt}h1{text-align:center;font-size:14pt}h2{font-size:12pt}h3{font-size:11pt}table{border-collapse:collapse;width:100%;margin:6px 0 14px}th,td{border:1px solid #555;padding:4px}th{background:#d9e8f6;text-align:center}td{text-align:right}td:first-child,td:nth-child(2){text-align:left}.gt{font-weight:bold}</style></head><body>'+paper.innerHTML.replace(/<div class="pre-export-bar"[\s\S]*?<\/div>\s*<\/div>/,'')+'</body></html>';const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=base+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+ function excel(){if(!window.XLSX){alert('Excel export library is not available.');return}const wb=XLSX.utils.book_new();paper.querySelectorAll('table').forEach((t,i)=>{const ws=XLSX.utils.table_to_sheet(t,{raw:true});XLSX.utils.book_append_sheet(wb,ws,'Table '+(i+1))});XLSX.writeFile(wb,base+'.xlsx')}
+ async function pdf(){if(!window.html2canvas||!window.jspdf){alert('PDF export library is not available.');return}menu.classList.remove('show');const canvas=await html2canvas(paper,{scale:1.35,backgroundColor:'#ffffff',useCORS:true,ignoreElements:e=>e.classList&&e.classList.contains('pre-export-bar')});const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'}),pw=doc.internal.pageSize.getWidth()-12,ph=doc.internal.pageSize.getHeight()-12,imgH=canvas.height*pw/canvas.width,pagePx=canvas.width*(ph/pw);let y=0,page=0;while(y<canvas.height){const slice=document.createElement('canvas');slice.width=canvas.width;slice.height=Math.min(pagePx,canvas.height-y);slice.getContext('2d').drawImage(canvas,0,y,canvas.width,slice.height,0,0,canvas.width,slice.height);if(page++)doc.addPage();const h=slice.height*pw/slice.width;doc.addImage(slice.toDataURL('image/jpeg',0.92),'JPEG',6,6,pw,h);y+=slice.height}doc.save(base+'.pdf')}
+ menu.addEventListener('click',e=>{const f=e.target.dataset.format;if(!f)return;e.stopPropagation();menu.classList.remove('show');if(f==='pdf')pdf();else if(f==='xlsx')excel();else word()});
+})();
 </script>
 </body>
 </html>
