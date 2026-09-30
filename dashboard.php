@@ -1437,9 +1437,70 @@ new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},opti
  document.addEventListener('click',()=>menu.classList.remove('show'));
  const season=<?=json_encode($season??'')?>;
  const base='Pre_Auction_Report_'+String(season||'').replace('/','-');
- function word(){const html='<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial;font-size:10pt}h1{text-align:center;font-size:14pt}h2{font-size:12pt}h3{font-size:11pt}table{border-collapse:collapse;width:100%;margin:6px 0 14px}th,td{border:1px solid #555;padding:4px}th{background:#d9e8f6;text-align:center}td{text-align:right}td:first-child,td:nth-child(2){text-align:left}.gt{font-weight:bold}</style></head><body>'+paper.innerHTML.replace(/<div class="pre-export-bar"[\s\S]*?<\/div>\s*<\/div>/,'')+'</body></html>';const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=base+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+ function word(){
+  const clone=paper.cloneNode(true);
+  clone.querySelectorAll('.pre-export-bar').forEach(e=>e.remove());
+  clone.querySelectorAll('.pre-scroll').forEach(w=>{while(w.firstChild)w.parentNode.insertBefore(w.firstChild,w);w.remove()});
+  const css=`@page{size:A4;margin:0.7in}
+  html,body{font-family:Arial,sans-serif!important;font-size:12pt!important;line-height:1.5!important;color:#000;background:#fff}
+  body,p,div,span,li{font-family:Arial,sans-serif!important;font-size:12pt!important;line-height:1.5!important}
+  p{margin:0 0 8pt 0}
+  h1,h2,h3{font-family:Arial,sans-serif!important;line-height:1.15!important;page-break-after:avoid}
+  h1{text-align:center;font-size:14pt!important;margin:10pt 0 7pt}
+  h2{font-size:13pt!important;margin:9pt 0 6pt}
+  h3{font-size:12pt!important;margin:8pt 0 5pt}
+  table{border-collapse:collapse!important;border-spacing:0!important;width:100%!important;table-layout:auto!important;margin:6pt 0 12pt;border:1px solid #555!important;mso-table-layout-alt:auto;mso-padding-alt:0}
+  thead{display:table-header-group}tr{page-break-inside:avoid;height:auto!important}
+  th,td{font-family:Arial,sans-serif!important;font-size:12pt!important;line-height:1.15!important;border:1px solid #555!important;padding:3pt 4pt!important;height:auto!important;vertical-align:middle!important;white-space:normal!important}
+  th{text-align:center!important;font-weight:bold;background:#fff!important}
+  td{text-align:right}td:first-child,td:nth-child(2){text-align:left}
+  .gt{font-weight:bold}
+  img{max-width:100%;height:auto}
+  .pre-paper{width:100%!important;max-width:none!important;padding:0!important;margin:0!important;box-shadow:none!important}`;
+  const html='<!doctype html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><meta name="ProgId" content="Word.Document"><style>'+css+'</style></head><body>'+clone.innerHTML+'</body></html>';
+  const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download=base+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+}
  function excel(){if(!window.XLSX){alert('Excel export library is not available.');return}const wb=XLSX.utils.book_new();paper.querySelectorAll('table').forEach((t,i)=>{const ws=XLSX.utils.table_to_sheet(t,{raw:true});XLSX.utils.book_append_sheet(wb,ws,'Table '+(i+1))});XLSX.writeFile(wb,base+'.xlsx')}
- async function pdf(){if(!window.html2canvas||!window.jspdf){alert('PDF export library is not available.');return}menu.classList.remove('show');const canvas=await html2canvas(paper,{scale:1.35,backgroundColor:'#ffffff',useCORS:true,ignoreElements:e=>e.classList&&e.classList.contains('pre-export-bar')});const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'}),pw=doc.internal.pageSize.getWidth()-12,ph=doc.internal.pageSize.getHeight()-12,imgH=canvas.height*pw/canvas.width,pagePx=canvas.width*(ph/pw);let y=0,page=0;while(y<canvas.height){const slice=document.createElement('canvas');slice.width=canvas.width;slice.height=Math.min(pagePx,canvas.height-y);slice.getContext('2d').drawImage(canvas,0,y,canvas.width,slice.height,0,0,canvas.width,slice.height);if(page++)doc.addPage();const h=slice.height*pw/slice.width;doc.addImage(slice.toDataURL('image/jpeg',0.92),'JPEG',6,6,pw,h);y+=slice.height}doc.save(base+'.pdf')}
+ async function pdf(){
+  if(!window.html2canvas||!window.jspdf){alert('PDF export library is not available.');return}
+  menu.classList.remove('show');
+  const canvas=await html2canvas(paper,{
+    scale:3,
+    backgroundColor:'#ffffff',
+    useCORS:true,
+    allowTaint:false,
+    logging:false,
+    imageTimeout:15000,
+    removeContainer:true,
+    ignoreElements:e=>e.classList&&e.classList.contains('pre-export-bar'),
+    onclone:d=>{
+      const p=d.getElementById('preAuctionReportPaper');
+      if(p){
+        p.style.background='#fff';p.style.color='#000';p.style.boxShadow='none';
+        p.querySelectorAll('*').forEach(el=>{el.style.opacity='1';el.style.filter='none';});
+        p.querySelectorAll('table,th,td').forEach(el=>{el.style.borderColor='#444';});
+      }
+    }
+  });
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+  const margin=6,pw=doc.internal.pageSize.getWidth()-margin*2,ph=doc.internal.pageSize.getHeight()-margin*2;
+  const pagePx=Math.floor(canvas.width*(ph/pw));
+  let y=0,page=0;
+  while(y<canvas.height){
+    const sh=Math.min(pagePx,canvas.height-y),slice=document.createElement('canvas');
+    slice.width=canvas.width;slice.height=sh;
+    const ctx=slice.getContext('2d',{alpha:false});
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,slice.width,slice.height);
+    ctx.drawImage(canvas,0,y,canvas.width,sh,0,0,canvas.width,sh);
+    if(page++)doc.addPage();
+    const h=sh*pw/canvas.width;
+    doc.addImage(slice.toDataURL('image/png'),'PNG',margin,margin,pw,h,undefined,'FAST');
+    y+=sh;
+  }
+  doc.save(base+'.pdf')
+}
  menu.addEventListener('click',e=>{const f=e.target.dataset.format;if(!f)return;e.stopPropagation();menu.classList.remove('show');if(f==='pdf')pdf();else if(f==='xlsx')excel();else word()});
 })();
 </script>
