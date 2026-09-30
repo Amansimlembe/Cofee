@@ -15,7 +15,27 @@ if($display==='preauction'){
  require_once __DIR__.'/kagera_database.php';
  require_once __DIR__.'/clean_database.php';
  require_once __DIR__.'/Direct_database.php';
- require_once __DIR__.'/farm_gate_database.php';
+ /* Farm Gate database: support the deployed canonical filename and the uploaded '(1)' filename. */
+ $farmDbFile=__DIR__.'/farm_gate_database.php';
+ if(!is_file($farmDbFile) && is_file(__DIR__.'/farm_gate_database(1).php')) $farmDbFile=__DIR__.'/farm_gate_database(1).php';
+ if(is_file($farmDbFile)) require_once $farmDbFile;
+
+ /* Backward-compatible fallback for servers that still have an older farm_gate_database.php. */
+ if(!function_exists('farm_db')){
+   function farm_db(): PDO{
+     static $db=null;if($db instanceof PDO)return $db;
+     $url=getenv('DATABASE_URL');if(!$url)throw new RuntimeException('DATABASE_URL is not configured in Render.');
+     $p=parse_url($url);if(!$p||empty($p['host'])||empty($p['user'])||empty($p['path']))throw new RuntimeException('DATABASE_URL is invalid.');
+     $dsn=sprintf('pgsql:host=%s;port=%d;dbname=%s',$p['host'],(int)($p['port']??5432),ltrim($p['path'],'/'));
+     $db=new PDO($dsn,urldecode($p['user']),urldecode($p['pass']??''),[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_EMULATE_PREPARES=>false]);return $db;
+   }
+ }
+ if(!function_exists('ensure_farm_gate_table')){
+   function ensure_farm_gate_table(): void{
+     $db=farm_db();
+     $db->exec("CREATE TABLE IF NOT EXISTS public.farm_gate_contracts(id BIGSERIAL PRIMARY KEY,contract_date DATE NOT NULL,seller_name VARCHAR(300) NOT NULL,seller_district VARCHAR(200),seller_region VARCHAR(200),buyer_name VARCHAR(300) NOT NULL,buyer_region VARCHAR(200),coffee_type VARCHAR(200),processing_method VARCHAR(100),kilos_to_be_sold NUMERIC(18,2) NOT NULL,price_per_kilo_tzs NUMERIC(18,2) NOT NULL,warehouse VARCHAR(300),row_hash VARCHAR(64),created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP)");
+   }
+ }
  ensure_kagera_table(); ensure_kagera_catalogue_table(); ensure_clean_table(); direct_ensure_table(); ensure_farm_gate_table();
  $kdb=kagera_db(); $cdb=clean_db(); $ddb=direct_db(); $fdb=farm_db();
  function season_bounds($s){if(!preg_match('/^(\\d{4})\\/(\\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
