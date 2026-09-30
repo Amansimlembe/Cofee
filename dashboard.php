@@ -308,41 +308,80 @@ function farm_display_name(string $name):string{
     return ucwords(strtolower($name));
 }
 
-function coffee_c_online_closes(string $fromDate,string $toDate):array{
-    static $memo=[];
-    $key=$fromDate.'|'.$toDate;
-    if(isset($memo[$key])) return $memo[$key];
-    $p1=strtotime($fromDate.' 00:00:00 UTC');
-    $p2=strtotime($toDate.' +2 days 00:00:00 UTC');
-    $url='https://query1.finance.yahoo.com/v8/finance/chart/KC=F?period1='.$p1.'&period2='.$p2.'&interval=1d&events=history';
-    $body=false;
+function coffee_http_get(string $url,int $timeout=8):string|false{
     if(function_exists('curl_init')){
         $ch=curl_init($url);
         curl_setopt_array($ch,[
-            CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,
-            CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>7,
-            CURLOPT_USERAGENT=>'TCB Coffee Market Dashboard/1.0',
-            CURLOPT_HTTPHEADER=>['Accept: application/json']
+            CURLOPT_RETURNTRANSFER=>true,
+            CURLOPT_FOLLOWLOCATION=>true,
+            CURLOPT_CONNECTTIMEOUT=>4,
+            CURLOPT_TIMEOUT=>$timeout,
+            CURLOPT_ENCODING=>'',
+            CURLOPT_SSL_VERIFYPEER=>true,
+            CURLOPT_USERAGENT=>'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/154 Safari/537.36',
+            CURLOPT_HTTPHEADER=>[
+                'Accept: text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
+                'Accept-Language: en-US,en;q=0.9'
+            ]
         ]);
         $body=curl_exec($ch);
         $code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
         curl_close($ch);
-        if($code<200||$code>=300) $body=false;
-    }elseif(ini_get('allow_url_fopen')){
-        $ctx=stream_context_create(['http'=>['timeout'=>7,'header'=>"User-Agent: TCB Coffee Market Dashboard/1.0\r\nAccept: application/json\r\n"]]);
-        $body=@file_get_contents($url,false,$ctx);
+        return ($body!==false && $code>=200 && $code<300)?(string)$body:false;
     }
-    if(!$body) return $memo[$key]=[];
-    $j=json_decode($body,true);
-    $r=$j['chart']['result'][0]??null;
-    if(!$r) return $memo[$key]=[];
-    $ts=$r['timestamp']??[];
-    $cl=$r['indicators']['quote'][0]['close']??[];
+    if(ini_get('allow_url_fopen')){
+        $ctx=stream_context_create(['http'=>[
+            'timeout'=>$timeout,'ignore_errors'=>true,
+            'header'=>"User-Agent: Mozilla/5.0\r\nAccept: text/html,application/json\r\n"
+        ]]);
+        $body=@file_get_contents($url,false,$ctx);
+        return $body===false?false:$body;
+    }
+    return false;
+}
+function coffee_c_online_closes(string $fromDate,string $toDate):array{
+    static $memo=[];
+    $key=$fromDate.'|'.$toDate;
+    if(isset($memo[$key])) return $memo[$key];
+
+    $p1=strtotime($fromDate.' 00:00:00 UTC');
+    $p2=strtotime($toDate.' +2 days 00:00:00 UTC');
     $rows=[];
-    foreach($ts as $i=>$stamp){
-        $v=$cl[$i]??null;
-        if($v===null||!is_numeric($v)) continue;
-        $rows[gmdate('Y-m-d',(int)$stamp)]=(float)$v;
+
+    /* Primary feeds: Yahoo Finance Coffee C continuous futures (KC=F). */
+    foreach(['query1.finance.yahoo.com','query2.finance.yahoo.com'] as $host){
+        $url='https://'.$host.'/v8/finance/chart/KC=F?period1='.$p1.'&period2='.$p2.'&interval=1d&events=history&includeAdjustedClose=true';
+        $body=coffee_http_get($url);
+        if(!$body) continue;
+        $j=json_decode($body,true);
+        $r=$j['chart']['result'][0]??null;
+        if(!$r) continue;
+        $ts=$r['timestamp']??[];
+        $cl=$r['indicators']['quote'][0]['close']??[];
+        foreach($ts as $i=>$stamp){
+            $v=$cl[$i]??null;
+            if($v===null||!is_numeric($v)) continue;
+            $d=gmdate('Y-m-d',(int)$stamp);
+            if($d>=$fromDate && $d<=$toDate) $rows[$d]=(float)$v;
+        }
+        if($rows) break;
+    }
+
+    /* Fallback: public US Coffee C historical page. This is deliberately
+       best-effort; if the provider blocks server requests we show unavailable
+       rather than inventing a market price. */
+    if(!$rows){
+        $body=coffee_http_get('https://www.investing.com/commodities/us-coffee-c-historical-data');
+        if($body){
+            $plain=html_entity_decode(strip_tags($body),ENT_QUOTES|ENT_HTML5,'UTF-8');
+            $months='Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec';
+            if(preg_match_all('/\b('.$months.')\s+(\d{1,2}),\s+(\d{4})\s+([0-9]{2,3}(?:\.[0-9]+)?)/i',$plain,$mm,PREG_SET_ORDER)){
+                foreach($mm as $m){
+                    $d=date('Y-m-d',strtotime($m[1].' '.$m[2].' '.$m[3]));
+                    if($d>=$fromDate && $d<=$toDate) $rows[$d]=(float)$m[4];
+                }
+            }
+        }
     }
     ksort($rows);
     return $memo[$key]=$rows;
@@ -360,31 +399,36 @@ function coffee_usd_per_50kg(float $centsLb):float{
     return ($centsLb/100.0)*(50.0/0.45359237);
 }
 
-/* Online New York Arabica Coffee C market data for the selected report cut-off.
-   Current = latest available trading close on/before selected Wednesday.
-   Comparison = latest available trading close on/before the previous clean-auction date. */
+/* Online market data is required only for the Pre Auction view.
+   Guarding this block prevents $reportDate warnings on Dashboard/Kagera/Clean views. */
 $coffeeMarketOnline=null;
-try{
-    $marketFrom=date('Y-m-d',strtotime($reportDate.' -45 days'));
-    $marketRows=coffee_c_online_closes($marketFrom,$reportDate);
-    $marketToday=coffee_c_close_on_or_before($marketRows,$reportDate);
+$coffeeMarketError=null;
+if(($view??'')==='preauction' && isset($reportDate) && $reportDate!==''){
+    try{
+        $marketFrom=date('Y-m-d',strtotime($reportDate.' -60 days'));
+        $marketRows=coffee_c_online_closes($marketFrom,$reportDate);
+        $marketToday=coffee_c_close_on_or_before($marketRows,$reportDate);
 
-    $prevAuctionDate=null;
-    if(isset($cdb) && $cdb instanceof PDO){
-        $mq=$cdb->prepare("SELECT MAX(auction_date) FROM public.clean_auction_results WHERE auction_date < :cutoff");
-        $mq->execute(['cutoff'=>$reportDate]);
-        $prevAuctionDate=$mq->fetchColumn()?:null;
+        $prevAuctionDate=null;
+        if(isset($cdb) && $cdb instanceof PDO){
+            $mq=$cdb->prepare("SELECT MAX(auction_date) FROM public.clean_auction_results WHERE auction_date < :cutoff");
+            $mq->execute(['cutoff'=>$reportDate]);
+            $prevAuctionDate=$mq->fetchColumn()?:null;
+        }
+        $marketPrev=$prevAuctionDate?coffee_c_close_on_or_before($marketRows,$prevAuctionDate):null;
+        if($marketToday){
+            $coffeeMarketOnline=[
+                'today'=>$marketToday,
+                'previous'=>$marketPrev,
+                'auction_date'=>$prevAuctionDate
+            ];
+        }else{
+            $coffeeMarketError='No verified Coffee C daily close was returned by the online market feeds.';
+        }
+    }catch(Throwable $marketError){
+        $coffeeMarketError=$marketError->getMessage();
+        error_log('Coffee market online fetch: '.$marketError->getMessage());
     }
-    $marketPrev=$prevAuctionDate?coffee_c_close_on_or_before($marketRows,$prevAuctionDate):null;
-    if($marketToday){
-        $coffeeMarketOnline=[
-            'today'=>$marketToday,
-            'previous'=>$marketPrev,
-            'auction_date'=>$prevAuctionDate
-        ];
-    }
-}catch(Throwable $marketError){
-    error_log('Coffee market online fetch: '.$marketError->getMessage());
 }
 ?><!doctype html>
 <html>
@@ -925,7 +969,7 @@ tfoot td{font-weight:700!important}
     <b><?=nf($mp['cents_lb'],2)?> US cents per pound</b>, equivalent to <b>USD <?=nf($mp50,2)?> per 50 Kgs</b>.
     <?php endif; ?>
     <?php else: ?>
-    <b>New York Arabica Coffee C Futures closing data could not be retrieved online for the selected report date.</b>
+    <b>Verified New York Arabica Coffee C Futures closing data is temporarily unavailable for the selected report date.</b>
     <?php endif; ?></p>
   <h2>1.1 Summary of the Last Clean Auction Conducted On <?= $preLatest?date('dS F Y',strtotime($preLatest)):'—' ?></h2>
   <p>During the last auction, <b><?=nf($lastOff)?> Kgs</b> of coffee were offered, of which <b><?=nf($lastSold)?> Kgs (<?=nf($lastPct,2)?>%)</b> were sold, generating a total value of <b>USD <?=nf($lastVal,2)?></b>. The average price achieved was <b><?=nf($lastAvg,2)?> per 50 Kgs</b>.</p>
