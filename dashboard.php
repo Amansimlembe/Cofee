@@ -20,6 +20,11 @@ if($display==='preauction'){
  if(!is_file($farmDbFile) && is_file(__DIR__.'/farm_gate_database(1).php')) $farmDbFile=__DIR__.'/farm_gate_database(1).php';
  if(is_file($farmDbFile)) require_once $farmDbFile;
 
+ /* License database: Pre-Auction Direct Export licensed-company count. */
+ $licenseDbFile=__DIR__.'/license_database.php';
+ if(!is_file($licenseDbFile) && is_file(__DIR__.'/license_database(1).php')) $licenseDbFile=__DIR__.'/license_database(1).php';
+ if(is_file($licenseDbFile)) require_once $licenseDbFile;
+
  /* Backward-compatible fallback for servers that still have an older farm_gate_database.php. */
  if(!function_exists('farm_db')){
    function farm_db(): PDO{
@@ -90,6 +95,31 @@ if($display==='preauction'){
  $preRegions=array_values($regionAgg);usort($preRegions,fn($a,$b)=>$b['kg']<=>$a['kg']);
  $preRegionKg=array_sum(array_column($preRegions,'kg'));$preRegionVal=array_sum(array_column($preRegions,'val'));
  $dewhere="UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('DE','DIRECT EXPORT')";$q=$ddb->prepare("SELECT COUNT(DISTINCT NULLIF(BTRIM(d.supplier_seller),'')) active,COUNT(DISTINCT NULLIF(BTRIM(d.buyer),'')) buyers,SUM(COALESCE(d.net_kg,0)) kg,SUM(COALESCE(d.net_kg,0)*COALESCE(d.price_usd_50kg,0)/50.0) val FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $dewhere");$q->execute(['f'=>$from,'t'=>$to]);$preDE=$q->fetch()?:[];
+
+ /* Licensed Direct Export Companies come from the License database, not sales activity.
+    Match the selected sale season and normalize common Direct Export category spellings. */
+ $preLicensedDE=0;
+ if(function_exists('license_db') && function_exists('ensure_license_table')){
+   try{
+     ensure_license_table();
+     $ldb=license_db();
+     $lq=$ldb->prepare("
+       SELECT COUNT(DISTINCT NULLIF(BTRIM(company_name),''))
+       FROM public.coffee_licenses
+       WHERE BTRIM(COALESCE(license_sale_season,''))=:season
+         AND (
+           UPPER(REGEXP_REPLACE(BTRIM(COALESCE(license_category,'')),'[^A-Z0-9]+','','g')) IN
+             ('DIRECTEXPORT','DIRECTEXPORTER','DIRECTEXPORTLICENCE','DIRECTEXPORTLICENSE','DE')
+           OR UPPER(BTRIM(COALESCE(license_category,''))) LIKE '%DIRECT%EXPORT%'
+         )
+     ");
+     $lq->execute(['season'=>$season]);
+     $preLicensedDE=(int)$lq->fetchColumn();
+   }catch(Throwable $e){
+     $preLicensedDE=0;
+     error_log('Pre-Auction license count: '.$e->getMessage());
+   }
+ }
  $partyNorm=function($f){return "COALESCE(NULLIF(INITCAP(LOWER(REGEXP_REPLACE(BTRIM(COALESCE($f,'')),'\\s+',' ','g'))),''),'Unspecified')";};$ns=$partyNorm('d.supplier_seller');$nb=$partyNorm('d.buyer');
  $q=$ddb->prepare("SELECT $ns name,SUM(COALESCE(d.net_kg,0)) kg,SUM(COALESCE(d.net_kg,0)*COALESCE(d.price_usd_50kg,0)/50.0) val FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $dewhere GROUP BY 1 ORDER BY kg DESC");$q->execute(['f'=>$from,'t'=>$to]);$preDESellers=$q->fetchAll();
  $q=$ddb->prepare("SELECT $nb name,SUM(COALESCE(d.net_kg,0)) kg,SUM(COALESCE(d.net_kg,0)*COALESCE(d.price_usd_50kg,0)/50.0) val FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $dewhere GROUP BY 1 ORDER BY kg DESC");$q->execute(['f'=>$from,'t'=>$to]);$preDEBuyers=$q->fetchAll();
@@ -1143,7 +1173,7 @@ tfoot td{font-weight:700!important}
   <div class="pre-scroll"><table class="pre-region-table"><thead><tr><th>No.</th><th>Region</th><th>Net Weight (MT)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php $i=1;foreach($preRegions as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['region'])?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$preRegionKg),2)?></td></tr><?php endforeach;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($preRegionKg/1000,3)?></td><td><?=nf($preRegionVal,2)?></td><td><?=$preRegionKg>0?'100':'0'?></td></tr></tbody></table></div>
 
   <h1>4.0: DIRECT EXPORT MARKET</h1><h2>4.1: Direct Export Market</h2><h3>4.1.1: Table 5: Direct Export Market Summary</h3>
-  <table><thead><tr><th>Indicator</th><th>Performance</th></tr></thead><tbody><tr><td>Licensed Direct Export Companies</td><td>—</td></tr><tr><td>Active Participants/Exporters</td><td><?=nf($preDE['active']??0)?></td></tr><tr><td>Overseas Buyers</td><td><?=nf($preDE['buyers']??0)?></td></tr><tr><td>Total DE sold</td><td><?=nf(($preDE['kg']??0)/1000,2)?> MT</td></tr><tr><td>Contribution to Total Coffee Sold</td><td><?=nf(pct($preDE['kg']??0,$preTotalKg),2)?>%</td></tr><tr><td>Total Export Value</td><td>USD <?=nf($preDE['val']??0,2)?></td></tr></tbody></table>
+  <table><thead><tr><th>Indicator</th><th>Performance</th></tr></thead><tbody><tr><td>Licensed Direct Export Companies</td><td><?=nf($preLicensedDE)?></td></tr><tr><td>Active Participants/Exporters</td><td><?=nf($preDE['active']??0)?></td></tr><tr><td>Overseas Buyers</td><td><?=nf($preDE['buyers']??0)?></td></tr><tr><td>Total DE sold</td><td><?=nf(($preDE['kg']??0)/1000,2)?> MT</td></tr><tr><td>Contribution to Total Coffee Sold</td><td><?=nf(pct($preDE['kg']??0,$preTotalKg),2)?>%</td></tr><tr><td>Total Export Value</td><td>USD <?=nf($preDE['val']??0,2)?></td></tr></tbody></table>
   <h3>4.1.2: Table 6: Top 10 Direct Export Coffee sellers.</h3><?php $top=array_slice($preDESellers,0,10);$oth=array_slice($preDESellers,10);?><table><thead><tr><th>S/N</th><th>Seller Name</th><th>N/Weight (MT)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php $i=1;foreach($top as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['kg']/1000,2)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$preDE['kg']??0),2)?></td></tr><?php endforeach;if($oth):$ok=array_sum(array_column($oth,'kg'));$ov=array_sum(array_column($oth,'val'));?><tr><td><?=$i?></td><td>Others</td><td><?=nf($ok/1000,2)?></td><td><?=nf($ov,2)?></td><td><?=nf(pct($ok,$preDE['kg']??0),2)?></td></tr><?php endif;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf(($preDE['kg']??0)/1000,2)?></td><td><?=nf($preDE['val']??0,2)?></td><td>100</td></tr></tbody></table>
   <h3>4.1.3: Table 7: Top 10 Direct Export Coffee Buyers.</h3><?php $top=array_slice($preDEBuyers,0,10);$oth=array_slice($preDEBuyers,10);?><table><thead><tr><th>S/N</th><th>Buyer</th><th>Net Weight (MT)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php $i=1;foreach($top as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['kg']/1000,2)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$preDE['kg']??0),2)?></td></tr><?php endforeach;if($oth):$ok=array_sum(array_column($oth,'kg'));$ov=array_sum(array_column($oth,'val'));?><tr><td></td><td>Others</td><td><?=nf($ok/1000,2)?></td><td><?=nf($ov,2)?></td><td><?=nf(pct($ok,$preDE['kg']??0),2)?></td></tr><?php endif;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf(($preDE['kg']??0)/1000,2)?></td><td><?=nf($preDE['val']??0,2)?></td><td>100</td></tr></tbody></table>
 
