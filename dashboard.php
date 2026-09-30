@@ -1014,6 +1014,21 @@ tfoot td{font-weight:700!important}
   .pre-report table{min-width:max-content}
   .pre-report table th,.pre-report table td{white-space:nowrap;padding:3px 5px}
 }
+
+/* High-quality PDF capture: preserve solid text/borders and avoid faded rendering */
+.pre-paper.pdf-exporting,
+.pre-paper.pdf-exporting *{
+  opacity:1 !important;
+  filter:none !important;
+  text-shadow:none !important;
+  -webkit-font-smoothing:antialiased;
+}
+.pre-paper.pdf-exporting table,
+.pre-paper.pdf-exporting th,
+.pre-paper.pdf-exporting td{
+  border-color:#333 !important;
+}
+.pre-paper.pdf-exporting{background:#fff !important;color:#111 !important}
 </style>
 </head>
 <body>
@@ -1046,7 +1061,7 @@ tfoot td{font-weight:700!important}
 <section class="pre-report">
  <div class="pre-paper" id="preAuctionReportPaper">
   <div class="pre-export-bar" data-html2canvas-ignore="true"><div class="pre-export-wrap"><button type="button" id="preExportBtn" class="pre-export-btn">⇩ Export Report</button><div id="preExportMenu" class="pre-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div>
-  <h1 class="pre-main-title">COFFEE SALES OVERVIEW TRADE SEASON ENDING <?=strtoupper(date('jS F Y',strtotime($reportDate)))?></h1><div class="pre-date-note pre-export-exclude">Report cut-off: <b><?=date('l, d F Y',strtotime($reportDate))?></b> · Prepared Wednesday for Thursday 10:30 AM auction.</div><?php if(!$preDirectEnd): ?><div class="pre-date-note pre-export-exclude">No Direct Sales invoice is recorded up to the selected report date.</div><?php else: ?><div class="pre-date-note pre-export-exclude">Latest Direct Sales invoice included: <b><?=date('jS F Y',strtotime($preDirectEnd))?></b>.</div><?php endif; ?>
+  <h1 class="pre-main-title">COFFEE SALES OVERVIEW TRADE SEASON ENDING <?=strtoupper(date('jS F Y',strtotime($reportDate)))?></h1>
   <h2>1.0 MARKET SITUATION TODAY</h2>
   <p><?php
       /* Always render the professional market narrative.
@@ -1105,7 +1120,6 @@ tfoot td{font-weight:700!important}
   <table><thead><tr><th>Coffee Type</th><th>Quantity (MT)</th><th>Value (USD)</th><th>% Share</th></tr></thead><tbody><?php foreach(['Mild Arabica','Hard Arabica'] as$ct):?><tr><td><?=$ct?></td><td><?=nf($preCoffee[$ct]['kg']/1000,2)?></td><td><?=nf($preCoffee[$ct]['val'],2)?></td><td><?=nf(pct($preCoffee[$ct]['kg'],$preTotalKg),2)?></td></tr><?php endforeach;?><tr class="gt"><td>Total Arabica</td><td><?=nf($preArabicaKg/1000,2)?></td><td><?=nf($preArabicaVal,2)?></td><td><?=nf(pct($preArabicaKg,$preTotalKg),2)?></td></tr><tr><td>Robusta</td><td><?=nf($preRobustaKg/1000,2)?></td><td><?=nf($preRobustaVal,2)?></td><td><?=nf(pct($preRobustaKg,$preTotalKg),2)?></td></tr><tr class="gt"><td>Grand Total</td><td><?=nf($preTotalKg/1000,2)?></td><td><?=nf($preTotalVal,2)?></td><td>100</td></tr></tbody></table>
 
   <h3>2.3: Table 3: Clean Coffee Sales by Sales Category</h3>
-  <div class="pre-date-note pre-export-exclude">Auction Sale data: cumulative clean-auction sales up to <b><?=date('jS F Y',strtotime($reportDate))?></b><?php if($preLatest): ?> · Latest clean auction held on <b><?=date('jS F Y',strtotime($preLatest))?></b><?php else: ?> · No clean auction recorded up to this report date<?php endif; ?>.</div>
   <div class="pre-scroll"><table class="pre-category-table"><thead><tr><th>Sales Channel</th><th>Quantity Sold (MT)</th><th>% of Total</th><th>Sales Value (USD)</th><th>Avg. Price (USD/50 kg)</th></tr></thead><tbody><?php foreach(['Auction Sale','Local Sale','Direct Export','Local Roast'] as$ch):$r=$preChannels[$ch];$avg=$r['kg']>0?$r['val']*50/$r['kg']:0;?><tr><td><?=htmlspecialchars($ch)?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf(pct($r['kg'],$preChannelKg),2)?>%</td><td><?=nf($r['val'],2)?></td><td><?=$r['kg']>0?nf($avg,2):'—'?></td></tr><?php endforeach;?><tr class="gt"><td>Grand Total</td><td><?=nf($preChannelKg/1000,3)?></td><td><?=$preChannelKg>0?'100.00%':'0.00%'?></td><td><?=nf($preChannelVal,2)?></td><td>—</td></tr></tbody></table></div>
 
   <h1>3.0 REGIONAL COFFEE SALES</h1><h3>3.1: Table 4: Coffee Sales Per Region</h3>
@@ -1437,107 +1451,73 @@ new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},opti
  document.addEventListener('click',()=>menu.classList.remove('show'));
  const season=<?=json_encode($season??'')?>;
  const base='Pre_Auction_Report_'+String(season||'').replace('/','-');
-
- function exportClone(){
-   const c=paper.cloneNode(true);
-   c.querySelectorAll('.pre-export-bar,.pre-export-exclude,[data-export-exclude="true"]').forEach(e=>e.remove());
-   c.querySelectorAll('.pre-scroll').forEach(w=>{
-      const p=w.parentNode; while(w.firstChild)p.insertBefore(w.firstChild,w); w.remove();
-   });
-   return c;
- }
- function txt(s){return String(s||'').replace(/\s+/g,' ').trim()}
- function tableMatrix(table){
-   const rows=[];
-   table.querySelectorAll('tr').forEach(tr=>{
-     const row=[];
-     tr.querySelectorAll(':scope > th,:scope > td').forEach(cell=>{
-       const span=Math.max(1,parseInt(cell.getAttribute('colspan')||'1',10));
-       row.push(txt(cell.innerText||cell.textContent));
-       for(let i=1;i<span;i++)row.push('');
-     });
-     if(row.length)rows.push(row);
-   });
-   return rows;
- }
- function reportRows(root){
-   const rows=[];
-   [...root.children].forEach(el=>{
-     if(el.matches&&el.matches('.pre-export-exclude,.pre-export-bar'))return;
-     if(/^H[1-3]$/.test(el.tagName)){rows.push([txt(el.textContent)]);rows.push([]);return}
-     if(el.tagName==='P'){rows.push([txt(el.textContent)]);rows.push([]);return}
-     if(el.tagName==='TABLE'){tableMatrix(el).forEach(r=>rows.push(r));rows.push([]);return}
-     const tables=el.querySelectorAll?el.querySelectorAll(':scope > table'):[];
-     if(tables.length){tables.forEach(tb=>{tableMatrix(tb).forEach(r=>rows.push(r));rows.push([])});return}
-     const s=txt(el.textContent);if(s){rows.push([s]);rows.push([])}
-   });
-   return rows;
- }
-
- function word(){
-   const clone=exportClone();
-   clone.querySelectorAll('table').forEach(tb=>{
-     tb.setAttribute('width','100%');
-     tb.style.cssText='border-collapse:collapse;width:100%;table-layout:auto;margin:6pt 0 12pt;';
-     tb.querySelectorAll('tr').forEach(tr=>tr.style.cssText='height:auto;page-break-inside:avoid;');
-     tb.querySelectorAll('th,td').forEach(c=>{
-       c.removeAttribute('width');c.removeAttribute('height');
-       c.style.cssText='border:1px solid #555;padding:3pt 4pt;vertical-align:middle;width:auto;height:auto;white-space:normal;';
-     });
-   });
-   const css=`@page{size:A4 portrait;margin:12mm}
-body{font-family:Arial,sans-serif;font-size:9pt;color:#111;margin:0}
-.pre-paper{width:100%;max-width:100%;margin:0;padding:0}
-h1{text-align:center;font-size:13pt;margin:10pt 0 5pt}
-h2{font-size:11pt;margin:9pt 0 4pt}h3{font-size:10pt;margin:7pt 0 3pt}
-p{margin:3pt 0 7pt;line-height:1.25}
-table{border-collapse:collapse;width:100%;table-layout:auto;margin:5pt 0 11pt}
-th,td{border:1px solid #555;padding:3pt 4pt;vertical-align:middle;width:auto;height:auto;white-space:normal}
-th{text-align:center;font-weight:bold}td{text-align:right}td:first-child{text-align:left}
-tr{height:auto;page-break-inside:avoid}.gt{font-weight:bold}`;
-   const html='<!doctype html><html><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+clone.innerHTML+'</body></html>';
-   const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');
-   a.href=URL.createObjectURL(b);a.download=base+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);
- }
-
- function excel(){
-   if(!window.XLSX){alert('Excel export library is not available.');return}
-   const clone=exportClone(),rows=reportRows(clone);
-   const maxCols=Math.max(1,...rows.map(r=>r.length));
-   rows.forEach(r=>{while(r.length<maxCols)r.push('')});
-   const ws=XLSX.utils.aoa_to_sheet(rows,{cellDates:false});
-   ws['!cols']=Array.from({length:maxCols},(_,c)=>{
-     let max=10;rows.forEach(r=>{max=Math.max(max,Math.min(42,String(r[c]||'').length+2))});return {wch:max};
-   });
-   ws['!rows']=rows.map(r=>{const n=Math.max(0,...r.map(v=>String(v||'').length));return {hpt:n>90?42:n>45?30:18}});
-   ws['!pageSetup']={orientation:'portrait',paperSize:9,fitToWidth:1,fitToHeight:0};
-   ws['!margins']={left:0.3,right:0.3,top:0.45,bottom:0.45,header:0.2,footer:0.2};
-   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Pre Auction Report');
-   XLSX.writeFile(wb,base+'.xlsx',{compression:true});
- }
-
+ function word(){const html='<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial;font-size:10pt}h1{text-align:center;font-size:14pt}h2{font-size:12pt}h3{font-size:11pt}table{border-collapse:collapse;width:100%;margin:6px 0 14px}th,td{border:1px solid #555;padding:4px}th{background:#d9e8f6;text-align:center}td{text-align:right}td:first-child,td:nth-child(2){text-align:left}.gt{font-weight:bold}</style></head><body>'+paper.innerHTML.replace(/<div class="pre-export-bar"[\s\S]*?<\/div>\s*<\/div>/,'')+'</body></html>';const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=base+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+ function excel(){if(!window.XLSX){alert('Excel export library is not available.');return}const wb=XLSX.utils.book_new();paper.querySelectorAll('table').forEach((t,i)=>{const ws=XLSX.utils.table_to_sheet(t,{raw:true});XLSX.utils.book_append_sheet(wb,ws,'Table '+(i+1))});XLSX.writeFile(wb,base+'.xlsx')}
  async function pdf(){
-   if(!window.html2canvas||!window.jspdf){alert('PDF export library is not available.');return}
-   menu.classList.remove('show');
-   const clone=exportClone();
-   clone.style.cssText+=';position:fixed;left:-100000px;top:0;width:794px;max-width:794px;background:#fff;color:#000;opacity:1;filter:none;box-shadow:none;';
-   clone.querySelectorAll('*').forEach(el=>{el.style.opacity='1';el.style.filter='none';el.style.textShadow='none'});
-   document.body.appendChild(clone);
-   try{
-     const canvas=await html2canvas(clone,{scale:3,backgroundColor:'#fff',useCORS:true,allowTaint:false,logging:false,windowWidth:794});
-     const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
-     const margin=7,pw=doc.internal.pageSize.getWidth()-margin*2,ph=doc.internal.pageSize.getHeight()-margin*2;
-     const pagePx=Math.floor(canvas.width*(ph/pw));let y=0,page=0;
-     while(y<canvas.height){
-       const hpx=Math.min(pagePx,canvas.height-y),slice=document.createElement('canvas');
-       slice.width=canvas.width;slice.height=hpx;
-       const g=slice.getContext('2d',{alpha:false});g.fillStyle='#fff';g.fillRect(0,0,slice.width,slice.height);
-       g.drawImage(canvas,0,y,canvas.width,hpx,0,0,canvas.width,hpx);
-       if(page++)doc.addPage();
-       doc.addImage(slice.toDataURL('image/png'),'PNG',margin,margin,pw,hpx*pw/canvas.width,undefined,'FAST');y+=hpx;
-     }
-     doc.save(base+'.pdf');
-   }finally{clone.remove()}
+  if(!window.html2canvas||!window.jspdf){alert('PDF export library is not available.');return}
+  menu.classList.remove('show');
+  const oldWidth=paper.style.width,oldMax=paper.style.maxWidth,oldShadow=paper.style.boxShadow;
+  paper.classList.add('pdf-exporting');
+  paper.style.width='794px';
+  paper.style.maxWidth='794px';
+  paper.style.boxShadow='none';
+  try{
+    if(document.fonts&&document.fonts.ready) await document.fonts.ready;
+    const scale=Math.max(2.5,Math.min(3.2,(window.devicePixelRatio||1)*2));
+    const canvas=await html2canvas(paper,{
+      scale,
+      backgroundColor:'#ffffff',
+      useCORS:true,
+      allowTaint:false,
+      logging:false,
+      imageTimeout:15000,
+      removeContainer:true,
+      scrollX:0,
+      scrollY:-window.scrollY,
+      windowWidth:794,
+      onclone:doc=>{
+        const p=doc.getElementById('preAuctionReportPaper');
+        if(p){
+          p.style.width='794px';
+          p.style.maxWidth='794px';
+          p.style.boxShadow='none';
+          p.style.opacity='1';
+          p.querySelectorAll('*').forEach(el=>{
+            el.style.opacity='1';
+            el.style.textShadow='none';
+            el.style.filter='none';
+          });
+        }
+      },
+      ignoreElements:e=>e.classList&&e.classList.contains('pre-export-bar')
+    });
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true,putOnlyUsedFonts:true});
+    const margin=6,pw=doc.internal.pageSize.getWidth()-margin*2,ph=doc.internal.pageSize.getHeight()-margin*2;
+    const pagePx=Math.floor(canvas.width*(ph/pw));
+    let y=0,page=0;
+    while(y<canvas.height){
+      const hpx=Math.min(pagePx,canvas.height-y);
+      const slice=document.createElement('canvas');
+      slice.width=canvas.width;
+      slice.height=hpx;
+      const ctx=slice.getContext('2d',{alpha:false});
+      ctx.fillStyle='#ffffff';
+      ctx.fillRect(0,0,slice.width,slice.height);
+      ctx.drawImage(canvas,0,y,canvas.width,hpx,0,0,canvas.width,hpx);
+      if(page++) doc.addPage();
+      const hmm=hpx*pw/canvas.width;
+      /* PNG is lossless and avoids the faded/soft JPEG text seen previously. */
+      doc.addImage(slice.toDataURL('image/png'),'PNG',margin,margin,pw,hmm,undefined,'FAST');
+      y+=hpx;
+    }
+    doc.save(base+'.pdf');
+  }finally{
+    paper.classList.remove('pdf-exporting');
+    paper.style.width=oldWidth;
+    paper.style.maxWidth=oldMax;
+    paper.style.boxShadow=oldShadow;
+  }
  }
  menu.addEventListener('click',e=>{const f=e.target.dataset.format;if(!f)return;e.stopPropagation();menu.classList.remove('show');if(f==='pdf')pdf();else if(f==='xlsx')excel();else word()});
 })();
