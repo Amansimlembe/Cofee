@@ -150,8 +150,42 @@ if($display==='sales'){
  require_once __DIR__.'/kagera_database.php';
  require_once __DIR__.'/clean_database.php';
  require_once __DIR__.'/Direct_database.php';
-  require_once __DIR__.'/farm_gate_database.php';
- ensure_kagera_table(); ensure_kagera_catalogue_table(); ensure_clean_table(); direct_ensure_table(); ensure_farm_gate_table();
+  /* Support both current and legacy farm-gate database layers. */
+  $salesFarmDbFile=__DIR__.'/farm_gate_database.php';
+  if(!is_file($salesFarmDbFile) && is_file(__DIR__.'/farm_gate_database(4).php')) $salesFarmDbFile=__DIR__.'/farm_gate_database(4).php';
+  if(is_file($salesFarmDbFile)) require_once $salesFarmDbFile;
+  if(!function_exists('farm_db')){
+    function farm_db(): PDO {
+      static $connection=null;
+      if($connection instanceof PDO)return $connection;
+      $url=getenv('DATABASE_URL');
+      if(!$url)throw new RuntimeException('DATABASE_URL is not configured in Render.');
+      $parts=parse_url($url);
+      if(!$parts || empty($parts['host']) || empty($parts['user']) || empty($parts['path']))throw new RuntimeException('DATABASE_URL is invalid.');
+      $dsn=sprintf('pgsql:host=%s;port=%d;dbname=%s',$parts['host'],(int)($parts['port']??5432),ltrim($parts['path'],'/'));
+      $connection=new PDO($dsn,urldecode($parts['user']),urldecode($parts['pass']??''),[
+        PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES=>false
+      ]);
+      return $connection;
+    }
+  }
+  if(!function_exists('ensure_farm_gate_table')){
+    function ensure_farm_gate_table(): void {
+      farm_db()->exec("CREATE TABLE IF NOT EXISTS public.farm_gate_contracts (
+        id BIGSERIAL PRIMARY KEY, contract_date DATE NOT NULL,
+        seller_name VARCHAR(300) NOT NULL, seller_district VARCHAR(200), seller_region VARCHAR(200),
+        buyer_name VARCHAR(300) NOT NULL, buyer_region VARCHAR(200),
+        coffee_type VARCHAR(200), processing_method VARCHAR(100),
+        kilos_to_be_sold NUMERIC(18,2) NOT NULL, price_per_kilo_tzs NUMERIC(18,2) NOT NULL,
+        warehouse VARCHAR(300), row_hash VARCHAR(64),
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )");
+    }
+  }
+  ensure_kagera_table(); ensure_kagera_catalogue_table(); ensure_clean_table(); direct_ensure_table(); ensure_farm_gate_table();
  $db=kagera_db(); $cdb=clean_db(); $ddb=direct_db(); $fdb=farm_db();
  function season_bounds($s){if(!preg_match('/^(\\d{4})\\/(\\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
  function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
