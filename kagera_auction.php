@@ -3391,6 +3391,10 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
         <button type="button" data-kagera-export="pdf">Download PDF</button>
         <button type="button" data-kagera-export="excel">Download Excel</button>
         <button type="button" data-kagera-export="word">Download Word</button>
+        <div class="kagera-export-divider" style="border-top:1px solid #ddd;margin:5px 0"></div>
+        <button type="button" data-kagera-export="all_pdf">All Auctions — PDF</button>
+        <button type="button" data-kagera-export="all_excel">All Auctions — Excel</button>
+        <button type="button" data-kagera-export="all_word">All Auctions — Word</button>
     </div>
 </div>
 
@@ -4671,7 +4675,7 @@ function kageraRenderHighLowReport(report)
             "<td>" + escapeKageraHtml(type) + "</td>" +
             "<td>" + kageraReportKg(g.offered) + "</td>" +
             "<td>" + kageraReportKg(g.sold) + "</td>" +
-            "<td>" + (g.prices.length ? kageraReportMoney(g.low) : "-") + "</td>" + "<td>" + kageraReportMoney(kageraNumber(row.kgs) * kageraNumber(row.price)) + "</td>" +
+            "<td>" + (g.prices.length ? kageraReportMoney(g.low) : "-") + "</td>" +
             "<td>" + (g.prices.length ? kageraReportMoney(g.average) : "-") + "</td>" +
             "<td>" + (g.prices.length ? kageraReportMoney(g.high) : "-") + "</td>" +
             "<td>" + kageraReportMoney(g.value) + "</td>" +
@@ -4725,7 +4729,7 @@ function kageraReportFileBase()
 
     // Sales Summary may legitimately display all auctions when Auction No. is blank.
     // The export filename must describe exactly what is currently displayed.
-    const auctionPart = auction
+    const auctionPart = window.kageraHLAllExport ? "All_Auctions" : auction
         ? "Auction_" + auction.replace(/[^A-Za-z0-9_-]+/g, "_")
         : (mode === "sales_summary" ? "All_Auctions" : "Selected_Auction");
 
@@ -4744,81 +4748,84 @@ function kageraDownloadBlob(blob, filename)
     setTimeout(function(){ URL.revokeObjectURL(url); }, 800);
 }
 
-function kageraExportSourceClone()
-{
-    const mode = kageraCurrentReportMode();
-    const auction = String(document.getElementById("kageraAuctionFilter")?.value || "").trim();
-
-    // High & Low is an auction-specific report, so it still requires an Auction No.
-    // Sales Summary does NOT require an Auction No.: export the table exactly as displayed.
-    if (mode === "high_low" && !auction) {
-        throw new Error("Select an Auction No. before exporting the High & Low report.");
-    }
-
-    const wrapper = document.createElement("div");
-    wrapper.className = "kagera-export-sheet";
-    wrapper.style.background = "#fff";
-    wrapper.style.color = "#000";
-    wrapper.style.fontFamily = "Arial, sans-serif";
-
-    if (mode === "high_low") {
-        const source = document.getElementById("kageraHighLowReport");
-        if (!source || source.style.display === "none") throw new Error("High & Low report is not ready yet.");
-        wrapper.appendChild(source.cloneNode(true));
-    } else if (mode === "sales_summary") {
-        const table = document.getElementById("kageraSalesSummaryTable");
-        if (!table || table.style.display === "none") throw new Error("Sales Summary is not ready yet.");
-        const heading = document.createElement("div");
-        const salesSummaryScope = auction
-            ? "SALES SUMMARY FOR AUCTION NO. " +
-                String(auction).replace(/[&<>"']/g, function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c];})
-            : "SALES SUMMARY FOR ALL DISPLAYED AUCTIONS";
-
-        heading.innerHTML = '<div style="text-align:center;font-weight:800;font-size:13px;margin-bottom:3px">KAGERA COFFEE EXCHANGE</div>' +
-            '<div style="text-align:center;font-weight:700;font-size:11px;margin-bottom:8px">' +
-            salesSummaryScope + '</div>';
-        wrapper.appendChild(heading);
-        wrapper.appendChild(table.cloneNode(true));
+function kageraHLNum(v) { const n=Number(v); return Number.isFinite(n)?n:0; }
+function kageraHLFmt(v, blankZero=false) { const n=kageraHLNum(v); return blankZero && n===0 ? "-" : n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function kageraHLEscape(v) {return String(v??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function kageraHLAuctionOrder(a,b) {const x=String(a),y=String(b);const nx=Number(x),ny=Number(y);return Number.isFinite(nx)&&Number.isFinite(ny)?nx-ny:x.localeCompare(y,undefined,{numeric:true});}
+function kageraHLSection(auction, payload, sequence) {
+    const groups=payload.groups||{};
+    const dry=groups['Dry Cherry Coffee']||{},clean=groups['Clean Coffee']||{};
+    const held=payload.held_on?formatKageraDate(payload.held_on):'—';
+    const header=(arr)=>'<tr>'+arr.map(x=>'<th>'+x+'</th>').join('')+'</tr>';
+    const sale=(name,g)=>'<tr><td>'+name+'</td><td>'+kageraHLFmt(g.kilos_offered,true)+'</td><td>'+kageraHLFmt(g.kilos_sold,true)+'</td><td>'+kageraHLFmt(g.total_value,true)+'</td></tr>';
+    const price=(name,g)=>'<tr><td>'+name+'</td>'+['lowest_price','average_price','highest_price'].map(k=>'<td>'+kageraHLFmt(g[k],true)+'</td>').join('')+'</tr>';
+    const percentage=g=>kageraHLNum(g.kilos_offered)>0?(100*kageraHLNum(g.kilos_sold)/kageraHLNum(g.kilos_offered)).toFixed(2)+'%':'0.00%';
+    const label='SALES SUMMARY FOR THE AUCTION NO. '+kageraHLEscape(auction);
+    return '<section class="kagera-hl-export-section">'+
+      '<div class="kagera-hl-auction-label">Auction No.'+kageraHLEscape(sequence)+'</div>'+
+      '<table class="kagera-hl-document-table"><tbody>'+
+      '<tr><th colspan="4">KAGERA COFFEE EXCHANGE</th></tr>'+
+      '<tr><th colspan="4">'+label+'</th></tr>'+
+      '<tr><th colspan="4">Held On '+kageraHLEscape(held)+'</th></tr>'+
+      header(['TYPE OF COFFEE','KILOS OFFERED','KILOS SOLD','TOTAL VALUE (TZS)'])+
+      sale('Dry Cherry Coffee',dry)+sale('Clean Coffee',clean)+
+      header(['PRICES','LOWEST PRICE PER KG','AVERAGE PRICE PER KG','HIGHEST PRICE PER KG'])+
+      price('Dry Cherry Coffee',dry)+price('Clean Coffee',clean)+
+      '<tr><td></td><td></td><th colspan="2">PERCENTAGE SOLD (Dry)= '+percentage(dry)+'</th></tr>'+
+      '<tr><td></td><td></td><th colspan="2">PERCENTAGE SOLD (Clean)= '+percentage(clean)+'</th></tr>'+
+      '</tbody></table></section>';
+}
+async function kageraHLFetch(auction,season) {
+    const params=new URLSearchParams({action:'report',season:season,auction_no:auction});
+    const response=await fetch('kagera_auction.php?'+params.toString(),{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
+    const json=await readKageraJson(response);
+    if(!response.ok || !json || !json.success)throw new Error(json?.message||'Could not retrieve Auction '+auction);
+    return json.data||{};
+}
+async function kageraHLDocument(all=false) {
+    const season=String(document.getElementById('kageraSeasonFilter')?.value||'').trim();
+    const selected=String(document.getElementById('kageraAuctionFilter')?.value||'').trim();
+    let auctions;
+    if(all) {
+       const values=new Set();
+       [...kageraCatalogueData,...kageraAllResults].forEach(row=>{
+          if((!season||kageraGetSeason(row.auction_date)===season)&&String(row.auction_no??'').trim())values.add(String(row.auction_no).trim());
+       });
+       auctions=[...values].sort(kageraHLAuctionOrder);
     } else {
-        throw new Error("Select High & Low or Sales Summary before exporting.");
+       if(!selected)throw new Error('Select an Auction No., or choose All Auctions export.');
+       auctions=[selected];
     }
-
-    wrapper.querySelectorAll("table").forEach(function(table){
-        table.style.width = "100%";
-        table.style.borderCollapse = "collapse";
-        table.style.border = "3px solid #000";
-        table.style.background = "#fff";
-        table.style.color = "#000";
-    });
-    wrapper.querySelectorAll("th,td").forEach(function(cell){
-        cell.style.border = "1px solid #000";
-        cell.style.background = "#fff";
-        cell.style.color = "#000";
-    });
-    wrapper.querySelectorAll("table tr:first-child > *").forEach(function(cell){cell.style.borderTop = "3px solid #000";});
-    wrapper.querySelectorAll("table tr:last-child > *").forEach(function(cell){cell.style.borderBottom = "3px solid #000";});
-    wrapper.querySelectorAll("table tr > *:first-child").forEach(function(cell){cell.style.borderLeft = "3px solid #000";});
-    wrapper.querySelectorAll("table tr > *:last-child").forEach(function(cell){cell.style.borderRight = "3px solid #000";});
-    wrapper.querySelectorAll(".kagera-high-low-total-row td").forEach(function(cell){
-        cell.style.fontWeight = "800";
-        cell.style.borderTop = "2px solid #000";
-    });
+    if(!auctions.length)throw new Error('No auctions found for the selected season.');
+    const wrapper=document.createElement('div');wrapper.className='kagera-export-sheet kagera-hl-document';
+    wrapper.innerHTML=all?'<h2 class="kagera-hl-document-heading">KAGERA AUCTION HIGH AND LOW – '+kageraHLEscape(season)+'</h2>':'';
+    for(let i=0;i<auctions.length;i++) {
+        const payload=await kageraHLFetch(auctions[i],season);
+        const section=document.createElement('div');section.innerHTML=kageraHLSection(auctions[i],payload,i+1);
+        wrapper.appendChild(section.firstElementChild);
+    }
     return wrapper;
 }
-
-function kageraExportDocumentHtml()
-{
-    const wrapper = kageraExportSourceClone();
-    return '<!doctype html><html><head><meta charset="utf-8"><style>' +
-        '@page{margin:12mm}body{font-family:Arial,sans-serif;color:#000;background:#fff}' +
-        'table{border-collapse:collapse;width:100%;border:3px solid #000;background:#fff}' +
-        'th,td{border:1px solid #000;padding:5px;text-align:center;background:#fff;color:#000}' +
-        'tr:first-child>*{border-top:3px solid #000}tr:last-child>*{border-bottom:3px solid #000}' +
-        'tr>*:first-child{border-left:3px solid #000}tr>*:last-child{border-right:3px solid #000}' +
-        '.kagera-high-low-total-row td{font-weight:bold;border-top:2px solid #000}' +
-        '.kagera-hl-title,.kagera-hl-subtitle,.kagera-hl-held{text-align:center;font-weight:bold}' +
-        '.kagera-hl-percentage{text-align:right;font-weight:bold;margin-top:5px}' +
-        '</style></head><body>' + wrapper.innerHTML + '</body></html>';
+function kageraExportSourceClone() {
+    const mode=kageraCurrentReportMode();
+    if(mode==='high_low') {if(!window.kageraHLPrepared)throw new Error('High & Low export is being prepared.');return window.kageraHLPrepared.cloneNode(true);}
+    const table=document.getElementById('kageraSalesSummaryTable');
+    if(mode!=='sales_summary'||!table||table.style.display==='none')throw new Error('Sales Summary is not ready yet.');
+    const wrapper=document.createElement('div');wrapper.className='kagera-export-sheet';
+    const title=document.createElement('h3');title.textContent='KAGERA COFFEE EXCHANGE — SALES SUMMARY';wrapper.appendChild(title);wrapper.appendChild(table.cloneNode(true));
+    return wrapper;
+}
+function kageraExportDocumentHtml() {
+ const wrapper=kageraExportSourceClone();
+ return '<!doctype html><html><head><meta charset="utf-8"><style>'+ 
+ '@page{size:A4;margin:12mm}body{font:10pt Arial,sans-serif;color:#000;background:#fff}'+
+ '.kagera-hl-document-heading{text-align:center;font-size:13pt;margin:0 0 22px}'+
+ '.kagera-hl-export-section{margin:0 0 26px;break-inside:avoid;page-break-inside:avoid}'+
+ '.kagera-hl-auction-label{font-weight:bold;margin:0 0 12px}'+
+ 'table{width:100%;border-collapse:collapse;border:1px solid #000;table-layout:fixed}'+
+ 'th,td{border:1px solid #000;padding:6px 4px;text-align:center;vertical-align:middle;color:#000;background:#fff}'+
+ 'th{font-weight:bold}.kagera-hl-document-table th{font-size:9pt}.kagera-hl-document-table td{font-size:9pt}'+
+ '</style></head><body>'+wrapper.innerHTML+'</body></html>';
 }
 
 function kageraExportReportExcel()
@@ -4918,14 +4925,22 @@ async function kageraExportReportPdf()
 async function kageraExportHighLow(format)
 {
     try {
-        if (format === "pdf") await kageraExportReportPdf();
-        else if (format === "excel") kageraExportReportExcel();
-        else if (format === "word") kageraExportReportWord();
+        const all=format.startsWith("all_");
+        if(all && kageraCurrentReportMode()!=="high_low") throw new Error("All Auctions export is available when High & Low is selected.");
+        const actual=all?format.slice(4):format;
+        window.kageraHLPrepared=null;
+        window.kageraHLAllExport=all;
+        if(kageraCurrentReportMode()==="high_low") window.kageraHLPrepared=await kageraHLDocument(all);
+        if (actual === "pdf") await kageraExportReportPdf();
+        else if (actual === "excel") kageraExportReportExcel();
+        else if (actual === "word") kageraExportReportWord();
         else throw new Error("Unsupported export format.");
     } catch (error) {
         console.error("Kagera report export:", error);
         alert(error.message || "Unable to export the selected report.");
     } finally {
+        window.kageraHLPrepared=null;
+        window.kageraHLAllExport=false;
         kageraCloseHighLowExportMenu();
     }
 }
