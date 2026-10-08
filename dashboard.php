@@ -1151,18 +1151,18 @@ html:has(body.report-sticky-mode),body.report-sticky-mode{
 }
 body.report-sticky-mode .dashboard{
  display:flex!important;flex-direction:column!important;align-items:stretch!important;
- height:auto!important;min-height:100dvh!important;overflow:visible!important;
+ height:auto!important;min-height:100dvh!important;overflow:visible!important;padding-top:var(--report-fixed-controls-height,105px)!important;
  grid-template-rows:none!important;gap:0!important;
 }
 body.report-sticky-mode .dashboard>.topbar{
- position:sticky!important;top:0!important;z-index:1000!important;
+ position:fixed!important;top:0!important;left:0!important;right:0!important;width:100%!important;z-index:1000!important;
  flex:0 0 auto!important;background:#f6f3f1!important;
  padding:9px 10px!important;border-bottom:1px solid #d9c9bd!important;
  box-shadow:0 3px 9px rgba(62,39,35,.08)!important;
 }
 body.report-sticky-mode .dashboard>.sales-actions,
 body.report-sticky-mode .dashboard>.pre-export-bar{
- position:sticky!important;top:var(--report-toolbar-height,56px)!important;
+ position:fixed!important;left:0!important;right:0!important;top:var(--report-toolbar-height,56px)!important;
  z-index:999!important;flex:0 0 auto!important;
  width:100%!important;max-width:100%!important;
  margin:0!important;padding:7px 10px!important;
@@ -1217,6 +1217,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
             </select>
             <?php endif; ?>
         </form>
+    </div><!-- /.topbar: close before report export and report body -->
             <?php if($display==='preauction'): ?>
 <div class="pre-export-bar" data-html2canvas-ignore="true"><div class="pre-export-wrap"><button type="button" id="preExportBtn" class="pre-export-btn">⇩ Export Report</button><div id="preExportMenu" class="pre-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div>
 <section class="pre-report">
@@ -1333,7 +1334,6 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
  <div class="sales-ppt-footer"><span class="contact web">www.coffee.go.tz</span><span class="contact email">info@coffee.go.tz</span><span class="contact phone">+255 27 2752324</span><span class="contact social">coffeeboardtz</span></div>
 </section>
 <?php endif; ?>
-    </div>
 
 
 <?php if($display==='totalclean'): ?>
@@ -1939,11 +1939,20 @@ menu.addEventListener('click',async e=>{
 </script>
 <script id="report-sticky-toolbar-height">
 (function(){
- const toolbar=document.querySelector('body.report-sticky-mode .dashboard > .topbar');
- if(!toolbar)return;
- const update=()=>document.documentElement.style.setProperty('--report-toolbar-height',Math.ceil(toolbar.getBoundingClientRect().height)+'px');
- update();window.addEventListener('resize',update,{passive:true});
- if(window.ResizeObserver)new ResizeObserver(update).observe(toolbar);
+ const root=document.querySelector('body.report-sticky-mode .dashboard');
+ if(!root)return;
+ const toolbar=root.querySelector(':scope > .topbar');
+ const exportBar=root.querySelector(':scope > .sales-actions, :scope > .pre-export-bar');
+ if(!toolbar||!exportBar)return;
+ const update=()=>{
+   const toolbarHeight=Math.ceil(toolbar.getBoundingClientRect().height);
+   const exportHeight=Math.ceil(exportBar.getBoundingClientRect().height);
+   document.documentElement.style.setProperty('--report-toolbar-height',toolbarHeight+'px');
+   document.documentElement.style.setProperty('--report-fixed-controls-height',(toolbarHeight+exportHeight+12)+'px');
+ };
+ update();
+ window.addEventListener('resize',update,{passive:true});
+ if(window.ResizeObserver){const observer=new ResizeObserver(update);observer.observe(toolbar);observer.observe(exportBar);}
 })();
 </script>
 </body>
