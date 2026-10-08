@@ -1524,32 +1524,6 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
   function word(){
    const table=exportTable();if(!table)return;const clone=table.cloneNode(true);clone.querySelectorAll('th,td').forEach(c=>c.style.cssText='border:1px solid #555;padding:3px;font-family:Arial;font-size:8pt');clone.style.cssText='border-collapse:collapse;width:100%';
    const html=`<html><head><meta charset="utf-8"></head><body><h3>Clean Coffee Buyer / Supplier-Seller Analysis</h3><p>Sale Season <?=htmlspecialchars($season)?> · ${esc(sel.options[sel.selectedIndex].text)}${search?.value?' · Filter: '+esc(search.value):''}</p>${clone.outerHTML}
-
-<style id="tcb-task-ui-style">
-#tcbTaskOverlay{position:fixed;inset:0;z-index:2147483000;background:rgba(25,23,19,.44);display:none;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(3px)}
-#tcbTaskOverlay.active{display:flex}.tcb-task-card{width:min(390px,94vw);box-sizing:border-box;background:#fff;border-radius:16px;padding:25px;box-shadow:0 20px 65px #0003;font:14px Arial,sans-serif;color:#302820}
-.tcb-task-heading{font-size:17px;font-weight:700;margin:0 0 7px}.tcb-task-description{color:#685b50;line-height:1.5;margin:0 0 18px}.tcb-task-progress{height:9px;background:#eee6dd;border-radius:9px;overflow:hidden}
-#tcbTaskBar{height:100%;width:0;background:linear-gradient(90deg,#795548,#b78c51);transition:width .22s}.tcb-task-bottom{display:flex;justify-content:space-between;margin-top:11px;font-weight:600}#tcbTaskPercent{font-variant-numeric:tabular-nums;color:#795548}
-@media(prefers-reduced-motion:reduce){#tcbTaskBar{transition:none}}
-</style>
-<div id="tcbTaskOverlay" role="status" aria-live="polite" aria-label="Processing report" aria-hidden="true">
- <div class="tcb-task-card"><div class="tcb-task-heading" id="tcbTaskHeading">Processing…</div><p class="tcb-task-description" id="tcbTaskDescription">Please wait.</p><div class="tcb-task-progress"><div id="tcbTaskBar"></div></div><div class="tcb-task-bottom"><span id="tcbTaskStep">Preparing</span><span id="tcbTaskPercent">0%</span></div></div>
-</div>
-<script id="tcb-task-ui-script">
-(function(){
- let token=0,active=false,completeTimer=null;
- const overlay=document.getElementById('tcbTaskOverlay');
- function update(value,description){if(!active)return;const n=Math.max(0,Math.min(100,Math.round(value)));document.getElementById('tcbTaskBar').style.width=n+'%';document.getElementById('tcbTaskPercent').textContent=n+'%';if(description)document.getElementById('tcbTaskDescription').textContent=description;document.getElementById('tcbTaskStep').textContent=n>=100?'Completed':n>=75?'Finalizing':n>=30?'Processing':'Preparing';}
- function start(title,description){clearTimeout(completeTimer);const t=++token;active=true;overlay.classList.add('active');overlay.setAttribute('aria-hidden','false');document.getElementById('tcbTaskHeading').textContent=title;update(0,description||'Preparing report…');return t;}
- function end(t,description){if(t!==token||!active)return;update(100,description||'Completed.');completeTimer=setTimeout(()=>{if(t===token){active=false;overlay.classList.remove('active');overlay.setAttribute('aria-hidden','true');}},650);}
- function fail(t,description){if(t!==token)return;update(0,description||'Operation failed.');completeTimer=setTimeout(()=>{if(t===token){active=false;overlay.classList.remove('active');overlay.setAttribute('aria-hidden','true');}},1600);}
- window.tcbTask={start,update,end,fail};
- // Report navigation: the actual page load ends the overlay, so no invented 100% while waiting.
- document.querySelectorAll('form.season').forEach(form=>form.addEventListener('submit',()=>{start('Loading report','Retrieving report data for the selected filters…');update(12,'Loading selected report…');}));
- document.querySelectorAll('form.season select').forEach(select=>select.addEventListener('change',()=>{if(select.form){start('Loading report','Applying report filters…');update(12,'Loading selected report…');}}));
- window.addEventListener('pageshow',()=>{if(active){active=false;overlay.classList.remove('active');overlay.setAttribute('aria-hidden','true');}});
-})();
-</script>
 </body></html>`;
    const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=fname('doc');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);
   }
@@ -1649,7 +1623,6 @@ new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},opti
   menu.classList.remove('show');
   const oldWidth=paper.style.width,oldMax=paper.style.maxWidth,oldShadow=paper.style.boxShadow;
   preApplyTableAlignment(paper);
-  window.tcbTask?.update(20,'Preparing report layout…');
   paper.classList.add('pdf-exporting');
   paper.style.width='794px';
   paper.style.maxWidth='794px';
@@ -1684,7 +1657,6 @@ new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},opti
       },
       ignoreElements:e=>e.classList&&e.classList.contains('pre-export-bar')
     });
-    window.tcbTask?.update(65,'Composing PDF pages…');
     const {jsPDF}=window.jspdf;
     const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true,putOnlyUsedFonts:true});
     const margin=6,pw=doc.internal.pageSize.getWidth()-margin*2,ph=doc.internal.pageSize.getHeight()-margin*2;
@@ -1704,9 +1676,7 @@ new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},opti
       /* PNG is lossless and avoids the faded/soft JPEG text seen previously. */
       doc.addImage(slice.toDataURL('image/png'),'PNG',margin,margin,pw,hmm,undefined,'FAST');
       y+=hpx;
-      window.tcbTask?.update(70+Math.round(27*y/canvas.height),'Preparing PDF page '+page+'…');
     }
-    window.tcbTask?.update(99,'Saving PDF…');
     doc.save(base+'.pdf');
   }finally{
     paper.classList.remove('pdf-exporting');
@@ -1715,7 +1685,15 @@ new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},opti
     paper.style.boxShadow=oldShadow;
   }
  }
- menu.addEventListener('click',async e=>{const f=e.target.closest('[data-format]')?.dataset.format;if(!f)return;e.stopPropagation();menu.classList.remove('show');if(btn.disabled)return;btn.disabled=true;const task=window.tcbTask?.start('Exporting Pre-Auction Report','Preparing '+f.toUpperCase()+' document…');window.tcbTask?.update(8,'Preparing report data…');try{if(f==='pdf')await pdf();else if(f==='xlsx'){window.tcbTask?.update(65,'Building Excel workbook…');excel();window.tcbTask?.update(98,'Saving Excel…');}else{window.tcbTask?.update(75,'Building Word document…');word();window.tcbTask?.update(98,'Saving Word…');}window.tcbTask?.end(task,'Export completed.');}catch(err){console.error(err);window.tcbTask?.fail(task,'Export failed.');alert('Pre-Auction export failed: '+err.message);}finally{btn.disabled=false;}});
+ menu.addEventListener('click',async e=>{const f=e.target.closest('[data-format]')?.dataset.format;if(!f)return;e.stopPropagation();menu.classList.remove('show');btn.disabled=true;
+ const task=window.reportTask.start('Exporting Pre-Auction Report','Preparing '+f.toUpperCase()+' report…');
+ try{window.reportTask.update(20,'Preparing report tables and formatting…');await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,40)));
+ if(f==='pdf'){window.reportTask.update(45,'Rendering high-resolution PDF pages…');await pdf();}
+ else if(f==='xlsx'){window.reportTask.update(70,'Generating Excel workbook…');excel();}
+ else{window.reportTask.update(70,'Generating Word document…');word();}
+ window.reportTask.update(95,'Saving report file…');window.reportTask.end(task,false);
+ }catch(err){console.error(err);window.reportTask.end(task,true);alert('Report export failed: '+err.message);}finally{btn.disabled=false;}
+ });
 })();
 
 function preApplyTableAlignment(root){
@@ -1868,7 +1846,7 @@ window.salesDashboardFit=fit;window.addEventListener('resize',fit,{passive:true}
 const button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions'),progress=document.getElementById('salesProgress'),status=document.getElementById('salesProgressText'),bar=document.getElementById('salesProgressFill'),percent=document.getElementById('salesProgressPercent');
 if(!button||!menu)return;
 button.addEventListener('click',e=>{e.stopPropagation();menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));});document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control')){menu.hidden=true;button.setAttribute('aria-expanded','false');}});
-function update(n,msg){if(progress)progress.hidden=false;if(bar)bar.style.width=n+'%';if(percent)percent.textContent=n+'%';if(status)status.textContent=msg;window.tcbTask?.update(n,msg);}
+function update(n,msg){if(progress)progress.hidden=false;if(bar)bar.style.width=n+'%';if(percent)percent.textContent=n+'%';if(status)status.textContent=msg;if(window.reportTask)window.reportTask.update(n,msg);}
 function save(blob,name){const a=document.createElement('a'),u=URL.createObjectURL(blob);a.href=u;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);a.remove()},5000);}
 function base(){return 'TCB_Sales_Dashboard_'+String(<?=json_encode($season)?>).replace(/\W/g,'_')+'_Friday_'+<?=json_encode($salesReportDate)?>;}
 async function library(url,check){if(check())return;await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=url;s.onload=resolve;s.onerror=()=>reject(new Error('Could not load export library: '+url));document.head.appendChild(s);});if(!check())throw new Error('Export library unavailable');}
@@ -1952,7 +1930,7 @@ async function wordWithImage(canvas){
 }
 menu.addEventListener('click',async e=>{
  const type=e.target.closest('[data-type]')?.dataset.type;if(!type)return;
- e.stopPropagation();menu.hidden=true;button.disabled=true;const task=window.tcbTask?.start('Exporting Sales Dashboard','Preparing '+type.toUpperCase()+' document…');window.tcbTask?.update(5,'Preparing dashboard export…');update(5,'Preparing dashboard export…');
+ e.stopPropagation();menu.hidden=true;button.disabled=true;const task=window.reportTask.start('Exporting Sales Dashboard','Preparing '+type.toUpperCase()+' export…');update(5,'Preparing dashboard export…');window.reportTask.update(5,'Preparing dashboard export…');
  try{
   const canvas=await snapshot();
   if(type==='png'||type==='jpg'){update(85,'Encoding image…');save(await canvasBlob(canvas,type==='png'?'image/png':'image/jpeg',.96),base()+'.'+type);}
@@ -1961,8 +1939,8 @@ menu.addEventListener('click',async e=>{
    update(85,'Composing PDF…');const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,210,297);pdf.save(base()+'.pdf');
   }else if(type==='xlsx')await excelWithImage(canvas);
   else if(type==='doc')await wordWithImage(canvas);
-  update(100,'Export completed');window.tcbTask?.end(task,'Export completed.');
- }catch(err){window.tcbTask?.fail(task,'Export failed.');update(0,'Export failed');alert('Dashboard export failed: '+err.message);console.error(err);}
+  update(100,'Export completed');window.reportTask.end(task,false);
+ }catch(err){update(0,'Export failed');window.reportTask.end(task,true);alert('Dashboard export failed: '+err.message);console.error(err);}
  finally{button.disabled=false;setTimeout(()=>{if(progress)progress.hidden=true;},2200);}
 });
 })();
@@ -1983,6 +1961,42 @@ menu.addEventListener('click',async e=>{
  update();
  window.addEventListener('resize',update,{passive:true});
  if(window.ResizeObserver){const observer=new ResizeObserver(update);observer.observe(toolbar);observer.observe(exportBar);}
+})();
+</script>
+<style>
+/* Shared report task indicator; independent of printable report content. */
+#reportTaskOverlay[hidden]{display:none!important}
+#reportTaskOverlay{position:fixed;inset:0;z-index:2147483000;background:rgba(28,20,15,.55);backdrop-filter:blur(3px);display:grid;place-items:center;padding:18px;box-sizing:border-box}
+.report-task-card{width:min(420px,100%);background:#fff;border-radius:17px;padding:25px;box-shadow:0 22px 75px rgba(0,0,0,.28);font-family:Arial,sans-serif;color:#3e2723;box-sizing:border-box}
+.report-task-icon{width:46px;height:46px;border-radius:14px;background:#f2e7dc;color:#65452f;display:grid;place-items:center;font-size:23px;margin-bottom:13px}
+.report-task-heading{font-size:18px;font-weight:800;margin:0 0 7px}
+.report-task-description{font-size:13px;color:#685b51;line-height:1.5;min-height:20px;margin-bottom:18px}
+.report-task-meter{height:9px;background:#eae4df;border-radius:20px;overflow:hidden}
+#reportTaskBar{height:100%;width:0;background:linear-gradient(90deg,#795548,#ba8b52);border-radius:20px;transition:width .25s ease}
+.report-task-bottom{display:flex;justify-content:space-between;margin-top:10px;font-size:12px;font-weight:700;color:#795548}
+@media(prefers-reduced-motion:reduce){#reportTaskBar{transition:none}}
+</style>
+<div id="reportTaskOverlay" hidden role="status" aria-live="polite" aria-atomic="true" data-html2canvas-ignore="true">
+ <div class="report-task-card"><div class="report-task-icon" aria-hidden="true">☕</div>
+ <div class="report-task-heading" id="reportTaskHeading">Preparing report</div>
+ <div class="report-task-description" id="reportTaskDescription">Please wait…</div>
+ <div class="report-task-meter" role="progressbar" aria-label="Report task progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="reportTaskMeter"><div id="reportTaskBar"></div></div>
+ <div class="report-task-bottom"><span id="reportTaskStage">Preparing</span><span id="reportTaskPercent">0%</span></div></div>
+</div>
+<script>
+window.reportTask=(function(){
+ let token=0,active=false;
+ const el=id=>document.getElementById(id);
+ function update(p,message){if(!active)return;const n=Math.max(0,Math.min(100,Math.round(p)));el('reportTaskBar').style.width=n+'%';el('reportTaskPercent').textContent=n+'%';el('reportTaskMeter').setAttribute('aria-valuenow',n);if(message)el('reportTaskDescription').textContent=message;el('reportTaskStage').textContent=n===100?'Completed':n>=80?'Finalizing':n>=30?'Processing':'Preparing';}
+ function start(title,message){const id=++token;active=true;el('reportTaskHeading').textContent=title;el('reportTaskOverlay').hidden=false;update(0,message||'Preparing…');return id;}
+ function end(id,failed){if(id!==token)return;if(!failed)update(100,'Your file is ready.');else{el('reportTaskStage').textContent='Failed';el('reportTaskDescription').textContent='The operation could not be completed.';}setTimeout(()=>{if(id===token){active=false;el('reportTaskOverlay').hidden=true;}},failed?1700:650);}
+ window.addEventListener('pageshow',()=>{active=false;el('reportTaskOverlay').hidden=true;});
+ return {start,update,end};
+})();
+(function(){
+ const form=document.querySelector('body.report-sticky-mode form.season');
+ if(form)form.addEventListener('submit',()=>{window.reportTask.start('Loading report','Applying filters and retrieving report data…');window.reportTask.update(18,'Loading selected season and report date…');});
+ document.querySelectorAll('body.report-sticky-mode form.season select').forEach(select=>select.addEventListener('change',()=>{if(select.form){window.reportTask.start('Loading report','Updating the selected report…');window.reportTask.update(18,'Retrieving report data…');}}));
 })();
 </script>
 </body>
