@@ -773,9 +773,9 @@ function exportHighLowExcel(){
  const html=`<!doctype html><html><head><meta charset="utf-8">
  <style>
  body{font-family:Arial,sans-serif}.highlow{width:760px;margin:auto}.hl-title,.hl-sub{text-align:center;font-weight:bold}
- table{border-collapse:collapse;width:100%;border:3px solid #000}th,td{border:1px solid #000;padding:5px;text-align:center;background:#fff;color:#000}
- tr:first-child>*{border-top:3px solid #000}tr:last-child>*{border-bottom:3px solid #000}
- tr>*:first-child{border-left:3px solid #000}tr>*:last-child{border-right:3px solid #000}
+ table{border-collapse:collapse;width:100%;border:1px solid #333}th,td{border:1px solid #333;padding:5px;text-align:center;background:#fff;color:#000}
+ tr:first-child>*{border-top:1px solid #333}tr:last-child>*{border-bottom:1px solid #333}
+ tr>*:first-child{border-left:1px solid #333}tr>*:last-child{border-right:1px solid #333}
  </style></head><body>${body}</body></html>`;
  downloadBlob(new Blob(['\ufeff',html],{type:'application/vnd.ms-excel;charset=utf-8'}),highLowExportName('xls'));
  message('High & Low Excel export prepared successfully.');
@@ -785,9 +785,9 @@ function exportHighLowWord(){
  const html=`<!doctype html><html><head><meta charset="utf-8">
  <style>
  @page{size:A4 portrait;margin:16mm}body{font-family:Arial,sans-serif}.highlow{width:100%}.hl-title,.hl-sub{text-align:center;font-weight:bold}
- table{border-collapse:collapse;width:100%;border:3px solid #000}th,td{border:1px solid #000;padding:5px;text-align:center;background:#fff;color:#000}
- tr:first-child>*{border-top:3px solid #000}tr:last-child>*{border-bottom:3px solid #000}
- tr>*:first-child{border-left:3px solid #000}tr>*:last-child{border-right:3px solid #000}
+ table{border-collapse:collapse;width:100%;border:1px solid #333}th,td{border:1px solid #333;padding:5px;text-align:center;background:#fff;color:#000}
+ tr:first-child>*{border-top:1px solid #333}tr:last-child>*{border-bottom:1px solid #333}
+ tr>*:first-child{border-left:1px solid #333}tr>*:last-child{border-right:1px solid #333}
  </style></head><body>${body}</body></html>`;
  downloadBlob(new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),highLowExportName('doc'));
  message('High & Low Word export prepared successfully.');
@@ -811,8 +811,8 @@ function exportSaleSummaryExcel(){
  table{border-collapse:collapse;width:100%;border:3px solid #000}
  th,td{border:1px solid #000;padding:5px;text-align:right;background:#fff;color:#000}
  th{text-align:center}td:first-child{text-align:left;font-weight:bold}
- tr:first-child>*{border-top:3px solid #000}tr:last-child>*{border-bottom:3px solid #000}
- tr>*:first-child{border-left:3px solid #000}tr>*:last-child{border-right:3px solid #000}
+ tr:first-child>*{border-top:1px solid #333}tr:last-child>*{border-bottom:1px solid #333}
+ tr>*:first-child{border-left:1px solid #333}tr>*:last-child{border-right:1px solid #333}
  .total td{font-weight:bold;border-top:2px solid #000}
  </style></head><body>${body}</body></html>`;
  downloadBlob(new Blob(['\ufeff',html],{type:'application/vnd.ms-excel;charset=utf-8'}),saleSummaryExportName('xls'));
@@ -826,8 +826,8 @@ function exportSaleSummaryWord(){
  table{border-collapse:collapse;width:100%;border:3px solid #000}
  th,td{border:1px solid #000;padding:5px;text-align:right;background:#fff;color:#000}
  th{text-align:center}td:first-child{text-align:left;font-weight:bold}
- tr:first-child>*{border-top:3px solid #000}tr:last-child>*{border-bottom:3px solid #000}
- tr>*:first-child{border-left:3px solid #000}tr>*:last-child{border-right:3px solid #000}
+ tr:first-child>*{border-top:1px solid #333}tr:last-child>*{border-bottom:1px solid #333}
+ tr>*:first-child{border-left:1px solid #333}tr>*:last-child{border-right:1px solid #333}
  .total td{font-weight:bold;border-top:2px solid #000}
  </style></head><body>${body}</body></html>`;
  downloadBlob(new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),saleSummaryExportName('doc'));
@@ -1023,13 +1023,14 @@ function cleanHighLowHTML(r,auctionNo){
  const low=p.lower||{low_price:r.lower_low,avg_price:r.lower_avg,high_price:r.lower_high};
  const held=r.auction_date ? new Date(r.auction_date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) : '-';
  return `<div class="highlow">
-   <div class="hl-title">TANZANIA COFFEE EXCHANGE</div>
-   <div class="hl-title">AUCTION RESULTS SALE NO TCB/M/${esc(auctionNo)}</div>
-   <div class="hl-sub">Held On ${esc(held)}</div>
-   <table class="hl-table"><colgroup><col><col><col></colgroup>
+   <table class="hl-table" style="width:100%;border-collapse:collapse;table-layout:fixed">
+    <colgroup><col style="width:33.333%"><col style="width:33.333%"><col style="width:33.334%"></colgroup>
+    <tr class="hl-section"><td colspan="3">TANZANIA COFFEE EXCHANGE</td></tr>
+    <tr class="hl-section"><td colspan="3">AUCTION RESULTS SALE NO TCB/M/${esc(auctionNo)}</td></tr>
+    <tr class="hl-section"><td colspan="3">Held On ${esc(held)}</td></tr>
     <tr class="hl-section"><td colspan="3">Price USD/50KGS</td></tr>
     <tr><th>KGS OFFERED</th><th>KGS SOLD</th><th>TOTAL VALUE (USD)</th></tr>
-    <tr class="hl-values"><td>${num(r.offered_kgs)}</td><td>${num(r.sold_kgs)}</td><td class="hl-money">${num(r.total_value)}</td></tr>
+    <tr class="hl-values"><td>${num(r.offered_kgs)}</td><td>${num(r.sold_kgs)}</td><td>${num(r.total_value)}</td></tr>
     <tr class="hl-section"><td colspan="3">Top Grades (AAA, AA, AB, A, B, PB)</td></tr>
     <tr><th>LOWEST PRICE</th><th>AVERAGE PRICE</th><th>HIGHEST PRICE</th></tr>
     <tr class="hl-values"><td>${num(top.low_price)}</td><td>${num(top.avg_price)}</td><td>${num(top.high_price)}</td></tr>
@@ -1102,7 +1103,13 @@ async function cleanExportAll(type){
  cleanProgress('Exporting all auctions',3,'Retrieving auction list…');
  try{
   const list=await api('clean_auction.php?action=auctions&season='+encodeURIComponent(season));
-  const auctions=list.auctions||[];
+  const auctions=[...(list.auctions||[])].sort((a,b)=>{
+   const da=Date.parse(a.d||a.auction_date||''),db=Date.parse(b.d||b.auction_date||'');
+   if(Number.isFinite(da)&&Number.isFinite(db)&&da!==db)return da-db;
+   const na=Number(a.auction_no),nb=Number(b.auction_no);
+   if(Number.isFinite(na)&&Number.isFinite(nb))return na-nb;
+   return String(a.auction_no).localeCompare(String(b.auction_no),undefined,{numeric:true});
+  });
   if(!auctions.length)throw Error('No auctions found for the selected season.');
   let sections='';
   for(let i=0;i<auctions.length;i++){
@@ -1159,7 +1166,7 @@ exportHighLow=function(type){
   $('exportMenu').classList.remove('open');
   try{
    cleanProgress('Exporting High & Low',20,'Preparing document…');
-   const html=cleanExportHTML(exportTableMarkup());
+   const html=cleanExportHTML('<div class="clean-auction-label">Auction No. '+esc($('auction').value)+'</div>'+exportTableMarkup());
    return cleanPdfFromHtml(html,highLowExportName('pdf')).then(()=>{cleanProgressDone();message('PDF prepared.')}).catch(e=>{$('cleanProgressOverlay').style.display='none';message(e.message,false)});
   }catch(e){$('cleanProgressOverlay').style.display='none';message(e.message,false)}
  }
