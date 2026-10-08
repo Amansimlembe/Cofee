@@ -1523,15 +1523,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
   }
   function word(){
    const table=exportTable();if(!table)return;const clone=table.cloneNode(true);clone.querySelectorAll('th,td').forEach(c=>c.style.cssText='border:1px solid #555;padding:3px;font-family:Arial;font-size:8pt');clone.style.cssText='border-collapse:collapse;width:100%';
-   const html=`<html><head><meta charset="utf-8"></head><body><h3>Clean Coffee Buyer / Supplier-Seller Analysis</h3><p>Sale Season <?=htmlspecialchars($season)?> · ${esc(sel.options[sel.selectedIndex].text)}${search?.value?' · Filter: '+esc(search.value):''}</p>${clone.outerHTML}<script id="report-sticky-toolbar-height">
-(function(){
- const toolbar=document.querySelector('body.report-sticky-mode .dashboard > .topbar');
- if(!toolbar)return;
- const update=()=>document.documentElement.style.setProperty('--report-toolbar-height',Math.ceil(toolbar.getBoundingClientRect().height)+'px');
- update();window.addEventListener('resize',update,{passive:true});
- if(window.ResizeObserver)new ResizeObserver(update).observe(toolbar);
-})();
-</script>
+   const html=`<html><head><meta charset="utf-8"></head><body><h3>Clean Coffee Buyer / Supplier-Seller Analysis</h3><p>Sale Season <?=htmlspecialchars($season)?> · ${esc(sel.options[sel.selectedIndex].text)}${search?.value?' · Filter: '+esc(search.value):''}</p>${clone.outerHTML}
 </body></html>`;
    const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=fname('doc');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);
   }
@@ -1943,6 +1935,15 @@ menu.addEventListener('click',async e=>{
  }catch(err){update(0,'Export failed');alert('Dashboard export failed: '+err.message);console.error(err);}
  finally{button.disabled=false;setTimeout(()=>{if(progress)progress.hidden=true;},2200);}
 });
+})();
+</script>
+<script id="report-sticky-toolbar-height">
+(function(){
+ const toolbar=document.querySelector('body.report-sticky-mode .dashboard > .topbar');
+ if(!toolbar)return;
+ const update=()=>document.documentElement.style.setProperty('--report-toolbar-height',Math.ceil(toolbar.getBoundingClientRect().height)+'px');
+ update();window.addEventListener('resize',update,{passive:true});
+ if(window.ResizeObserver)new ResizeObserver(update).observe(toolbar);
 })();
 </script>
 </body>
