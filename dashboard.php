@@ -150,8 +150,9 @@ if($display==='sales'){
  require_once __DIR__.'/kagera_database.php';
  require_once __DIR__.'/clean_database.php';
  require_once __DIR__.'/Direct_database.php';
- ensure_kagera_table(); ensure_kagera_catalogue_table(); ensure_clean_table(); direct_ensure_table();
- $db=kagera_db(); $cdb=clean_db(); $ddb=direct_db();
+  require_once __DIR__.'/farm_gate_database.php';
+ ensure_kagera_table(); ensure_kagera_catalogue_table(); ensure_clean_table(); direct_ensure_table(); ensure_farm_gate_table();
+ $db=kagera_db(); $cdb=clean_db(); $ddb=direct_db(); $fdb=farm_db();
  function season_bounds($s){if(!preg_match('/^(\\d{4})\\/(\\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
  function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
  $dateRows=$ddb->query("SELECT invoice_date d FROM public.direct_sales WHERE invoice_date IS NOT NULL UNION SELECT auction_date FROM public.clean_auction_results WHERE auction_date IS NOT NULL")->fetchAll();
@@ -166,6 +167,20 @@ if($display==='sales'){
  $salesFarm=['Dry Cherry'=>['weekkg'=>0,'weekval'=>0,'seasonkg'=>0,'seasonval'=>0],'Clean Coffee'=>['weekkg'=>0,'weekval'=>0,'seasonkg'=>0,'seasonval'=>0]];
  $kEndQ=$db->prepare("SELECT MAX(auction_date) FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t");$kEndQ->execute(['f'=>$kFrom,'t'=>$kTo]);$kSalesEnd=$kEndQ->fetchColumn()?:$kTo;$kWeekStart=date('Y-m-d',strtotime('monday this week',strtotime($kSalesEnd)));if($kWeekStart<$kFrom)$kWeekStart=$kFrom;
  $q=$db->prepare("SELECT $kcase typ,SUM(CASE WHEN auction_date BETWEEN :w AND :e THEN COALESCE(kgs,0) ELSE 0 END) weekkg,SUM(CASE WHEN auction_date BETWEEN :w AND :e THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END) weekval,SUM(COALESCE(kgs,0)) seasonkg,SUM(COALESCE(kgs,0)*COALESCE(price,0)) seasonval FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['w'=>$kWeekStart,'e'=>$kSalesEnd,'f'=>$kFrom,'t'=>$kTo]);foreach($q as$r){if(isset($salesFarm[$r['typ']]))foreach(['weekkg','weekval','seasonkg','seasonval']as$k)$salesFarm[$r['typ']][$k]=(float)$r[$k];}
+  /* Parchment: registered farm-gate contracts, identified by coffee type or processing method.
+     Contract amounts are in TZS; this does not represent confirmed auction sales. */
+  $salesParchment=['weekkg'=>0.0,'weekval'=>0.0,'seasonkg'=>0.0,'seasonval'=>0.0];
+  $pq=$fdb->prepare("SELECT
+      COALESCE(SUM(CASE WHEN contract_date BETWEEN :w AND :e THEN COALESCE(kilos_to_be_sold,0) ELSE 0 END),0) weekkg,
+      COALESCE(SUM(CASE WHEN contract_date BETWEEN :w AND :e THEN COALESCE(kilos_to_be_sold,0)*COALESCE(price_per_kilo_tzs,0) ELSE 0 END),0) weekval,
+      COALESCE(SUM(COALESCE(kilos_to_be_sold,0)),0) seasonkg,
+      COALESCE(SUM(COALESCE(kilos_to_be_sold,0)*COALESCE(price_per_kilo_tzs,0)),0) seasonval
+    FROM public.farm_gate_contracts
+    WHERE contract_date BETWEEN :f AND :t
+      AND (COALESCE(coffee_type,'') ILIKE '%parchment%' OR COALESCE(processing_method,'') ILIKE '%parchment%')");
+  $pq->execute(['w'=>$weekStart,'e'=>$salesEnd,'f'=>$from,'t'=>$to]);
+  $parchmentRow=$pq->fetch()?:[];
+  foreach($salesParchment as$key=>$unused)$salesParchment[$key]=(float)($parchmentRow[$key]??0);
  $coffeeTypes=['M-Arabica','H-Arabica','Robusta'];$channels=['Clean Auction','Direct Export','Local Roast','Local Sale'];$salesClean=[];foreach($channels as$ch)foreach($coffeeTypes as$ct)$salesClean[$ch][$ct]=['weekkg'=>0,'weekval'=>0,'seasonkg'=>0,'seasonval'=>0];
  $ctype="CASE WHEN LOWER(COALESCE(grade2,'')||' '||COALESCE(grade,'')) LIKE '%robusta%' OR UPPER(BTRIM(COALESCE(grade,''))) LIKE 'R%' THEN 'Robusta' WHEN UPPER(BTRIM(COALESCE(grade,''))) LIKE 'H%' OR LOWER(COALESCE(grade2,'')) LIKE '%hard%' THEN 'H-Arabica' ELSE 'M-Arabica' END";
  $sold="UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
@@ -175,7 +190,11 @@ if($display==='sales'){
  $lsSeason="GREATEST(COALESCE(d.net_kg,0)-COALESCE((SELECT SUM(COALESCE(de.net_kg,0)) FROM public.direct_sales de WHERE UPPER(BTRIM(COALESCE(de.sale_category,''))) IN ('DE','DIRECT EXPORT') AND NULLIF(BTRIM(de.source_invoice_number),'') IS NOT NULL AND UPPER(BTRIM(de.source_invoice_number))=UPPER(BTRIM(d.invoice_number)) AND de.invoice_date BETWEEN :lf AND :lt),0),0)";
  $qty="CASE WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('LS','LOCAL SALE') THEN $lsSeason ELSE COALESCE(d.net_kg,0) END";
  $q=$ddb->prepare("SELECT $dch ch,$dtype ct,SUM(CASE WHEN d.invoice_date BETWEEN :w AND :e THEN $qty ELSE 0 END) weekkg,SUM(CASE WHEN d.invoice_date BETWEEN :w AND :e THEN ($qty)*COALESCE(d.price_usd_50kg,0)/50.0 ELSE 0 END) weekval,SUM($qty) seasonkg,SUM(($qty)*COALESCE(d.price_usd_50kg,0)/50.0) seasonval FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $dch IS NOT NULL GROUP BY 1,2");$q->execute(['w'=>$weekStart,'e'=>$salesEnd,'f'=>$from,'t'=>$to,'lf'=>$from,'lt'=>$to]);foreach($q as$r)if(isset($salesClean[$r['ch']][$r['ct']]))foreach(['weekkg','weekval','seasonkg','seasonval']as$k)$salesClean[$r['ch']][$r['ct']][$k]=(float)$r[$k];
- $salesGrandKg=$salesGrandVal=0;foreach($channels as$ch)foreach($coffeeTypes as$ct){$salesGrandKg+=$salesClean[$ch][$ct]['seasonkg'];$salesGrandVal+=$salesClean[$ch][$ct]['seasonval'];}
+  $salesGrandKg=$salesGrandVal=$salesGrandWeekKg=$salesGrandWeekVal=0;
+  foreach($channels as$ch)foreach($coffeeTypes as$ct){
+    $salesGrandKg+=$salesClean[$ch][$ct]['seasonkg'];$salesGrandVal+=$salesClean[$ch][$ct]['seasonval'];
+    $salesGrandWeekKg+=$salesClean[$ch][$ct]['weekkg'];$salesGrandWeekVal+=$salesClean[$ch][$ct]['weekval'];
+  }
  $estimatedProduction=85000.0;$productionPct=$estimatedProduction>0?($salesGrandKg/1000)/$estimatedProduction*100:0;
  $dashboardTitle='Sales Dashboard';$dashboardSub='Tanzania Coffee Board · Sales Season (FY)';
 }else
@@ -1203,15 +1222,15 @@ tfoot td{font-weight:700!important}
    <tr><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
    <?php foreach(['Dry Cherry','Clean Coffee'] as$ct):$r=$salesFarm[$ct];?><tr><td class="sales-label"><?=htmlspecialchars($ct)?></td><td class="sales-num"><?=nf($r['weekkg']/1000,3)?></td><td class="sales-num"><?=nf($r['weekval'],2)?></td><td class="sales-num"><?=nf($r['seasonkg']/1000,3)?></td><td class="sales-num"><?=nf($r['seasonval'],2)?></td></tr><?php endforeach;?>
    <tr><td class="sales-label">2&nbsp; Certified Coffee</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td></tr>
-   <tr><td class="sales-label">3&nbsp; Parchment</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td></tr>
-   <?php $farmWeekKg=array_sum(array_column($salesFarm,'weekkg'));$farmWeekVal=array_sum(array_column($salesFarm,'weekval'));$farmSeasonKg=array_sum(array_column($salesFarm,'seasonkg'));$farmSeasonVal=array_sum(array_column($salesFarm,'seasonval')); ?>
-   <tr class="sales-grand"><td>Grand Total (Kagera Auction)</td><td class="sales-num"><?=nf($farmWeekKg/1000,3)?></td><td class="sales-num"><?=nf($farmWeekVal,2)?></td><td class="sales-num"><?=nf($farmSeasonKg/1000,3)?></td><td class="sales-num"><?=nf($farmSeasonVal,2)?></td></tr>
+   <tr><td class="sales-label">3&nbsp; Parchment</td><?php foreach(['weekkg','weekval','seasonkg','seasonval'] as $field): $v=$salesParchment[$field]; ?><td class="sales-num"><?=$v?nf(str_ends_with($field,'kg')?$v/1000:$v,str_ends_with($field,'kg')?3:2):'—'?></td><?php endforeach; ?></tr>
+   <?php $farmWeekKg=array_sum(array_column($salesFarm,'weekkg'))+$salesParchment['weekkg'];$farmWeekVal=array_sum(array_column($salesFarm,'weekval'))+$salesParchment['weekval'];$farmSeasonKg=array_sum(array_column($salesFarm,'seasonkg'))+$salesParchment['seasonkg'];$farmSeasonVal=array_sum(array_column($salesFarm,'seasonval'))+$salesParchment['seasonval']; ?>
+   <tr class="sales-grand"><td>Grand Total (Kagera Auction, Certified Coffee and Parchment)</td><td class="sales-num"><?=nf($farmWeekKg/1000,3)?></td><td class="sales-num"><?=nf($farmWeekVal,2)?></td><td class="sales-num"><?=nf($farmSeasonKg/1000,3)?></td><td class="sales-num"><?=nf($farmSeasonVal,2)?></td></tr>
    <tr class="sales-band"><td colspan="5">Clean Coffee Market</td></tr>
    <?php foreach($channels as$ci=>$ch): ?>
    <tr><th><?=$ci+1?>&nbsp; <?=htmlspecialchars($ch)?></th><th>This Week (MT)</th><th>Value ($)</th><th>Season Total (MT)</th><th>Total Value ($)</th></tr>
    <?php foreach($coffeeTypes as$ct):$r=$salesClean[$ch][$ct];?><tr><td class="sales-label"><?=htmlspecialchars($ct)?></td><td class="sales-num"><?=$r['weekkg']?nf($r['weekkg']/1000,2):'—'?></td><td class="sales-num"><?=$r['weekval']?nf($r['weekval'],2):'—'?></td><td class="sales-num"><?=$r['seasonkg']?nf($r['seasonkg']/1000,2):'—'?></td><td class="sales-num"><?=$r['seasonval']?nf($r['seasonval'],2):'—'?></td></tr><?php endforeach;?>
    <?php endforeach;?>
-   <tr class="sales-grand"><td colspan="3">Grand Total (Clean Auctions, Direct Export, Local Roast and Local Sale)</td><td class="sales-num"><?=nf($salesGrandKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandVal,2)?></td></tr>
+   <tr class="sales-grand"><td>Grand Total (Clean Auctions, Direct Export, Local Roast and Local Sale)</td><td class="sales-num"><?=nf($salesGrandWeekKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandWeekVal,2)?></td><td class="sales-num"><?=nf($salesGrandKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandVal,2)?></td></tr>
    <tr class="sales-band"><td colspan="5">Production</td></tr>
    <tr class="sales-production"><td colspan="3">Estimated Production (MT)</td><td colspan="2" class="sales-num"><?=nf($estimatedProduction,2)?></td></tr>
    <tr class="sales-production"><td colspan="3">Percentage Achieved</td><td colspan="2" class="sales-num"><?=nf($productionPct,2)?></td></tr>
