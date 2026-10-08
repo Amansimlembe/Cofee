@@ -3231,6 +3231,16 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
 #kageraSalesSummaryTable th,
 #kageraSalesSummaryTable td { padding:4px 5px; }
 
+
+#kageraActivity{position:fixed;inset:0;z-index:99999;background:rgba(31,25,21,.34);display:none;align-items:center;justify-content:center;padding:20px}
+#kageraActivity.active{display:flex}
+.kagera-activity-card{width:min(390px,94vw);background:white;border:1px solid #b9a08b;border-radius:14px;padding:23px;box-shadow:0 16px 50px #0003;text-align:center;font:14px Arial,sans-serif;color:#4e342e}
+.kagera-activity-spinner{width:35px;height:35px;margin:0 auto 13px;border:4px solid #eaded4;border-top-color:#795548;border-radius:50%;animation:kagera-spin .85s linear infinite}
+@keyframes kagera-spin{to{transform:rotate(360deg)}}
+.kagera-activity-title{font-size:16px;font-weight:700;margin-bottom:9px}
+.kagera-activity-track{height:9px;background:#ede4dc;border-radius:10px;overflow:hidden;margin:15px 0 8px}
+#kageraActivityBar{height:100%;width:0%;background:#795548;transition:width .22s ease}
+#kageraActivityPercent{font-weight:700;font-variant-numeric:tabular-nums}
 </style>
 
 </head>
@@ -4719,6 +4729,35 @@ function kageraCurrentReportMode()
     return String(kageraDisplayType?.value || "").trim();
 }
 
+
+let kageraActivityOwner=0,kageraActivityTimer=null;
+function kageraActivityStart(title,detail){
+ const id=++kageraActivityOwner;
+ clearInterval(kageraActivityTimer);
+ const box=document.getElementById('kageraActivity');if(!box)return id;
+ box.classList.add('active');
+ document.getElementById('kageraActivityTitle').textContent=title||'Loading…';
+ document.getElementById('kageraActivityDetail').textContent=detail||'Processing your request';
+ kageraActivityUpdate(2,id);
+ return id;
+}
+function kageraActivityUpdate(value,id,detail){
+ if(id!==kageraActivityOwner)return;
+ const p=Math.max(0,Math.min(100,Math.round(value)));
+ const bar=document.getElementById('kageraActivityBar'),pct=document.getElementById('kageraActivityPercent');
+ if(bar)bar.style.width=p+'%';if(pct)pct.textContent=p+'%';
+ if(detail){const el=document.getElementById('kageraActivityDetail');if(el)el.textContent=detail;}
+}
+function kageraActivityFinish(id){
+ if(id!==kageraActivityOwner)return;
+ clearInterval(kageraActivityTimer);kageraActivityUpdate(100,id,'Ready');
+ setTimeout(()=>{if(id===kageraActivityOwner)document.getElementById('kageraActivity')?.classList.remove('active');},330);
+}
+function kageraActivityAuto(id){
+ let p=5;
+ kageraActivityTimer=setInterval(()=>{if(id!==kageraActivityOwner){clearInterval(kageraActivityTimer);return}p=Math.min(90,p+(p<50?4:p<75?2:1));kageraActivityUpdate(p,id)},350);
+}
+
 function kageraReportFileBase()
 {
     const mode = kageraCurrentReportMode();
@@ -4782,7 +4821,7 @@ async function kageraHLFetch(auction,season) {
     if(!response.ok || !json || !json.success)throw new Error(json?.message||'Could not retrieve Auction '+auction);
     return json.data||{};
 }
-async function kageraHLDocument(all=false) {
+async function kageraHLDocument(all=false,onProgress=null) {
     const season=String(document.getElementById('kageraSeasonFilter')?.value||'').trim();
     const selected=String(document.getElementById('kageraAuctionFilter')?.value||'').trim();
     let auctions;
@@ -4803,6 +4842,7 @@ async function kageraHLDocument(all=false) {
         const payload=await kageraHLFetch(auctions[i],season);
         const section=document.createElement('div');section.innerHTML=kageraHLSection(auctions[i],payload,i+1);
         wrapper.appendChild(section.firstElementChild);
+        if(onProgress)onProgress(i+1,auctions.length);
     }
     return wrapper;
 }
@@ -4822,10 +4862,11 @@ function kageraExportDocumentHtml() {
  '.kagera-hl-document-heading{text-align:center;font-size:13pt;margin:0 0 22px}'+
  '.kagera-hl-export-section{margin:0 0 26px;break-inside:avoid;page-break-inside:avoid}'+
  '.kagera-hl-auction-label{font-weight:bold;margin:0 0 12px}'+
- 'table{width:100%;border-collapse:collapse;border:1px solid #000;table-layout:fixed}'+
+ 'table{width:100%;border-collapse:collapse;border:1px solid #000;table-layout:fixed;mso-table-layout-alt:fixed}'+
  'th,td{border:1px solid #000;padding:6px 4px;text-align:center;vertical-align:middle;color:#000;background:#fff}'+
  'th{font-weight:bold}.kagera-hl-document-table th{font-size:9pt}.kagera-hl-document-table td{font-size:9pt}'+
- '</style></head><body>'+wrapper.innerHTML+'</body></html>';
+ '</style></head><body>'+wrapper.innerHTML+'<div id="kageraActivity" role="status" aria-live="polite" aria-label="Kagera processing indicator"><div class="kagera-activity-card"><div class="kagera-activity-spinner"></div><div class="kagera-activity-title" id="kageraActivityTitle">Preparing…</div><div id="kageraActivityDetail">Please wait</div><div class="kagera-activity-track"><div id="kageraActivityBar"></div></div><div id="kageraActivityPercent">0%</div></div></div>
+</body></html>';
 }
 
 function kageraExportReportExcel()
@@ -4873,78 +4914,78 @@ async function kageraEnsurePdfLibrary()
     }
 }
 
-async function kageraExportReportPdf()
-{
-    await kageraEnsurePdfLibrary();
-    const source = kageraExportSourceClone();
-    const mode = kageraCurrentReportMode();
-    const button = document.getElementById("kageraHighLowExportBtn");
-    const original = button ? button.innerHTML : "";
-    if (button) { button.disabled = true; button.textContent = "Preparing PDF…"; }
-
-    source.style.width = mode === "sales_summary" ? "1050px" : "780px";
-    source.style.maxWidth = source.style.width;
-    source.style.padding = "10px";
-    const stage = document.createElement("div");
-    stage.style.position = "fixed";
-    stage.style.left = "-12000px";
-    stage.style.top = "0";
-    stage.style.width = mode === "sales_summary" ? "1070px" : "800px";
-    stage.style.background = "#fff";
-    stage.appendChild(source);
-    document.body.appendChild(stage);
-
-    try {
-        const canvas = await window.html2canvas(source, {scale:2.2, backgroundColor:'#ffffff', useCORS:true, logging:false});
-        const JsPDF = window.jspdf.jsPDF;
-        const orientation = mode === "sales_summary" ? "landscape" : "portrait";
-        const pdf = new JsPDF({orientation:orientation, unit:'mm', format:'a4', compress:true});
-        const pageW = pdf.internal.pageSize.getWidth();
-        const pageH = pdf.internal.pageSize.getHeight();
-        const margin = 8;
-        const usableW = pageW - margin * 2;
-        const pxPerMm = canvas.width / usableW;
-        const pagePx = Math.floor((pageH - margin * 2) * pxPerMm);
-        let y = 0, page = 0;
-        while (y < canvas.height) {
-            const sliceH = Math.min(pagePx, canvas.height - y);
-            const part = document.createElement('canvas');
-            part.width = canvas.width; part.height = sliceH;
-            part.getContext('2d').drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-            if (page > 0) pdf.addPage();
-            pdf.addImage(part.toDataURL('image/jpeg',0.96), 'JPEG', margin, margin, usableW, sliceH / pxPerMm, undefined, 'FAST');
-            y += sliceH; page++;
-        }
-        pdf.save(kageraReportFileBase() + '.pdf');
-    } finally {
-        stage.remove();
-        if (button) { button.disabled = false; button.innerHTML = original; }
-    }
+async function kageraExportReportPdf(){
+ await kageraEnsurePdfLibrary();
+ const source=kageraExportSourceClone(),mode=kageraCurrentReportMode();
+ const all=!!window.kageraHLAllExport&&mode==='high_low';
+ const stage=document.createElement('div');
+ stage.style.cssText='position:fixed;left:-12000px;top:0;width:780px;background:#fff;z-index:-1';
+ document.body.appendChild(stage);
+ try{
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({orientation:mode==='sales_summary'?'landscape':'portrait',unit:'mm',format:'a4',compress:true});
+  const margin=10,pw=pdf.internal.pageSize.getWidth()-margin*2,ph=pdf.internal.pageSize.getHeight()-margin*2;
+  let page=0;
+  const sections=all?[...source.querySelectorAll('.kagera-hl-export-section')]:[source];
+  const heading=source.querySelector('.kagera-hl-document-heading')?.textContent||'';
+  for(let i=0;i<sections.length;i++){
+   const section=sections[i].cloneNode(true);
+   const paper=document.createElement('div');
+   paper.className='kagera-hl-document';
+   paper.style.cssText='width:760px;background:#fff;color:#111;padding:12px;font:12px Arial,sans-serif';
+   if(all&&i===0){const h=document.createElement('h2');h.textContent=heading;h.style.cssText='text-align:center;font-size:16px;margin:0 0 18px';paper.appendChild(h)}
+   paper.appendChild(section);stage.replaceChildren(paper);
+   const canvas=await html2canvas(paper,{scale:3,backgroundColor:'#fff',useCORS:true,logging:false});
+   const scaledHeight=canvas.height*pw/canvas.width;
+   if(page++)pdf.addPage();
+   if(scaledHeight<=ph){
+     pdf.addImage(canvas.toDataURL('image/png'),'PNG',margin,margin,pw,scaledHeight,undefined,'FAST');
+   }else{
+     const slicePx=Math.floor(canvas.width*ph/pw);
+     for(let y=0;y<canvas.height;y+=slicePx){
+       if(y)pdf.addPage();
+       const slice=document.createElement('canvas');slice.width=canvas.width;slice.height=Math.min(slicePx,canvas.height-y);
+       slice.getContext('2d').drawImage(canvas,0,y,canvas.width,slice.height,0,0,canvas.width,slice.height);
+       pdf.addImage(slice.toDataURL('image/png'),'PNG',margin,margin,pw,slice.height*pw/canvas.width,undefined,'FAST');
+     }
+   }
+   if(window.kageraExportProgress)window.kageraExportProgress(60+Math.round((i+1)/sections.length*35),'Rendering PDF auction '+(i+1)+' of '+sections.length);
+   await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  pdf.save(kageraReportFileBase()+'.pdf');
+ }finally{stage.remove()}
 }
-
-async function kageraExportHighLow(format)
-{
-    try {
-        const all=format.startsWith("all_");
-        if(all && kageraCurrentReportMode()!=="high_low") throw new Error("All Auctions export is available when High & Low is selected.");
-        const actual=all?format.slice(4):format;
-        window.kageraHLPrepared=null;
-        window.kageraHLAllExport=all;
-        if(kageraCurrentReportMode()==="high_low") window.kageraHLPrepared=await kageraHLDocument(all);
-        if (actual === "pdf") await kageraExportReportPdf();
-        else if (actual === "excel") kageraExportReportExcel();
-        else if (actual === "word") kageraExportReportWord();
-        else throw new Error("Unsupported export format.");
-    } catch (error) {
-        console.error("Kagera report export:", error);
-        alert(error.message || "Unable to export the selected report.");
-    } finally {
-        window.kageraHLPrepared=null;
-        window.kageraHLAllExport=false;
-        kageraCloseHighLowExportMenu();
-    }
+async function kageraExportHighLow(format){
+ const token=kageraActivityStart('Preparing export','Collecting auction information…');
+ kageraActivityAuto(token);
+ const controls=[...document.querySelectorAll('[data-kagera-export]')];
+ controls.forEach(b=>b.disabled=true);
+ try{
+  const all=format.startsWith('all_');
+  if(all&&kageraCurrentReportMode()!=='high_low')throw new Error('All Auctions export requires High & Low display.');
+  const actual=all?format.slice(4):format;
+  window.kageraHLPrepared=null;window.kageraHLAllExport=all;
+  window.kageraExportProgress=(percent,detail)=>kageraActivityUpdate(percent,token,detail);
+  if(kageraCurrentReportMode()==='high_low'){
+   kageraActivityUpdate(8,token,'Retrieving auction reports…');
+   window.kageraHLPrepared=await kageraHLDocument(all,(done,total)=>kageraActivityUpdate(8+Math.round(50*done/total),token,'Loaded '+done+' of '+total+' auctions'));
+  }
+  kageraActivityUpdate(60,token,'Creating '+actual.toUpperCase()+' document…');
+  if(actual==='pdf')await kageraExportReportPdf();
+  else if(actual==='excel')kageraExportReportExcel();
+  else if(actual==='word')kageraExportReportWord();
+  else throw new Error('Unsupported export format.');
+  kageraActivityFinish(token);
+ }catch(error){
+  console.error('Kagera report export:',error);
+  kageraActivityFinish(token);
+  alert(error.message||'Unable to export the selected report.');
+ }finally{
+  controls.forEach(b=>b.disabled=false);
+  window.kageraHLPrepared=null;window.kageraHLAllExport=false;window.kageraExportProgress=null;
+  kageraCloseHighLowExportMenu();
+ }
 }
-
 function kageraSetupHighLowExport()
 {
     const btn = document.getElementById("kageraHighLowExportBtn");
@@ -5005,6 +5046,9 @@ function kageraSetHighLowExportVisible(visible)
 
 async function kageraShowReport()
 {
+    const activityToken=kageraActivityStart('Loading auction report','Retrieving selected auction information…');
+    kageraActivityAuto(activityToken);
+    setTimeout(()=>kageraActivityFinish(activityToken),1800);
     const panel = document.getElementById("kageraReportPanel");
     const highLow = document.getElementById("kageraHighLowReport");
     const salesSummary = document.getElementById("kageraSalesSummaryTable");
@@ -5402,6 +5446,9 @@ async function kageraShowReport()
 
 async function loadKageraResults(options = {})
 {
+    const activityToken=kageraActivityStart('Loading auction data','Updating the selected display…');
+    kageraActivityAuto(activityToken);
+    setTimeout(()=>kageraActivityFinish(activityToken),1200);
     const type = kageraDisplayType ? kageraDisplayType.value : "results";
     const force = options.force === true;
 
