@@ -1264,7 +1264,7 @@ tfoot td{font-weight:700!important}
    <tr><th><?=$ci+1?>&nbsp; <?=htmlspecialchars($ch)?></th><th>This Week (MT)</th><th>Value ($)</th><th>Season Total (MT)</th><th>Total Value ($)</th></tr>
    <?php foreach($coffeeTypes as$ct):$r=$salesClean[$ch][$ct];?><tr><td class="sales-label"><?=htmlspecialchars($ct)?></td><td class="sales-num"><?=$r['weekkg']?nf($r['weekkg']/1000,2):'—'?></td><td class="sales-num"><?=$r['weekval']?nf($r['weekval'],2):'—'?></td><td class="sales-num"><?=$r['seasonkg']?nf($r['seasonkg']/1000,2):'—'?></td><td class="sales-num"><?=$r['seasonval']?nf($r['seasonval'],2):'—'?></td></tr><?php endforeach;?>
    <?php endforeach;?>
-   <tr class="sales-grand"><td>Grand Total (Clean Auctions, Direct Export, Local Roast and Local Sale)</td><td class="sales-num"><?=nf($salesGrandWeekKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandWeekVal,2)?></td><td class="sales-num"><?=nf($salesGrandKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandVal,2)?></td></tr>
+   <tr class="sales-grand"><td>Grand Total (Clean Auction, Direct Export, Local Roast, and Local Sale)</td><td class="sales-num"><?=nf($salesGrandWeekKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandWeekVal,2)?></td><td class="sales-num"><?=nf($salesGrandKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandVal,2)?></td></tr>
    <tr class="sales-band"><td colspan="5">Production</td></tr>
    <tr class="sales-production"><td colspan="3">Estimated Production (MT)</td><td colspan="2" class="sales-num"><?=nf($estimatedProduction,2)?></td></tr>
    <tr class="sales-production"><td colspan="3">Percentage Achieved</td><td colspan="2" class="sales-num"><?=nf($productionPct,2)?></td></tr>
@@ -1717,6 +1717,22 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 #salesDashboardDocument.sales-ppt .sales-ppt-footer .phone{left:9.2%!important;top:91.15%!important}
 #salesDashboardDocument.sales-ppt .sales-ppt-footer .social{left:76.2%!important;top:86.6%!important;font-size:21px!important}
 #salesDashboardDocument.sales-ppt .sales-ppt-title span{border-bottom:8px solid #985027!important}
+/* Ensure long grand-total descriptions are visible in full, not clipped by the fixed table layout. */
+#salesDashboardDocument .sales-table th:first-child{width:43%!important}
+#salesDashboardDocument .sales-table th:nth-child(2){width:13%!important}
+#salesDashboardDocument .sales-table th:nth-child(3){width:16%!important}
+#salesDashboardDocument .sales-table th:nth-child(4){width:13%!important}
+#salesDashboardDocument .sales-table th:nth-child(5){width:15%!important}
+#salesDashboardDocument .sales-table tr.sales-grand td:first-child{
+ white-space:normal!important;overflow-wrap:break-word!important;word-break:normal!important;
+ line-height:1.3!important;font-size:11.5px!important;text-align:left!important;
+ padding:7px 8px!important;vertical-align:middle!important;color:#2d2119!important;
+ background:rgba(255,244,222,.96)!important;
+}
+#salesDashboardDocument .sales-table tr.sales-grand td:not(:first-child){
+ white-space:nowrap!important;vertical-align:middle!important;font-weight:800!important;
+ background:rgba(255,244,222,.96)!important;
+}
 </style>
 <script>
 (function(){
