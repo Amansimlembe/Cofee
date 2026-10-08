@@ -4,6 +4,37 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) { header(
 
 $display=strtolower(trim($_GET['display']??'kagera'));
 if(!in_array($display,['sales','preauction','kagera','clean','direct','totalclean'],true))$display='kagera';
+/* Manual terminal market prices: persistent, report-date-specific and authenticated. */
+if(!isset($_SESSION['terminal_price_csrf']))$_SESSION['terminal_price_csrf']=bin2hex(random_bytes(24));
+function terminal_price_db(): PDO {
+ static $pdo=null;if($pdo instanceof PDO)return $pdo;
+ $url=getenv('DATABASE_URL');$parts=$url?parse_url($url):false;
+ if(!$parts||empty($parts['host'])||empty($parts['user'])||empty($parts['path']))throw new RuntimeException('Database configuration is unavailable.');
+ $dsn=sprintf('pgsql:host=%s;port=%d;dbname=%s',$parts['host'],(int)($parts['port']??5432),ltrim($parts['path'],'/'));
+ return $pdo=new PDO($dsn,urldecode($parts['user']),urldecode($parts['pass']??''),[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
+}
+function terminal_price_table(PDO $pdo):void{
+ $pdo->exec('CREATE TABLE IF NOT EXISTS public.dashboard_terminal_prices (season VARCHAR(9) NOT NULL, report_date DATE NOT NULL, coffee_type VARCHAR(8) NOT NULL CHECK (coffee_type IN (\'arabica\',\'robusta\')), price_usd_kg NUMERIC(12,4) NOT NULL CHECK (price_usd_kg >= 0), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (season, report_date, coffee_type))');
+}
+if(($_GET['action']??'')==='save_terminal_price'){
+ header('Content-Type: application/json; charset=utf-8');header('Cache-Control: no-store');
+ try{
+  if(($_SERVER['REQUEST_METHOD']??'')!=='POST')throw new InvalidArgumentException('POST is required.');
+  if(!hash_equals($_SESSION['terminal_price_csrf'],(string)($_POST['csrf']??'')))throw new InvalidArgumentException('Invalid security token. Refresh and try again.');
+  $season=(string)($_POST['season']??'');$date=(string)($_POST['report_date']??'');$type=(string)($_POST['coffee_type']??'');$raw=trim((string)($_POST['price']??''));
+  if(!preg_match('/^(\d{4})\/(\d{4})$/',$season,$m)||(int)$m[2]!==((int)$m[1]+1))throw new InvalidArgumentException('Invalid season.');
+  $dt=DateTimeImmutable::createFromFormat('!Y-m-d',$date);
+  if(!$dt||$dt->format('Y-m-d')!==$date||$dt->format('N')!=='5'||$date<$m[1].'-07-01'||$date>$m[2].'-06-30')throw new InvalidArgumentException('Invalid Friday report date.');
+  if(!in_array($type,['arabica','robusta'],true))throw new InvalidArgumentException('Invalid coffee type.');
+  if(!preg_match('/^\d{1,8}(?:\.\d{1,4})?$/D',$raw)||(float)$raw>99999999)throw new InvalidArgumentException('Enter a valid non-negative USD/kg price (up to 4 decimal places).');
+  $pdo=terminal_price_db();terminal_price_table($pdo);
+  $q=$pdo->prepare('INSERT INTO public.dashboard_terminal_prices (season,report_date,coffee_type,price_usd_kg) VALUES (:season,:date,:type,:price) ON CONFLICT (season,report_date,coffee_type) DO UPDATE SET price_usd_kg=EXCLUDED.price_usd_kg,updated_at=NOW()');
+  $q->execute(['season'=>$season,'date'=>$date,'type'=>$type,'price'=>$raw]);
+  echo json_encode(['success'=>true,'price'=>number_format((float)$raw,4,'.','')]);
+ }catch(InvalidArgumentException $e){http_response_code(422);echo json_encode(['success'=>false,'message'=>$e->getMessage()]);}
+ catch(Throwable $e){error_log('Terminal price save: '.$e->getMessage());http_response_code(500);echo json_encode(['success'=>false,'message'=>'Unable to save the price. Please try again.']);}
+ exit;
+}
 $totalCleanView=$_GET['totalclean_view']??'summary';
 if(!in_array($totalCleanView,['summary','analysis'],true))$totalCleanView='summary';
 
@@ -242,6 +273,8 @@ if($display==='sales'){
     $salesGrandWeekKg+=$salesClean[$ch][$ct]['weekkg'];$salesGrandWeekVal+=$salesClean[$ch][$ct]['weekval'];
   }
  $estimatedProduction=85000.0;$productionPct=$estimatedProduction>0?($salesGrandKg/1000)/$estimatedProduction*100:0;
+  $terminalPrices=['arabica'=>null,'robusta'=>null];
+  try{$tpdo=terminal_price_db();terminal_price_table($tpdo);$tq=$tpdo->prepare('SELECT coffee_type,price_usd_kg FROM public.dashboard_terminal_prices WHERE season=:s AND report_date=:d');$tq->execute(['s'=>$season,'d'=>$salesReportDate]);foreach($tq as$tr)$terminalPrices[$tr['coffee_type']]=(float)$tr['price_usd_kg'];}catch(Throwable $e){error_log('Terminal price read: '.$e->getMessage());}
  $dashboardTitle='Sales Dashboard';$dashboardSub='Tanzania Coffee Board · Sales Season (FY)';
 }else
 if($display==='totalclean'){
@@ -1311,7 +1344,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
  <div class="sales-ppt-header"><div class="gov-title">THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div></div>
  <div class="sales-ppt-title"><span>SALES DASHBOARD</span></div>
  <div class="sales-ppt-body">
-  <table class="sales-meta"><tr><th>Sale Season (FY)</th><td><b><?=htmlspecialchars($season)?></b></td><th>End Date</th><td><b><?=date('d/m/Y',strtotime($salesEnd))?></b></td></tr><tr><th>Terminal Market</th><td>Arabica ($/kg) &nbsp; <b>—</b></td><td colspan="2">Robusta ($/kg) &nbsp; <b>—</b></td></tr></table>
+  <table class="sales-meta"><tr><th>Sale Season (FY)</th><td><b><?=htmlspecialchars($season)?></b></td><th>End Date</th><td><b><?=date('d/m/Y',strtotime($salesEnd))?></b></td></tr><tr><th>Terminal Market</th><td>Arabica ($/kg) &nbsp; <b class="terminal-price" data-coffee="arabica" title="Double-click to edit Arabica terminal price" tabindex="0" role="button" aria-label="Edit Arabica terminal price"><?= $terminalPrices['arabica']===null?'—':nf($terminalPrices['arabica'],4) ?></b></td><td colspan="2">Robusta ($/kg) &nbsp; <b class="terminal-price" data-coffee="robusta" title="Double-click to edit Robusta terminal price" tabindex="0" role="button" aria-label="Edit Robusta terminal price"><?= $terminalPrices['robusta']===null?'—':nf($terminalPrices['robusta'],4) ?></b></td></tr></table>
   <table class="sales-table">
    <tr class="sales-band"><td colspan="5">Farmgate Market</td></tr>
    <tr><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
@@ -1970,6 +2003,45 @@ menu.addEventListener('click',async e=>{
  }catch(err){update(0,'Export failed');window.reportTask.end(task,true);alert('Dashboard export failed: '+err.message);console.error(err);}
  finally{button.disabled=false;setTimeout(()=>{if(progress)progress.hidden=true;},2200);}
 });
+})();
+</script>
+<style id="terminal-price-edit-style">
+#salesDashboardDocument .terminal-price{cursor:pointer;border-bottom:1px dashed #89532e;padding:0 3px;outline-offset:3px}
+#salesDashboardDocument .terminal-price:hover,#salesDashboardDocument .terminal-price:focus{background:#fff3db;outline:1px solid #b78858}
+.terminal-price-dialog{position:fixed;inset:0;z-index:2147483600;background:rgba(23,20,15,.58);display:grid;place-items:center;padding:16px}
+.terminal-price-dialog[hidden]{display:none!important}
+.terminal-price-card{width:min(390px,100%);background:#fff;border-radius:14px;padding:22px;box-shadow:0 20px 70px #0004;font:14px Arial,sans-serif;color:#32251a}
+.terminal-price-card h3{margin:0 0 10px;font-size:19px}.terminal-price-card label{display:block;margin:14px 0 7px;font-weight:700}
+.terminal-price-card input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #bca58b;border-radius:8px;font:inherit}
+.terminal-price-card .actions{display:flex;justify-content:flex-end;gap:9px;margin-top:16px}.terminal-price-card button{padding:10px 16px;border-radius:8px;border:1px solid #c4b5a4;background:#fff;cursor:pointer}
+.terminal-price-card button[type=submit]{background:#704327;color:#fff;border-color:#704327}.terminal-price-card .error{color:#b42318;min-height:18px;margin-top:9px}
+</style>
+<div id="terminalPriceDialog" class="terminal-price-dialog" hidden data-html2canvas-ignore="true" aria-hidden="true">
+ <form id="terminalPriceForm" class="terminal-price-card" role="dialog" aria-modal="true" aria-labelledby="terminalPriceHeading">
+  <h3 id="terminalPriceHeading">Edit terminal market price</h3><p>Enter the price in USD per kilogram for the selected Friday report.</p>
+  <label for="terminalPriceInput">Price (USD/kg)</label><input id="terminalPriceInput" type="number" min="0" max="99999999" step="0.0001" inputmode="decimal" required>
+  <div id="terminalPriceError" class="error" role="alert"></div>
+  <div class="actions"><button type="button" id="terminalPriceCancel">Cancel</button><button type="submit" id="terminalPriceSave">Save price</button></div>
+ </form>
+</div>
+<script id="terminal-price-edit-js">
+(()=>{
+ const dialog=document.getElementById('terminalPriceDialog'),form=document.getElementById('terminalPriceForm');if(!dialog||!form)return;
+ const input=document.getElementById('terminalPriceInput'),heading=document.getElementById('terminalPriceHeading'),error=document.getElementById('terminalPriceError'),save=document.getElementById('terminalPriceSave');
+ const fields=[...document.querySelectorAll('#salesDashboardDocument .terminal-price')];let active=null,previousFocus=null;
+ const close=()=>{if(save.disabled)return;dialog.hidden=true;dialog.setAttribute('aria-hidden','true');previousFocus?.focus();active=null;};
+ const open=el=>{active=el;previousFocus=document.activeElement;heading.textContent='Edit '+(el.dataset.coffee==='arabica'?'Arabica':'Robusta')+' terminal price';input.value=el.textContent.trim()==='—'?'':el.textContent.trim().replace(/,/g,'');error.textContent='';dialog.hidden=false;dialog.setAttribute('aria-hidden','false');input.focus();input.select();};
+ fields.forEach(el=>{el.addEventListener('dblclick',()=>open(el));el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open(el);}});});
+ document.getElementById('terminalPriceCancel').addEventListener('click',close);
+ dialog.addEventListener('click',e=>{if(e.target===dialog)close();});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.hidden)close();});
+ form.addEventListener('submit',async e=>{e.preventDefault();if(!active||save.disabled)return;const value=input.value.trim();if(!/^\d{1,8}(?:\.\d{1,4})?$/.test(value)){error.textContent='Enter a valid price with up to 4 decimal places.';return;}
+  save.disabled=true;save.textContent='Saving…';error.textContent='';
+  try{const body=new URLSearchParams({csrf:<?=json_encode($_SESSION['terminal_price_csrf'])?>,season:<?=json_encode($season)?>,report_date:<?=json_encode($salesReportDate)?>,coffee_type:active.dataset.coffee,price:value});
+   const response=await fetch('dashboard.php?action=save_terminal_price',{method:'POST',body,credentials:'same-origin',headers:{'Accept':'application/json'}});const result=await response.json();if(!response.ok||!result.success)throw new Error(result.message||'Saving failed');
+   active.textContent=Number(result.price).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:4});
+   dialog.hidden=true;dialog.setAttribute('aria-hidden','true');previousFocus?.focus();active=null;window.salesDashboardFit?.();
+  }catch(err){error.textContent=err.message||'Unable to save price';}finally{save.disabled=false;save.textContent='Save price';}
+ });
 })();
 </script>
 <script id="report-sticky-toolbar-height">
