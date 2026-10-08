@@ -756,7 +756,7 @@ tfoot td{font-weight:700!important}
 .sales-ppt .sales-meta th,.sales-ppt .sales-meta td,.sales-ppt .sales-table th,.sales-ppt .sales-table td{padding:clamp(2px,.35vw,5px)!important;font-size:clamp(7px,.82vw,10px)!important;line-height:1.15!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere}
 .sales-ppt .sales-table th:first-child,.sales-ppt .sales-table td:first-child{width:29%!important}
 .sales-ppt .sales-table th:not(:first-child),.sales-ppt .sales-table td:not(:first-child){width:17.75%!important}
-.sales-ppt-footer{width:100%;aspect-ratio:1533/946;height:auto!important;min-height:0!important;background:url('sales_dashboard_footer_responsive.png') center/100% 100% no-repeat!important;position:relative;margin:0}
+.sales-ppt-footer{width:100%;aspect-ratio:1533/946;height:auto!important;min-height:0!important;background:url('sales_dashboard_footer_responsive(1).png') center/100% 100% no-repeat!important;position:relative;margin:0}
 .sales-ppt-footer .contact,.sales-ppt-footer .social{display:none!important}
 
 .pre-report{overflow:visible!important;padding:4px 0 14px}
@@ -1191,17 +1191,21 @@ tfoot td{font-weight:700!important}
  </div>
 </section>
 <?php elseif($display==='sales'): ?>
-<section class="sales-ppt">
+<div class="sales-actions" data-html2canvas-ignore="true"><div class="sales-export-control"><button type="button" id="salesExportButton">⇩ Export Dashboard</button><div id="salesExportOptions" hidden><button type="button" data-type="pdf">PDF</button><button type="button" data-type="xlsx">Excel</button><button type="button" data-type="doc">Word</button></div></div></div>
+<div id="salesProgress" class="sales-progress" role="status" aria-live="polite" hidden><span class="sales-spinner"></span><span id="salesProgressText">Preparing…</span><div class="sales-progress-track"><div id="salesProgressFill"></div></div><strong id="salesProgressPercent">0%</strong></div>
+<section class="sales-ppt" id="salesDashboardDocument">
  <div class="sales-ppt-header"><div class="gov-title">THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div></div>
  <div class="sales-ppt-title">SALES DASHBOARD</div>
  <div class="sales-ppt-body">
-  <table class="sales-meta"><tr><th>Sale Season (FY)</th><td><b><?=htmlspecialchars($season)?></b></td><th>End Date</th><td><b><?=date('d/m/Y',strtotime($salesEnd))?></b></td></tr><tr><th>Terminal Market</th><td>Arabica ($/kg) &nbsp; <b>7.5</b></td><td colspan="2">Robusta ($/kg) &nbsp; <b>3.6</b></td></tr></table>
+  <table class="sales-meta"><tr><th>Sale Season (FY)</th><td><b><?=htmlspecialchars($season)?></b></td><th>End Date</th><td><b><?=date('d/m/Y',strtotime($salesEnd))?></b></td></tr><tr><th>Terminal Market</th><td>Arabica ($/kg) &nbsp; <b>—</b></td><td colspan="2">Robusta ($/kg) &nbsp; <b>—</b></td></tr></table>
   <table class="sales-table">
    <tr class="sales-band"><td colspan="5">Farmgate Market</td></tr>
    <tr><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
    <?php foreach(['Dry Cherry','Clean Coffee'] as$ct):$r=$salesFarm[$ct];?><tr><td class="sales-label"><?=htmlspecialchars($ct)?></td><td class="sales-num"><?=nf($r['weekkg']/1000,3)?></td><td class="sales-num"><?=nf($r['weekval'],2)?></td><td class="sales-num"><?=nf($r['seasonkg']/1000,3)?></td><td class="sales-num"><?=nf($r['seasonval'],2)?></td></tr><?php endforeach;?>
    <tr><td class="sales-label">2&nbsp; Certified Coffee</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td></tr>
    <tr><td class="sales-label">3&nbsp; Parchment</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td></tr>
+   <?php $farmWeekKg=array_sum(array_column($salesFarm,'weekkg'));$farmWeekVal=array_sum(array_column($salesFarm,'weekval'));$farmSeasonKg=array_sum(array_column($salesFarm,'seasonkg'));$farmSeasonVal=array_sum(array_column($salesFarm,'seasonval')); ?>
+   <tr class="sales-grand"><td>Grand Total (Kagera Auction)</td><td class="sales-num"><?=nf($farmWeekKg/1000,3)?></td><td class="sales-num"><?=nf($farmWeekVal,2)?></td><td class="sales-num"><?=nf($farmSeasonKg/1000,3)?></td><td class="sales-num"><?=nf($farmSeasonVal,2)?></td></tr>
    <tr class="sales-band"><td colspan="5">Clean Coffee Market</td></tr>
    <?php foreach($channels as$ci=>$ch): ?>
    <tr><th><?=$ci+1?>&nbsp; <?=htmlspecialchars($ch)?></th><th>This Week (MT)</th><th>Value ($)</th><th>Season Total (MT)</th><th>Total Value ($)</th></tr>
@@ -1406,7 +1410,83 @@ tfoot td{font-weight:700!important}
   }
   function word(){
    const table=exportTable();if(!table)return;const clone=table.cloneNode(true);clone.querySelectorAll('th,td').forEach(c=>c.style.cssText='border:1px solid #555;padding:3px;font-family:Arial;font-size:8pt');clone.style.cssText='border-collapse:collapse;width:100%';
-   const html=`<html><head><meta charset="utf-8"></head><body><h3>Clean Coffee Buyer / Supplier-Seller Analysis</h3><p>Sale Season <?=htmlspecialchars($season)?> · ${esc(sel.options[sel.selectedIndex].text)}${search?.value?' · Filter: '+esc(search.value):''}</p>${clone.outerHTML}</body></html>`;
+   const html=`<html><head><meta charset="utf-8"></head><body><h3>Clean Coffee Buyer / Supplier-Seller Analysis</h3><p>Sale Season <?=htmlspecialchars($season)?> · ${esc(sel.options[sel.selectedIndex].text)}${search?.value?' · Filter: '+esc(search.value):''}</p>${clone.outerHTML}
+<style>
+.sales-actions{display:flex;justify-content:flex-end;margin:0 0 10px;position:relative;z-index:10}
+.sales-export-control{position:relative}
+#salesExportButton{border:0;background:#60402d;color:white;padding:10px 18px;border-radius:7px;font-weight:700;cursor:pointer}
+#salesExportOptions{position:absolute;right:0;top:100%;background:white;border:1px solid #bda58b;box-shadow:0 7px 22px #0002;min-width:145px;z-index:20}
+#salesExportOptions[hidden],#salesProgress[hidden]{display:none!important}
+#salesExportOptions button{display:block;width:100%;padding:10px;text-align:left;border:0;background:white;cursor:pointer}
+#salesExportOptions button:hover{background:#f1e4d7}
+.sales-progress{position:fixed;bottom:22px;right:22px;z-index:9999;display:flex;gap:12px;align-items:center;flex-wrap:wrap;width:min(370px,calc(100vw - 44px));padding:16px;background:#fff;color:#432d20;border:1px solid #bca18a;border-radius:12px;box-shadow:0 10px 32px #0003}
+.sales-spinner{height:21px;width:21px;border:3px solid #e6d8c9;border-top-color:#785038;border-radius:50%;animation:salesSpin .7s linear infinite}
+@keyframes salesSpin{to{transform:rotate(360deg)}}
+.sales-progress-track{height:7px;background:#e9dfd4;border-radius:5px;overflow:hidden;flex-basis:100%;order:4}
+#salesProgressFill{height:100%;background:#8d613e;width:0;transition:width .2s}
+#salesProgressPercent{margin-left:auto}
+.sales-ppt{width:100%;max-width:100%;overflow:visible;background:#f7f1e8}
+.sales-ppt-header{background-color:#e9dfd0}
+.sales-ppt-body{overflow-x:auto}
+.sales-ppt .sales-table,.sales-ppt .sales-meta{border-collapse:collapse;border:1px solid #55483e;table-layout:fixed;width:100%}
+.sales-ppt .sales-table td,.sales-ppt .sales-table th,.sales-ppt .sales-meta td,.sales-ppt .sales-meta th{border:1px solid #55483e}
+.sales-ppt .sales-table th{text-align:center}
+.sales-ppt .sales-table .sales-label{text-align:left}
+.sales-ppt .sales-table .sales-num{text-align:center}
+.sales-ppt-footer{background-image:url('sales_dashboard_footer_responsive(1).png')!important;background-size:100% 100%!important;background-repeat:no-repeat!important;aspect-ratio:1533/946;height:auto!important}
+@media(max-width:760px){.sales-ppt .sales-table,.sales-ppt .sales-meta{min-width:620px!important}.sales-ppt-header .gov-title{font-size:clamp(11px,2.5vw,16px)}}
+@media print{.sales-actions,.sales-progress{display:none!important}.sales-ppt{border:0;box-shadow:none}.sales-ppt-body{overflow:visible}}
+</style>
+<script>
+(function(){
+ const paper=document.getElementById('salesDashboardDocument'),button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions');
+ if(!paper||!button||!menu)return;
+ const progress=document.getElementById('salesProgress'),label=document.getElementById('salesProgressText'),fill=document.getElementById('salesProgressFill'),pct=document.getElementById('salesProgressPercent');
+ const season=<?=json_encode($season??'')?>;
+ const base='TCB_Sales_Dashboard_'+season.replace('/','-');
+ let busy=false;
+ function update(n,message){progress.hidden=false;label.textContent=message;fill.style.width=n+'%';pct.textContent=n+'%'}
+ function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
+ function load(url,test){return new Promise((resolve,reject)=>{if(test())return resolve();const sc=document.createElement('script');sc.src=url;sc.onload=()=>test()?resolve():reject(new Error('Library unavailable'));sc.onerror=()=>reject(new Error('Could not load export library'));document.head.append(sc)})}
+ button.addEventListener('click',()=>{if(busy)return;menu.hidden=!menu.hidden});
+ document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control'))menu.hidden=true});
+ document.querySelectorAll('.season select').forEach(select=>select.addEventListener('change',()=>{update(10,'Loading selected dashboard…')}));
+ menu.addEventListener('click',async e=>{
+  const type=e.target.dataset.type;if(!type||busy)return;menu.hidden=true;busy=true;button.disabled=true;
+  try{
+   update(5,'Preparing dashboard export…');
+   if(type==='xlsx'){
+    await load('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',()=>!!window.XLSX);
+    update(40,'Building Excel workbook…');
+    const wb=XLSX.utils.book_new();
+    paper.querySelectorAll('table').forEach((table,i)=>{const ws=XLSX.utils.table_to_sheet(table);ws['!cols']=[{wch:40},{wch:22},{wch:22},{wch:24},{wch:24}];XLSX.utils.book_append_sheet(wb,ws,i===0?'Season and Market':'Coffee Sales')});
+    update(85,'Generating Excel file…');XLSX.writeFile(wb,base+'.xlsx');
+   }else if(type==='doc'){
+    update(45,'Preparing Word document…');
+    const clone=paper.cloneNode(true);
+    const style='<style>body{font-family:Arial;color:#30251d}table{width:100%;border-collapse:collapse}td,th{border:1px solid #555;padding:5px;font-size:9pt}th{text-align:center}h1{text-align:center}</style>';
+    const html='<!doctype html><html><head><meta charset="utf-8">'+style+'</head><body>'+clone.outerHTML+'</body></html>';
+    download(new Blob(['\ufeff',html],{type:'application/msword'}),base+'.doc');
+   }else{
+    await load('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
+    await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
+    update(30,'Rendering high-resolution PDF…');
+    await document.fonts.ready;
+    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='none';el.querySelector('.sales-ppt-body').style.overflow='visible'}}});
+    update(76,'Composing PDF pages…');
+    const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
+    const pagePx=Math.floor(canvas.width*(ph-2*margin)/iw),pageCount=Math.ceil(canvas.height/pagePx);
+    for(let i=0;i<pageCount;i++){if(i)pdf.addPage();const part=document.createElement('canvas');part.width=canvas.width;part.height=Math.min(pagePx,canvas.height-i*pagePx);part.getContext('2d').drawImage(canvas,0,i*pagePx,canvas.width,part.height,0,0,part.width,part.height);pdf.addImage(part.toDataURL('image/png'),'PNG',margin,margin,iw,part.height*iw/canvas.width);update(77+Math.round(18*(i+1)/pageCount),'Writing PDF pages…')}
+    pdf.save(base+'.pdf');
+   }
+   update(100,'Export ready');
+  }catch(err){update(0,'Export failed: '+err.message);alert('Dashboard export failed: '+err.message)}
+  finally{busy=false;button.disabled=false;setTimeout(()=>{progress.hidden=true},2400)}
+ });
+})();
+</script>
+</body></html>`;
    const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=fname('doc');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);
   }
   exportMenu.addEventListener('click',e=>{const f=e.target.dataset.format;if(!f)return;e.stopPropagation();exportMenu.classList.remove('show');f==='xlsx'?xlsx():f==='pdf'?pdf():word()});
@@ -1469,7 +1549,83 @@ tfoot td{font-weight:700!important}
    const cloned=table.cloneNode(true);
    cloned.querySelectorAll('th,td').forEach(c=>c.setAttribute('style','border:1px solid #5b4033;padding:4px;font-family:Arial;font-size:9pt;'));
    cloned.setAttribute('style','border-collapse:collapse;width:100%;');
-   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Coffee Sales Summary</title></head><body><h2 style="font-family:Arial;color:#4b2e20;margin-bottom:3px">Coffee Sales Summary</h2><div style="font-family:Arial;font-size:9pt;margin-bottom:10px">Clean coffee · Sale Season ${season}</div>${cloned.outerHTML}</body></html>`;
+   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Coffee Sales Summary</title></head><body><h2 style="font-family:Arial;color:#4b2e20;margin-bottom:3px">Coffee Sales Summary</h2><div style="font-family:Arial;font-size:9pt;margin-bottom:10px">Clean coffee · Sale Season ${season}</div>${cloned.outerHTML}
+<style>
+.sales-actions{display:flex;justify-content:flex-end;margin:0 0 10px;position:relative;z-index:10}
+.sales-export-control{position:relative}
+#salesExportButton{border:0;background:#60402d;color:white;padding:10px 18px;border-radius:7px;font-weight:700;cursor:pointer}
+#salesExportOptions{position:absolute;right:0;top:100%;background:white;border:1px solid #bda58b;box-shadow:0 7px 22px #0002;min-width:145px;z-index:20}
+#salesExportOptions[hidden],#salesProgress[hidden]{display:none!important}
+#salesExportOptions button{display:block;width:100%;padding:10px;text-align:left;border:0;background:white;cursor:pointer}
+#salesExportOptions button:hover{background:#f1e4d7}
+.sales-progress{position:fixed;bottom:22px;right:22px;z-index:9999;display:flex;gap:12px;align-items:center;flex-wrap:wrap;width:min(370px,calc(100vw - 44px));padding:16px;background:#fff;color:#432d20;border:1px solid #bca18a;border-radius:12px;box-shadow:0 10px 32px #0003}
+.sales-spinner{height:21px;width:21px;border:3px solid #e6d8c9;border-top-color:#785038;border-radius:50%;animation:salesSpin .7s linear infinite}
+@keyframes salesSpin{to{transform:rotate(360deg)}}
+.sales-progress-track{height:7px;background:#e9dfd4;border-radius:5px;overflow:hidden;flex-basis:100%;order:4}
+#salesProgressFill{height:100%;background:#8d613e;width:0;transition:width .2s}
+#salesProgressPercent{margin-left:auto}
+.sales-ppt{width:100%;max-width:100%;overflow:visible;background:#f7f1e8}
+.sales-ppt-header{background-color:#e9dfd0}
+.sales-ppt-body{overflow-x:auto}
+.sales-ppt .sales-table,.sales-ppt .sales-meta{border-collapse:collapse;border:1px solid #55483e;table-layout:fixed;width:100%}
+.sales-ppt .sales-table td,.sales-ppt .sales-table th,.sales-ppt .sales-meta td,.sales-ppt .sales-meta th{border:1px solid #55483e}
+.sales-ppt .sales-table th{text-align:center}
+.sales-ppt .sales-table .sales-label{text-align:left}
+.sales-ppt .sales-table .sales-num{text-align:center}
+.sales-ppt-footer{background-image:url('sales_dashboard_footer_responsive(1).png')!important;background-size:100% 100%!important;background-repeat:no-repeat!important;aspect-ratio:1533/946;height:auto!important}
+@media(max-width:760px){.sales-ppt .sales-table,.sales-ppt .sales-meta{min-width:620px!important}.sales-ppt-header .gov-title{font-size:clamp(11px,2.5vw,16px)}}
+@media print{.sales-actions,.sales-progress{display:none!important}.sales-ppt{border:0;box-shadow:none}.sales-ppt-body{overflow:visible}}
+</style>
+<script>
+(function(){
+ const paper=document.getElementById('salesDashboardDocument'),button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions');
+ if(!paper||!button||!menu)return;
+ const progress=document.getElementById('salesProgress'),label=document.getElementById('salesProgressText'),fill=document.getElementById('salesProgressFill'),pct=document.getElementById('salesProgressPercent');
+ const season=<?=json_encode($season??'')?>;
+ const base='TCB_Sales_Dashboard_'+season.replace('/','-');
+ let busy=false;
+ function update(n,message){progress.hidden=false;label.textContent=message;fill.style.width=n+'%';pct.textContent=n+'%'}
+ function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
+ function load(url,test){return new Promise((resolve,reject)=>{if(test())return resolve();const sc=document.createElement('script');sc.src=url;sc.onload=()=>test()?resolve():reject(new Error('Library unavailable'));sc.onerror=()=>reject(new Error('Could not load export library'));document.head.append(sc)})}
+ button.addEventListener('click',()=>{if(busy)return;menu.hidden=!menu.hidden});
+ document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control'))menu.hidden=true});
+ document.querySelectorAll('.season select').forEach(select=>select.addEventListener('change',()=>{update(10,'Loading selected dashboard…')}));
+ menu.addEventListener('click',async e=>{
+  const type=e.target.dataset.type;if(!type||busy)return;menu.hidden=true;busy=true;button.disabled=true;
+  try{
+   update(5,'Preparing dashboard export…');
+   if(type==='xlsx'){
+    await load('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',()=>!!window.XLSX);
+    update(40,'Building Excel workbook…');
+    const wb=XLSX.utils.book_new();
+    paper.querySelectorAll('table').forEach((table,i)=>{const ws=XLSX.utils.table_to_sheet(table);ws['!cols']=[{wch:40},{wch:22},{wch:22},{wch:24},{wch:24}];XLSX.utils.book_append_sheet(wb,ws,i===0?'Season and Market':'Coffee Sales')});
+    update(85,'Generating Excel file…');XLSX.writeFile(wb,base+'.xlsx');
+   }else if(type==='doc'){
+    update(45,'Preparing Word document…');
+    const clone=paper.cloneNode(true);
+    const style='<style>body{font-family:Arial;color:#30251d}table{width:100%;border-collapse:collapse}td,th{border:1px solid #555;padding:5px;font-size:9pt}th{text-align:center}h1{text-align:center}</style>';
+    const html='<!doctype html><html><head><meta charset="utf-8">'+style+'</head><body>'+clone.outerHTML+'</body></html>';
+    download(new Blob(['\ufeff',html],{type:'application/msword'}),base+'.doc');
+   }else{
+    await load('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
+    await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
+    update(30,'Rendering high-resolution PDF…');
+    await document.fonts.ready;
+    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='none';el.querySelector('.sales-ppt-body').style.overflow='visible'}}});
+    update(76,'Composing PDF pages…');
+    const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
+    const pagePx=Math.floor(canvas.width*(ph-2*margin)/iw),pageCount=Math.ceil(canvas.height/pagePx);
+    for(let i=0;i<pageCount;i++){if(i)pdf.addPage();const part=document.createElement('canvas');part.width=canvas.width;part.height=Math.min(pagePx,canvas.height-i*pagePx);part.getContext('2d').drawImage(canvas,0,i*pagePx,canvas.width,part.height,0,0,part.width,part.height);pdf.addImage(part.toDataURL('image/png'),'PNG',margin,margin,iw,part.height*iw/canvas.width);update(77+Math.round(18*(i+1)/pageCount),'Writing PDF pages…')}
+    pdf.save(base+'.pdf');
+   }
+   update(100,'Export ready');
+  }catch(err){update(0,'Export failed: '+err.message);alert('Dashboard export failed: '+err.message)}
+  finally{busy=false;button.disabled=false;setTimeout(()=>{progress.hidden=true},2400)}
+ });
+})();
+</script>
+</body></html>`;
    const blob=new Blob(['\ufeff',html],{type:'application/msword'});
    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename('doc');document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
  }
@@ -1498,7 +1654,83 @@ new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},opti
  document.addEventListener('click',()=>menu.classList.remove('show'));
  const season=<?=json_encode($season??'')?>;
  const base='Pre_Auction_Report_'+String(season||'').replace('/','-');
- function word(){const html='<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial;font-size:10pt}h1{text-align:center;font-size:14pt}h2{font-size:12pt}h3{font-size:11pt}table{border-collapse:collapse;width:100%;margin:6px 0 14px}th,td{border:1px solid #555;padding:4px}th{background:#d9e8f6;text-align:center}td{text-align:right}td:first-child,td:nth-child(2){text-align:left}.gt{font-weight:bold}</style></head><body>'+paper.innerHTML.replace(/<div class="pre-export-bar"[\s\S]*?<\/div>\s*<\/div>/,'')+'</body></html>';const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=base+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+ function word(){const html='<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial;font-size:10pt}h1{text-align:center;font-size:14pt}h2{font-size:12pt}h3{font-size:11pt}table{border-collapse:collapse;width:100%;margin:6px 0 14px}th,td{border:1px solid #555;padding:4px}th{background:#d9e8f6;text-align:center}td{text-align:right}td:first-child,td:nth-child(2){text-align:left}.gt{font-weight:bold}</style></head><body>'+paper.innerHTML.replace(/<div class="pre-export-bar"[\s\S]*?<\/div>\s*<\/div>/,'')+'
+<style>
+.sales-actions{display:flex;justify-content:flex-end;margin:0 0 10px;position:relative;z-index:10}
+.sales-export-control{position:relative}
+#salesExportButton{border:0;background:#60402d;color:white;padding:10px 18px;border-radius:7px;font-weight:700;cursor:pointer}
+#salesExportOptions{position:absolute;right:0;top:100%;background:white;border:1px solid #bda58b;box-shadow:0 7px 22px #0002;min-width:145px;z-index:20}
+#salesExportOptions[hidden],#salesProgress[hidden]{display:none!important}
+#salesExportOptions button{display:block;width:100%;padding:10px;text-align:left;border:0;background:white;cursor:pointer}
+#salesExportOptions button:hover{background:#f1e4d7}
+.sales-progress{position:fixed;bottom:22px;right:22px;z-index:9999;display:flex;gap:12px;align-items:center;flex-wrap:wrap;width:min(370px,calc(100vw - 44px));padding:16px;background:#fff;color:#432d20;border:1px solid #bca18a;border-radius:12px;box-shadow:0 10px 32px #0003}
+.sales-spinner{height:21px;width:21px;border:3px solid #e6d8c9;border-top-color:#785038;border-radius:50%;animation:salesSpin .7s linear infinite}
+@keyframes salesSpin{to{transform:rotate(360deg)}}
+.sales-progress-track{height:7px;background:#e9dfd4;border-radius:5px;overflow:hidden;flex-basis:100%;order:4}
+#salesProgressFill{height:100%;background:#8d613e;width:0;transition:width .2s}
+#salesProgressPercent{margin-left:auto}
+.sales-ppt{width:100%;max-width:100%;overflow:visible;background:#f7f1e8}
+.sales-ppt-header{background-color:#e9dfd0}
+.sales-ppt-body{overflow-x:auto}
+.sales-ppt .sales-table,.sales-ppt .sales-meta{border-collapse:collapse;border:1px solid #55483e;table-layout:fixed;width:100%}
+.sales-ppt .sales-table td,.sales-ppt .sales-table th,.sales-ppt .sales-meta td,.sales-ppt .sales-meta th{border:1px solid #55483e}
+.sales-ppt .sales-table th{text-align:center}
+.sales-ppt .sales-table .sales-label{text-align:left}
+.sales-ppt .sales-table .sales-num{text-align:center}
+.sales-ppt-footer{background-image:url('sales_dashboard_footer_responsive(1).png')!important;background-size:100% 100%!important;background-repeat:no-repeat!important;aspect-ratio:1533/946;height:auto!important}
+@media(max-width:760px){.sales-ppt .sales-table,.sales-ppt .sales-meta{min-width:620px!important}.sales-ppt-header .gov-title{font-size:clamp(11px,2.5vw,16px)}}
+@media print{.sales-actions,.sales-progress{display:none!important}.sales-ppt{border:0;box-shadow:none}.sales-ppt-body{overflow:visible}}
+</style>
+<script>
+(function(){
+ const paper=document.getElementById('salesDashboardDocument'),button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions');
+ if(!paper||!button||!menu)return;
+ const progress=document.getElementById('salesProgress'),label=document.getElementById('salesProgressText'),fill=document.getElementById('salesProgressFill'),pct=document.getElementById('salesProgressPercent');
+ const season=<?=json_encode($season??'')?>;
+ const base='TCB_Sales_Dashboard_'+season.replace('/','-');
+ let busy=false;
+ function update(n,message){progress.hidden=false;label.textContent=message;fill.style.width=n+'%';pct.textContent=n+'%'}
+ function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
+ function load(url,test){return new Promise((resolve,reject)=>{if(test())return resolve();const sc=document.createElement('script');sc.src=url;sc.onload=()=>test()?resolve():reject(new Error('Library unavailable'));sc.onerror=()=>reject(new Error('Could not load export library'));document.head.append(sc)})}
+ button.addEventListener('click',()=>{if(busy)return;menu.hidden=!menu.hidden});
+ document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control'))menu.hidden=true});
+ document.querySelectorAll('.season select').forEach(select=>select.addEventListener('change',()=>{update(10,'Loading selected dashboard…')}));
+ menu.addEventListener('click',async e=>{
+  const type=e.target.dataset.type;if(!type||busy)return;menu.hidden=true;busy=true;button.disabled=true;
+  try{
+   update(5,'Preparing dashboard export…');
+   if(type==='xlsx'){
+    await load('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',()=>!!window.XLSX);
+    update(40,'Building Excel workbook…');
+    const wb=XLSX.utils.book_new();
+    paper.querySelectorAll('table').forEach((table,i)=>{const ws=XLSX.utils.table_to_sheet(table);ws['!cols']=[{wch:40},{wch:22},{wch:22},{wch:24},{wch:24}];XLSX.utils.book_append_sheet(wb,ws,i===0?'Season and Market':'Coffee Sales')});
+    update(85,'Generating Excel file…');XLSX.writeFile(wb,base+'.xlsx');
+   }else if(type==='doc'){
+    update(45,'Preparing Word document…');
+    const clone=paper.cloneNode(true);
+    const style='<style>body{font-family:Arial;color:#30251d}table{width:100%;border-collapse:collapse}td,th{border:1px solid #555;padding:5px;font-size:9pt}th{text-align:center}h1{text-align:center}</style>';
+    const html='<!doctype html><html><head><meta charset="utf-8">'+style+'</head><body>'+clone.outerHTML+'</body></html>';
+    download(new Blob(['\ufeff',html],{type:'application/msword'}),base+'.doc');
+   }else{
+    await load('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
+    await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
+    update(30,'Rendering high-resolution PDF…');
+    await document.fonts.ready;
+    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='none';el.querySelector('.sales-ppt-body').style.overflow='visible'}}});
+    update(76,'Composing PDF pages…');
+    const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
+    const pagePx=Math.floor(canvas.width*(ph-2*margin)/iw),pageCount=Math.ceil(canvas.height/pagePx);
+    for(let i=0;i<pageCount;i++){if(i)pdf.addPage();const part=document.createElement('canvas');part.width=canvas.width;part.height=Math.min(pagePx,canvas.height-i*pagePx);part.getContext('2d').drawImage(canvas,0,i*pagePx,canvas.width,part.height,0,0,part.width,part.height);pdf.addImage(part.toDataURL('image/png'),'PNG',margin,margin,iw,part.height*iw/canvas.width);update(77+Math.round(18*(i+1)/pageCount),'Writing PDF pages…')}
+    pdf.save(base+'.pdf');
+   }
+   update(100,'Export ready');
+  }catch(err){update(0,'Export failed: '+err.message);alert('Dashboard export failed: '+err.message)}
+  finally{busy=false;button.disabled=false;setTimeout(()=>{progress.hidden=true},2400)}
+ });
+})();
+</script>
+</body></html>';const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=base+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
  function excel(){if(!window.XLSX){alert('Excel export library is not available.');return}const wb=XLSX.utils.book_new();paper.querySelectorAll('table').forEach((t,i)=>{const ws=XLSX.utils.table_to_sheet(t,{raw:true});XLSX.utils.book_append_sheet(wb,ws,'Table '+(i+1))});XLSX.writeFile(wb,base+'.xlsx')}
  async function pdf(){
   if(!window.html2canvas||!window.jspdf){alert('PDF export library is not available.');return}
@@ -1588,6 +1820,82 @@ function preApplyTableAlignment(root){
   });
 }
 document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document));
+</script>
+
+<style>
+.sales-actions{display:flex;justify-content:flex-end;margin:0 0 10px;position:relative;z-index:10}
+.sales-export-control{position:relative}
+#salesExportButton{border:0;background:#60402d;color:white;padding:10px 18px;border-radius:7px;font-weight:700;cursor:pointer}
+#salesExportOptions{position:absolute;right:0;top:100%;background:white;border:1px solid #bda58b;box-shadow:0 7px 22px #0002;min-width:145px;z-index:20}
+#salesExportOptions[hidden],#salesProgress[hidden]{display:none!important}
+#salesExportOptions button{display:block;width:100%;padding:10px;text-align:left;border:0;background:white;cursor:pointer}
+#salesExportOptions button:hover{background:#f1e4d7}
+.sales-progress{position:fixed;bottom:22px;right:22px;z-index:9999;display:flex;gap:12px;align-items:center;flex-wrap:wrap;width:min(370px,calc(100vw - 44px));padding:16px;background:#fff;color:#432d20;border:1px solid #bca18a;border-radius:12px;box-shadow:0 10px 32px #0003}
+.sales-spinner{height:21px;width:21px;border:3px solid #e6d8c9;border-top-color:#785038;border-radius:50%;animation:salesSpin .7s linear infinite}
+@keyframes salesSpin{to{transform:rotate(360deg)}}
+.sales-progress-track{height:7px;background:#e9dfd4;border-radius:5px;overflow:hidden;flex-basis:100%;order:4}
+#salesProgressFill{height:100%;background:#8d613e;width:0;transition:width .2s}
+#salesProgressPercent{margin-left:auto}
+.sales-ppt{width:100%;max-width:100%;overflow:visible;background:#f7f1e8}
+.sales-ppt-header{background-color:#e9dfd0}
+.sales-ppt-body{overflow-x:auto}
+.sales-ppt .sales-table,.sales-ppt .sales-meta{border-collapse:collapse;border:1px solid #55483e;table-layout:fixed;width:100%}
+.sales-ppt .sales-table td,.sales-ppt .sales-table th,.sales-ppt .sales-meta td,.sales-ppt .sales-meta th{border:1px solid #55483e}
+.sales-ppt .sales-table th{text-align:center}
+.sales-ppt .sales-table .sales-label{text-align:left}
+.sales-ppt .sales-table .sales-num{text-align:center}
+.sales-ppt-footer{background-image:url('sales_dashboard_footer_responsive(1).png')!important;background-size:100% 100%!important;background-repeat:no-repeat!important;aspect-ratio:1533/946;height:auto!important}
+@media(max-width:760px){.sales-ppt .sales-table,.sales-ppt .sales-meta{min-width:620px!important}.sales-ppt-header .gov-title{font-size:clamp(11px,2.5vw,16px)}}
+@media print{.sales-actions,.sales-progress{display:none!important}.sales-ppt{border:0;box-shadow:none}.sales-ppt-body{overflow:visible}}
+</style>
+<script>
+(function(){
+ const paper=document.getElementById('salesDashboardDocument'),button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions');
+ if(!paper||!button||!menu)return;
+ const progress=document.getElementById('salesProgress'),label=document.getElementById('salesProgressText'),fill=document.getElementById('salesProgressFill'),pct=document.getElementById('salesProgressPercent');
+ const season=<?=json_encode($season??'')?>;
+ const base='TCB_Sales_Dashboard_'+season.replace('/','-');
+ let busy=false;
+ function update(n,message){progress.hidden=false;label.textContent=message;fill.style.width=n+'%';pct.textContent=n+'%'}
+ function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
+ function load(url,test){return new Promise((resolve,reject)=>{if(test())return resolve();const sc=document.createElement('script');sc.src=url;sc.onload=()=>test()?resolve():reject(new Error('Library unavailable'));sc.onerror=()=>reject(new Error('Could not load export library'));document.head.append(sc)})}
+ button.addEventListener('click',()=>{if(busy)return;menu.hidden=!menu.hidden});
+ document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control'))menu.hidden=true});
+ document.querySelectorAll('.season select').forEach(select=>select.addEventListener('change',()=>{update(10,'Loading selected dashboard…')}));
+ menu.addEventListener('click',async e=>{
+  const type=e.target.dataset.type;if(!type||busy)return;menu.hidden=true;busy=true;button.disabled=true;
+  try{
+   update(5,'Preparing dashboard export…');
+   if(type==='xlsx'){
+    await load('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',()=>!!window.XLSX);
+    update(40,'Building Excel workbook…');
+    const wb=XLSX.utils.book_new();
+    paper.querySelectorAll('table').forEach((table,i)=>{const ws=XLSX.utils.table_to_sheet(table);ws['!cols']=[{wch:40},{wch:22},{wch:22},{wch:24},{wch:24}];XLSX.utils.book_append_sheet(wb,ws,i===0?'Season and Market':'Coffee Sales')});
+    update(85,'Generating Excel file…');XLSX.writeFile(wb,base+'.xlsx');
+   }else if(type==='doc'){
+    update(45,'Preparing Word document…');
+    const clone=paper.cloneNode(true);
+    const style='<style>body{font-family:Arial;color:#30251d}table{width:100%;border-collapse:collapse}td,th{border:1px solid #555;padding:5px;font-size:9pt}th{text-align:center}h1{text-align:center}</style>';
+    const html='<!doctype html><html><head><meta charset="utf-8">'+style+'</head><body>'+clone.outerHTML+'</body></html>';
+    download(new Blob(['\ufeff',html],{type:'application/msword'}),base+'.doc');
+   }else{
+    await load('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
+    await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
+    update(30,'Rendering high-resolution PDF…');
+    await document.fonts.ready;
+    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='none';el.querySelector('.sales-ppt-body').style.overflow='visible'}}});
+    update(76,'Composing PDF pages…');
+    const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
+    const pagePx=Math.floor(canvas.width*(ph-2*margin)/iw),pageCount=Math.ceil(canvas.height/pagePx);
+    for(let i=0;i<pageCount;i++){if(i)pdf.addPage();const part=document.createElement('canvas');part.width=canvas.width;part.height=Math.min(pagePx,canvas.height-i*pagePx);part.getContext('2d').drawImage(canvas,0,i*pagePx,canvas.width,part.height,0,0,part.width,part.height);pdf.addImage(part.toDataURL('image/png'),'PNG',margin,margin,iw,part.height*iw/canvas.width);update(77+Math.round(18*(i+1)/pageCount),'Writing PDF pages…')}
+    pdf.save(base+'.pdf');
+   }
+   update(100,'Export ready');
+  }catch(err){update(0,'Export failed: '+err.message);alert('Dashboard export failed: '+err.message)}
+  finally{busy=false;button.disabled=false;setTimeout(()=>{progress.hidden=true},2400)}
+ });
+})();
 </script>
 </body>
 </html>
