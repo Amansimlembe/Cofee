@@ -67,6 +67,9 @@ if(!in_array($totalCleanView,['summary','analysis'],true))$totalCleanView='summa
 
 function nf($v,$dec=0){$v=(float)$v;$d=(abs($v-round($v))<0.000001)?0:$dec;return number_format($v,$d,'.',',');}
 function pct($a,$b){return $b>0?($a/$b*100):0;}
+/* Keep meaningful decimal digits, never display trailing fractional zeros. */
+function nf_clean($v,$dec=2){if($dec<=0)return number_format((float)$v,0,'.',',');$n=number_format((float)$v,$dec,'.',',');return rtrim(rtrim($n,'0'),'.');}
+
 
 
 if($display==='preauction'){
@@ -1373,15 +1376,15 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
  <div class="sales-ppt-header"><div class="gov-title">THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div></div>
  <div class="sales-ppt-title"><span>SALES DASHBOARD</span></div>
  <div class="sales-ppt-body">
-  <table class="sales-meta"><tr><th>Sale Season (FY)</th><td><b><?=htmlspecialchars($season)?></b></td><th>End Date</th><td><b><?=date('d/m/Y',strtotime($salesEnd))?></b></td></tr><tr><th>Terminal Market</th><td>Arabica ($/kg) &nbsp; <b class="terminal-price" data-coffee="arabica" title="Double-click to edit Arabica terminal price" tabindex="0" role="button" aria-label="Edit Arabica terminal price"><?= $terminalPrices['arabica']===null?'—':nf($terminalPrices['arabica'],4) ?></b></td><td colspan="2">Robusta ($/kg) &nbsp; <b class="terminal-price" data-coffee="robusta" title="Double-click to edit Robusta terminal price" tabindex="0" role="button" aria-label="Edit Robusta terminal price"><?= $terminalPrices['robusta']===null?'—':nf($terminalPrices['robusta'],4) ?></b></td></tr></table>
+  <table class="sales-meta"><tr><th>Sale Season (FY)</th><td><b><?=htmlspecialchars($season)?></b></td><th>End Date</th><td><b><?=date('d/m/Y',strtotime($salesEnd))?></b></td></tr><tr><th>Terminal Market</th><td>Arabica ($/kg) &nbsp; <b class="terminal-price" data-coffee="arabica" title="Double-click to edit Arabica terminal price" tabindex="0" role="button" aria-label="Edit Arabica terminal price"><?= $terminalPrices['arabica']===null?'—':nf_clean($terminalPrices['arabica'],4) ?></b></td><td colspan="2">Robusta ($/kg) &nbsp; <b class="terminal-price" data-coffee="robusta" title="Double-click to edit Robusta terminal price" tabindex="0" role="button" aria-label="Edit Robusta terminal price"><?= $terminalPrices['robusta']===null?'—':nf_clean($terminalPrices['robusta'],4) ?></b></td></tr></table>
   <table class="sales-table">
    <tr class="sales-band"><td colspan="5">Farmgate Market</td></tr>
    <tr><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
    <?php foreach(['Dry Cherry','Clean Coffee'] as$ct):$r=$salesFarm[$ct];?><tr><td class="sales-label"><?=htmlspecialchars($ct)?></td><td class="sales-num"><?=nf($r['weekkg']/1000,3)?></td><td class="sales-num"><?=nf($r['weekval'],2)?></td><td class="sales-num"><?=nf($r['seasonkg']/1000,3)?></td><td class="sales-num"><?=nf($r['seasonval'],2)?></td></tr><?php endforeach;?>
-   <tr><td class="sales-label">2&nbsp; Certified Coffee</td><?php foreach(['week_mt','week_value_tzs','season_mt','season_value_tzs'] as $field):$val=$certifiedCoffee[$field];?><td class="sales-num certified-edit" data-field="<?=$field?>" data-value="<?=htmlspecialchars((string)$val,ENT_QUOTES)?>" title="Double-click to edit Certified Coffee" tabindex="0" role="button" aria-label="Edit Certified Coffee <?=htmlspecialchars(str_replace('_',' ',$field))?>"><?=$val?nf($val,str_ends_with($field,'mt')?3:2):'—'?></td><?php endforeach;?></tr>
+   <tr><td class="sales-label">2&nbsp; Certified Coffee</td><?php foreach(['week_mt','week_value_tzs','season_mt','season_value_tzs'] as $field):$val=$certifiedCoffee[$field];?><td class="sales-num certified-edit" data-field="<?=$field?>" data-value="<?=htmlspecialchars((string)$val,ENT_QUOTES)?>" title="Double-click to edit Certified Coffee" tabindex="0" role="button" aria-label="Edit Certified Coffee <?=htmlspecialchars(str_replace('_',' ',$field))?>"><?=$val?nf_clean($val,str_ends_with($field,'mt')?3:2):'—'?></td><?php endforeach;?></tr>
    <tr><td class="sales-label">3&nbsp; Parchment</td><?php foreach(['weekkg','weekval','seasonkg','seasonval'] as $field): $v=$salesParchment[$field]; ?><td class="sales-num"><?=$v?nf(str_ends_with($field,'kg')?$v/1000:$v,str_ends_with($field,'kg')?3:2):'—'?></td><?php endforeach; ?></tr>
    <?php $farmWeekKg=array_sum(array_column($salesFarm,'weekkg'))+$salesParchment['weekkg']+$certifiedCoffee['week_mt']*1000;$farmWeekVal=array_sum(array_column($salesFarm,'weekval'))+$salesParchment['weekval']+$certifiedCoffee['week_value_tzs'];$farmSeasonKg=array_sum(array_column($salesFarm,'seasonkg'))+$salesParchment['seasonkg']+$certifiedCoffee['season_mt']*1000;$farmSeasonVal=array_sum(array_column($salesFarm,'seasonval'))+$salesParchment['seasonval']+$certifiedCoffee['season_value_tzs']; ?>
-   <tr class="sales-grand" id="farmgateGrandTotal"><td>Grand Total</td><td class="sales-num"><?=nf($farmWeekKg/1000,3)?></td><td class="sales-num"><?=nf($farmWeekVal,2)?></td><td class="sales-num"><?=nf($farmSeasonKg/1000,3)?></td><td class="sales-num"><?=nf($farmSeasonVal,2)?></td></tr>
+   <tr class="sales-grand" id="farmgateGrandTotal"><td>Grand Total</td><td class="sales-num"><?=nf_clean($farmWeekKg/1000,3)?></td><td class="sales-num"><?=nf_clean($farmWeekVal,2)?></td><td class="sales-num"><?=nf_clean($farmSeasonKg/1000,3)?></td><td class="sales-num"><?=nf_clean($farmSeasonVal,2)?></td></tr>
    <tr class="sales-band"><td colspan="5">Clean Coffee Market</td></tr>
    <?php foreach($channels as$ci=>$ch): ?>
    <tr><th><?=$ci+1?>&nbsp; <?=htmlspecialchars($ch)?></th><th>This Week (MT)</th><th>Value ($)</th><th>Season Total (MT)</th><th>Total Value ($)</th></tr>
@@ -2067,7 +2070,7 @@ menu.addEventListener('click',async e=>{
   save.disabled=true;save.textContent='Saving…';error.textContent='';
   try{const body=new URLSearchParams({csrf:<?=json_encode($_SESSION['terminal_price_csrf'])?>,season:<?=json_encode($season)?>,report_date:<?=json_encode($salesReportDate)?>,coffee_type:active.dataset.coffee,price:value});
    const response=await fetch('dashboard.php?action=save_terminal_price',{method:'POST',body,credentials:'same-origin',headers:{'Accept':'application/json'}});const result=await response.json();if(!response.ok||!result.success)throw new Error(result.message||'Saving failed');
-   active.textContent=Number(result.price).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:4});
+   active.textContent=Number(result.price).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:4});
    dialog.hidden=true;dialog.setAttribute('aria-hidden','true');previousFocus?.focus();active=null;window.salesDashboardFit?.();
   }catch(err){error.textContent=err.message||'Unable to save price';}finally{save.disabled=false;save.textContent='Save price';}
  });
@@ -2099,7 +2102,7 @@ menu.addEventListener('click',async e=>{
  cells.forEach(c=>{c.addEventListener('dblclick',open);c.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});});
  document.getElementById('certifiedCoffeeCancel').addEventListener('click',close);
  dialog.addEventListener('click',e=>{if(e.target===dialog)close();});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.hidden)close();});
- const fmt=(v,dec)=>Number(v).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+ const fmt=(v,dec)=>Number(v).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:dec});
  form.addEventListener('submit',async e=>{e.preventDefault();if(save.disabled)return;const values={};
   for(const [k,input] of Object.entries(fields)){const raw=input.value.trim(),dec=k.endsWith('_mt')?3:2;if(!new RegExp('^\\d{1,14}(?:\\.\\d{1,'+dec+'})?$').test(raw)){error.textContent='Enter valid non-negative numbers (up to '+dec+' decimal places).';input.focus();return;}values[k]=raw;}
   save.disabled=true;save.textContent='Saving…';error.textContent='';
