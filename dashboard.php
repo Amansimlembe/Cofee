@@ -1258,13 +1258,13 @@ tfoot td{font-weight:700!important}
    <tr><td class="sales-label">2&nbsp; Certified Coffee</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td></tr>
    <tr><td class="sales-label">3&nbsp; Parchment</td><?php foreach(['weekkg','weekval','seasonkg','seasonval'] as $field): $v=$salesParchment[$field]; ?><td class="sales-num"><?=$v?nf(str_ends_with($field,'kg')?$v/1000:$v,str_ends_with($field,'kg')?3:2):'—'?></td><?php endforeach; ?></tr>
    <?php $farmWeekKg=array_sum(array_column($salesFarm,'weekkg'))+$salesParchment['weekkg'];$farmWeekVal=array_sum(array_column($salesFarm,'weekval'))+$salesParchment['weekval'];$farmSeasonKg=array_sum(array_column($salesFarm,'seasonkg'))+$salesParchment['seasonkg'];$farmSeasonVal=array_sum(array_column($salesFarm,'seasonval'))+$salesParchment['seasonval']; ?>
-   <tr class="sales-grand"><td class="sales-grand-label">Grand Total (Kagera Auction, Certified Coffee and Parchment)</td><td class="sales-num"><?=nf($farmWeekKg/1000,3)?></td><td class="sales-num"><?=nf($farmWeekVal,2)?></td><td class="sales-num"><?=nf($farmSeasonKg/1000,3)?></td><td class="sales-num"><?=nf($farmSeasonVal,2)?></td></tr>
+   <tr class="sales-grand"><td>Grand Total (Kagera Auction, Certified Coffee and Parchment)</td><td class="sales-num"><?=nf($farmWeekKg/1000,3)?></td><td class="sales-num"><?=nf($farmWeekVal,2)?></td><td class="sales-num"><?=nf($farmSeasonKg/1000,3)?></td><td class="sales-num"><?=nf($farmSeasonVal,2)?></td></tr>
    <tr class="sales-band"><td colspan="5">Clean Coffee Market</td></tr>
    <?php foreach($channels as$ci=>$ch): ?>
    <tr><th><?=$ci+1?>&nbsp; <?=htmlspecialchars($ch)?></th><th>This Week (MT)</th><th>Value ($)</th><th>Season Total (MT)</th><th>Total Value ($)</th></tr>
    <?php foreach($coffeeTypes as$ct):$r=$salesClean[$ch][$ct];?><tr><td class="sales-label"><?=htmlspecialchars($ct)?></td><td class="sales-num"><?=$r['weekkg']?nf($r['weekkg']/1000,2):'—'?></td><td class="sales-num"><?=$r['weekval']?nf($r['weekval'],2):'—'?></td><td class="sales-num"><?=$r['seasonkg']?nf($r['seasonkg']/1000,2):'—'?></td><td class="sales-num"><?=$r['seasonval']?nf($r['seasonval'],2):'—'?></td></tr><?php endforeach;?>
    <?php endforeach;?>
-   <tr class="sales-grand"><td class="sales-grand-label">Grand Total (Clean Auctions, Direct Export, Local Roast and Local Sale)</td><td class="sales-num"><?=nf($salesGrandWeekKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandWeekVal,2)?></td><td class="sales-num"><?=nf($salesGrandKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandVal,2)?></td></tr>
+   <tr class="sales-grand"><td>Grand Total (Clean Auctions, Direct Export, Local Roast and Local Sale)</td><td class="sales-num"><?=nf($salesGrandWeekKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandWeekVal,2)?></td><td class="sales-num"><?=nf($salesGrandKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandVal,2)?></td></tr>
    <tr class="sales-band"><td colspan="5">Production</td></tr>
    <tr class="sales-production"><td colspan="3">Estimated Production (MT)</td><td colspan="2" class="sales-num"><?=nf($estimatedProduction,2)?></td></tr>
    <tr class="sales-production"><td colspan="3">Percentage Achieved</td><td colspan="2" class="sales-num"><?=nf($productionPct,2)?></td></tr>
@@ -1717,20 +1717,6 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 #salesDashboardDocument.sales-ppt .sales-ppt-footer .phone{left:9.2%!important;top:91.15%!important}
 #salesDashboardDocument.sales-ppt .sales-ppt-footer .social{left:76.2%!important;top:86.6%!important;font-size:21px!important}
 #salesDashboardDocument.sales-ppt .sales-ppt-title span{border-bottom:8px solid #985027!important}
-
-/* Allow the two long grand-total descriptions to wrap within column one. */
-#salesDashboardDocument .sales-table tr.sales-grand td.sales-grand-label{
-  white-space:normal!important;
-  overflow-wrap:break-word!important;
-  word-break:normal!important;
-  overflow:visible!important;
-  text-overflow:clip!important;
-  height:auto!important;
-  line-height:1.25!important;
-  vertical-align:middle!important;
-  text-align:left!important;
-}
-#salesDashboardDocument .sales-table tr.sales-grand{height:auto!important;}
 </style>
 <script>
 (function(){
