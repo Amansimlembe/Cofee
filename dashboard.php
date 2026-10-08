@@ -1598,7 +1598,7 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 #salesDashboardDocument .sales-ppt-header,#salesDashboardDocument .sales-ppt-title,#salesDashboardDocument .sales-ppt-footer{display:none!important}
 #salesDashboardDocument .sales-ppt-body{position:absolute!important;top:21.6%!important;left:15px!important;width:993px!important;max-width:none!important;box-sizing:border-box!important;height:auto!important;overflow:visible!important;padding:0!important;margin:0!important;background:transparent!important;transform-origin:top left!important}
 #salesDashboardDocument .sales-meta,#salesDashboardDocument .sales-table{width:100%!important;min-width:0!important;table-layout:fixed!important;border-collapse:collapse!important;background:rgba(255,255,255,.79)!important;margin:0 0 5px!important}
-#salesDashboardDocument .sales-meta th,#salesDashboardDocument .sales-meta td,#salesDashboardDocument .sales-table th,#salesDashboardDocument .sales-table td{font-size:11.5px!important;line-height:1.18!important;padding:3px 5px!important;border:1px solid #685d50!important;white-space:nowrap!important;overflow-wrap:normal!important;word-break:normal!important;box-sizing:border-box!important;overflow:hidden!important;text-overflow:clip!important}
+#salesDashboardDocument .sales-meta th,#salesDashboardDocument .sales-meta td,#salesDashboardDocument .sales-table th,#salesDashboardDocument .sales-table td{font-size:13px!important;line-height:1.18!important;padding:4px 6px!important;border:1px solid #685d50!important;white-space:nowrap!important;overflow-wrap:normal!important;word-break:normal!important;box-sizing:border-box!important;overflow:hidden!important;text-overflow:clip!important}
 #salesDashboardDocument .sales-table th{text-align:center!important}
 #salesDashboardDocument .sales-table td.sales-label{text-align:left!important}
 #salesDashboardDocument .sales-table td.sales-num{text-align:right!important;font-variant-numeric:tabular-nums!important}
@@ -1610,12 +1610,21 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 #salesDashboardDocument .sales-band td,#salesDashboardDocument .sales-grand td{background:rgba(217,171,121,.72)!important;font-weight:bold!important}
 #salesExportOptions[hidden],#salesProgress[hidden]{display:none!important}
 @media print{#salesDashboardDocument{box-shadow:none!important}.sales-actions,.sales-progress{display:none!important}}
+
+#salesDashboardDocument .sales-meta th,#salesDashboardDocument .sales-meta td{width:auto!important;text-align:center!important;font-weight:700!important}
+#salesDashboardDocument .sales-table tr:not(.sales-band):not(.sales-grand) td:first-child{text-align:left!important}
+#salesDashboardDocument .sales-table tr:not(.sales-band):not(.sales-grand) th{background:rgba(242,232,219,.78)!important;font-weight:700!important}
+#salesDashboardDocument .sales-table tr.sales-band td{background:rgba(216,136,63,.82)!important;text-align:left!important;font-weight:700!important}
+#salesDashboardDocument .sales-table tr.sales-grand td{background:rgba(239,212,180,.88)!important;font-weight:700!important}
+#salesDashboardDocument .sales-table tr.sales-production td{font-weight:700!important;font-style:italic!important}
+#salesDashboardDocument .sales-meta{margin-bottom:5px!important}
+#salesDashboardDocument .sales-table{margin-bottom:0!important}
 </style>
 <script>
 (function(){
 const paper=document.getElementById('salesDashboardDocument');if(!paper)return;
 const body=paper.querySelector('.sales-ppt-body');
-function fit(){if(!body)return;const width=paper.getBoundingClientRect().width||1023;const height=width*1447/1023;const areaHeight=height*.424;body.style.transform='none';const natural=body.scrollHeight||1;const factor=Math.min(width/1023,areaHeight/natural);body.style.transform='scale('+Math.max(.01,factor)+')';}
+function fit(){if(!body)return;body.style.transform='none';const available=1447*.424;const natural=body.scrollHeight||1;const scale=Math.min(1,available/natural);body.style.transform='scale('+scale+')';}
 window.salesDashboardFit=fit;window.addEventListener('resize',fit,{passive:true});if(window.ResizeObserver)new ResizeObserver(fit).observe(paper);document.fonts?.ready.then(fit);requestAnimationFrame(fit);
 const button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions'),progress=document.getElementById('salesProgress'),status=document.getElementById('salesProgressText'),bar=document.getElementById('salesProgressFill'),percent=document.getElementById('salesProgressPercent');
 if(!button||!menu)return;
@@ -1687,13 +1696,18 @@ async function excelWithImage(canvas){
  save(await zip.generateAsync({type:'blob',compression:'DEFLATE'}),base()+'.xlsx');
 }
 async function wordWithImage(canvas){
- update(75,'Embedding dashboard image in Word document…');
- const png=await canvasBlob(canvas,'image/png');const pngBytes=new Uint8Array(await png.arrayBuffer());let binary='';for(let i=0;i<pngBytes.length;i+=8192)binary+=String.fromCharCode(...pngBytes.subarray(i,i+8192));
- const encoded=btoa(binary).match(/.{1,76}/g).join('\r\n');
- const tables=''; // One-page Word export: avoid duplicating the dashboard tables below the image.
- const html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Arial}table{border-collapse:collapse;width:100%}th,td{border:1px solid #777;padding:5px;font-size:9pt}img{width:7.5in;height:auto}</style></head><body><img src="dashboard.png" width="768" alt="Sales Dashboard"/><div style="page-break-before:always"><h2>Editable Sales Data</h2>'+tables+'</div></body></html>';
- const boundary='----TCBDashboard'+Date.now();const mhtml='MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary="'+boundary+'"; type="text/html"\r\n\r\n--'+boundary+'\r\nContent-Type: text/html; charset="utf-8"\r\nContent-Location: file:///dashboard.html\r\n\r\n'+html+'\r\n--'+boundary+'\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\nContent-Location: dashboard.png\r\n\r\n'+encoded+'\r\n--'+boundary+'--';
- save(new Blob([mhtml],{type:'message/rfc822'}),base()+'.mht');
+ update(72,'Creating Microsoft Word DOCX…');
+ await library('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',()=>!!window.JSZip);
+ const zip=new JSZip();const png=await canvasBlob(canvas,'image/png');
+ const w=11906,h=16838; // A4 in twentieths of a point
+ const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+ zip.file('[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
+ zip.file('_rels/.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+ zip.file('word/_rels/document.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/dashboard.png"/></Relationships>`);
+ zip.file('word/media/dashboard.png',png);
+ const cx=7470000,cy=Math.round(cx*1447/1023);
+ zip.file('word/document.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body><w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="1" name="Sales Dashboard"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="dashboard.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p><w:sectPr><w:pgSz w:w="${w}" w:h="${h}"/><w:pgMar w:top="180" w:right="180" w:bottom="180" w:left="180" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>`);
+ save(await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}}),base()+'.docx');
 }
 menu.addEventListener('click',async e=>{
  const type=e.target.closest('[data-type]')?.dataset.type;if(!type)return;
