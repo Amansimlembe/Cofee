@@ -192,14 +192,26 @@ if($display==='sales'){
  $dateRows=$ddb->query("SELECT invoice_date d FROM public.direct_sales WHERE invoice_date IS NOT NULL UNION SELECT auction_date FROM public.clean_auction_results WHERE auction_date IS NOT NULL")->fetchAll();
  $seasons=[];foreach($dateRows as$r){$d=$r['d']??null;if(!$d)continue;$y=(int)substr($d,0,4);$m=(int)substr($d,5,2);$sy=$m>=7?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}
  $kDateRows=$db->query("SELECT auction_date d FROM public.kagera_auction_results WHERE auction_date IS NOT NULL UNION SELECT auction_date FROM public.kagera_auction_catalogue WHERE auction_date IS NOT NULL")->fetchAll();foreach($kDateRows as$r){$d=$r['d']??null;if(!$d)continue;$y=(int)substr($d,0,4);$m=(int)substr($d,5,2);$sy=$m>=6?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
- $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
- [$kSy1,$kSy2]=array_map('intval',explode('/',$season));$kFrom=$kSy1.'-06-01';$kTo=$kSy2.'-05-31';
+  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$seasonTo]=season_bounds($season);
+  /* Friday-only publication dates, bounded by the selected season and local date. */
+  $salesFridayDates=[];
+  $salesTZ=new DateTimeZone('Africa/Dar_es_Salaam');
+  $fridayCursor=new DateTimeImmutable($from,$salesTZ);
+  while((int)$fridayCursor->format('N')!==5)$fridayCursor=$fridayCursor->modify('+1 day');
+  $fridayLimit=new DateTimeImmutable($seasonTo,$salesTZ);
+  $todayLocal=new DateTimeImmutable('today',$salesTZ);
+  if($todayLocal<$fridayLimit)$fridayLimit=$todayLocal;
+  for(;$fridayCursor<=$fridayLimit;$fridayCursor=$fridayCursor->modify('+7 days'))$salesFridayDates[]=$fridayCursor->format('Y-m-d');
+  $requestedFriday=trim((string)($_GET['report_date']??''));
+  $salesReportDate=in_array($requestedFriday,$salesFridayDates,true)?$requestedFriday:($salesFridayDates?end($salesFridayDates):$from);
+  $to=$salesReportDate;
+  [$kSy1,$kSy2]=array_map('intval',explode('/',$season));$kFrom=$kSy1.'-06-01';$kSeasonEnd=$kSy2.'-05-31';$kTo=min($kSeasonEnd,$salesReportDate);
  $endQ=$ddb->prepare("SELECT MAX(d) FROM (SELECT invoice_date d FROM public.direct_sales WHERE invoice_date BETWEEN :f1 AND :t1 UNION ALL SELECT auction_date FROM public.clean_auction_results WHERE auction_date BETWEEN :f2 AND :t2 UNION ALL SELECT auction_date FROM public.kagera_auction_results WHERE auction_date BETWEEN :f3 AND :t3)x");
- $endQ->execute(['f1'=>$from,'t1'=>$to,'f2'=>$from,'t2'=>$to,'f3'=>$kFrom,'t3'=>$kTo]);$salesEnd=$endQ->fetchColumn()?:$to;
+ $endQ->execute(['f1'=>$from,'t1'=>$to,'f2'=>$from,'t2'=>$to,'f3'=>$kFrom,'t3'=>$kTo]);$latestSalesTransaction=$endQ->fetchColumn()?:null;$salesEnd=$salesReportDate;
  $weekStart=date('Y-m-d',strtotime('monday this week',strtotime($salesEnd))); if($weekStart<$from)$weekStart=$from;
  $kcase="CASE WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%dry cherry%' THEN 'Dry Cherry' WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%clean%' THEN 'Clean Coffee' ELSE NULL END";
  $salesFarm=['Dry Cherry'=>['weekkg'=>0,'weekval'=>0,'seasonkg'=>0,'seasonval'=>0],'Clean Coffee'=>['weekkg'=>0,'weekval'=>0,'seasonkg'=>0,'seasonval'=>0]];
- $kEndQ=$db->prepare("SELECT MAX(auction_date) FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t");$kEndQ->execute(['f'=>$kFrom,'t'=>$kTo]);$kSalesEnd=$kEndQ->fetchColumn()?:$kTo;$kWeekStart=date('Y-m-d',strtotime('monday this week',strtotime($kSalesEnd)));if($kWeekStart<$kFrom)$kWeekStart=$kFrom;
+ $kEndQ=$db->prepare("SELECT MAX(auction_date) FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t");$kEndQ->execute(['f'=>$kFrom,'t'=>$kTo]);$kLatestTransaction=$kEndQ->fetchColumn()?:null;$kSalesEnd=$kTo;$kWeekStart=date('Y-m-d',strtotime('monday this week',strtotime($kSalesEnd)));if($kWeekStart<$kFrom)$kWeekStart=$kFrom;
  $q=$db->prepare("SELECT $kcase typ,SUM(CASE WHEN auction_date BETWEEN :w AND :e THEN COALESCE(kgs,0) ELSE 0 END) weekkg,SUM(CASE WHEN auction_date BETWEEN :w AND :e THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END) weekval,SUM(COALESCE(kgs,0)) seasonkg,SUM(COALESCE(kgs,0)*COALESCE(price,0)) seasonval FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['w'=>$kWeekStart,'e'=>$kSalesEnd,'f'=>$kFrom,'t'=>$kTo]);foreach($q as$r){if(isset($salesFarm[$r['typ']]))foreach(['weekkg','weekval','seasonkg','seasonval']as$k)$salesFarm[$r['typ']][$k]=(float)$r[$k];}
   /* Parchment: registered farm-gate contracts, identified by coffee type or processing method.
      Contract amounts are in TZS; this does not represent confirmed auction sales. */
@@ -1149,6 +1161,13 @@ tfoot td{font-weight:700!important}
               <?php foreach(array_reverse($wednesdayDates) as $wd): ?><option value="<?=htmlspecialchars($wd)?>" <?=$wd===$reportDate?'selected':''?>><?=date('D, d M Y',strtotime($wd))?></option><?php endforeach; ?>
             </select>
             <?php endif; ?>
+            <?php if($display==='sales'): ?>
+            <label for="salesReportDate">Report Date (Friday)</label>
+            <select id="salesReportDate" name="report_date" onchange="this.form.submit()" title="Weekly Sales Dashboard published each Friday; totals include transactions up to the selected Friday">
+              <?php foreach(array_reverse($salesFridayDates) as $friday): ?><option value="<?=htmlspecialchars($friday)?>" <?=$friday===$salesReportDate?'selected':''?>><?=date('D, d M Y',strtotime($friday))?></option><?php endforeach; ?>
+              <?php if(!$salesFridayDates): ?><option value="<?=htmlspecialchars($salesReportDate)?>">No Friday yet this season</option><?php endif; ?>
+            </select>
+            <?php endif; ?>
             <?php if($display==='totalclean'): ?>
             <label>View</label>
             <select name="totalclean_view" class="totalclean-view-select" onchange="this.form.submit()">
@@ -1244,7 +1263,7 @@ tfoot td{font-weight:700!important}
  </div>
 </section>
 <?php elseif($display==='sales'): ?>
-<div class="sales-actions" data-html2canvas-ignore="true"><div class="sales-export-control"><button type="button" id="salesExportButton">⇩ Export Dashboard</button><div id="salesExportOptions" hidden><button type="button" data-type="pdf">PDF</button><button type="button" data-type="xlsx">Excel</button><button type="button" data-type="doc">Word</button><button type="button" data-type="png">PNG Image</button><button type="button" data-type="jpg">JPEG Image</button></div></div></div>
+<div class="sales-actions" data-html2canvas-ignore="true"><div class="sales-export-control pre-export-wrap"><button type="button" id="salesExportButton" class="pre-export-btn" aria-haspopup="true" aria-expanded="false">⇩ Export Dashboard</button><div id="salesExportOptions" class="pre-export-menu" hidden><button type="button" data-type="pdf">PDF</button><button type="button" data-type="xlsx">Excel</button><button type="button" data-type="doc">Word</button><button type="button" data-type="png">PNG Image</button><button type="button" data-type="jpg">JPEG Image</button></div></div></div>
 <div id="salesProgress" class="sales-progress" role="status" aria-live="polite" hidden><span class="sales-spinner"></span><span id="salesProgressText">Preparing…</span><div class="sales-progress-track"><div id="salesProgressFill"></div></div><strong id="salesProgressPercent">0%</strong></div>
 <section class="sales-ppt" id="salesDashboardDocument">
  <div class="sales-ppt-header"><div class="gov-title">THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div></div>
@@ -1717,6 +1736,24 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 #salesDashboardDocument.sales-ppt .sales-ppt-footer .phone{left:9.2%!important;top:91.15%!important}
 #salesDashboardDocument.sales-ppt .sales-ppt-footer .social{left:76.2%!important;top:86.6%!important;font-size:21px!important}
 #salesDashboardDocument.sales-ppt .sales-ppt-title span{border-bottom:8px solid #985027!important}
+/* Consistent export controls and mobile-friendly report surfaces */
+.sales-actions{display:flex!important;justify-content:flex-end!important;align-items:center!important;flex-wrap:wrap!important;gap:8px!important;max-width:1023px!important;width:100%!important;margin:8px auto!important;overflow:visible!important}
+.sales-actions .sales-export-control{position:relative!important;display:inline-flex!important;justify-content:flex-end!important}
+.sales-actions #salesExportButton{border:1px solid #6f4e37!important;background:#fff!important;color:#4b2e20!important;border-radius:6px!important;padding:7px 12px!important;font-size:12px!important;font-weight:800!important;cursor:pointer!important;min-height:36px!important}
+.sales-actions #salesExportButton:hover,.pre-export-btn:hover{background:#f4e8dc!important}
+.sales-actions #salesExportOptions{position:absolute!important;right:0!important;top:calc(100% + 4px)!important;z-index:100!important;min-width:145px!important;padding:4px!important;border:1px solid #d8cec8!important;border-radius:6px!important;background:#fff!important;box-shadow:0 7px 20px rgba(0,0,0,.14)!important}
+.sales-actions #salesExportOptions[hidden]{display:none!important}
+.sales-actions #salesExportOptions:not([hidden]){display:block!important}
+.sales-actions #salesExportOptions button{display:block!important;width:100%!important;padding:9px 10px!important;border:0!important;background:transparent!important;text-align:left!important;color:#4b2e20!important;font-size:12px!important;cursor:pointer!important}
+.sales-actions #salesExportOptions button:hover{background:#f4e8dc!important}
+.pre-report{min-width:0!important;max-width:100%!important;overflow-x:hidden!important}
+.pre-report .pre-paper{box-sizing:border-box!important;max-width:min(980px,100%)!important;min-width:0!important}
+.pre-report .pre-scroll{max-width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
+.pre-report .pre-scroll table{width:100%!important}
+#salesDashboardDocument{max-width:min(1023px,100%)!important;min-width:0!important}
+@media(max-width:720px){.pre-report .pre-paper{padding:16px 12px 26px!important}.pre-report .pre-paper h1{font-size:clamp(13px,3.5vw,17px)!important}.pre-report .pre-paper h2{font-size:clamp(12px,3vw,15px)!important}.pre-report .pre-paper p{font-size:12px!important;line-height:1.55!important}.pre-report .pre-scroll table{min-width:560px!important}.sales-actions{padding:0 2px!important}.sales-actions #salesExportButton{font-size:12px!important}}
+@media(max-width:420px){.pre-report .pre-paper{padding:12px 9px 22px!important}.pre-report .pre-scroll table{min-width:520px!important}.pre-export-bar{justify-content:flex-end!important}}
+@media print{.sales-actions,.pre-export-bar{display:none!important}}
 </style>
 <script>
 (function(){
@@ -1726,10 +1763,10 @@ function fit(){if(!body)return;const width=paper.getBoundingClientRect().width||
 window.salesDashboardFit=fit;window.addEventListener('resize',fit,{passive:true});if(window.ResizeObserver)new ResizeObserver(fit).observe(paper);document.fonts?.ready.then(fit);requestAnimationFrame(fit);
 const button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions'),progress=document.getElementById('salesProgress'),status=document.getElementById('salesProgressText'),bar=document.getElementById('salesProgressFill'),percent=document.getElementById('salesProgressPercent');
 if(!button||!menu)return;
-button.addEventListener('click',e=>{e.stopPropagation();menu.hidden=!menu.hidden;});document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control'))menu.hidden=true;});
+button.addEventListener('click',e=>{e.stopPropagation();menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));});document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control')){menu.hidden=true;button.setAttribute('aria-expanded','false');}});
 function update(n,msg){if(progress)progress.hidden=false;if(bar)bar.style.width=n+'%';if(percent)percent.textContent=n+'%';if(status)status.textContent=msg;}
 function save(blob,name){const a=document.createElement('a'),u=URL.createObjectURL(blob);a.href=u;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);a.remove()},5000);}
-function base(){return 'TCB_Sales_Dashboard_'+String(<?=json_encode($season)?>).replace(/\W/g,'_');}
+function base(){return 'TCB_Sales_Dashboard_'+String(<?=json_encode($season)?>).replace(/\W/g,'_')+'_Friday_'+<?=json_encode($salesReportDate)?>;}
 async function library(url,check){if(check())return;await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=url;s.onload=resolve;s.onerror=()=>reject(new Error('Could not load export library: '+url));document.head.appendChild(s);});if(!check())throw new Error('Export library unavailable');}
 async function snapshot(){
  await library('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
