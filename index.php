@@ -1325,6 +1325,15 @@ submenu names.
  .mobile-account-menu{width:min(220px,calc(100vw - var(--shell-sidebar) - 12px));top:calc(100% + 5px)}
 }
 
+
+/* Embedded reports must track the live main-panel width, not a stale viewport. */
+html,body{max-width:100%;overflow-x:hidden}
+.main{width:auto;min-width:0;max-width:calc(100% - var(--shell-sidebar));box-sizing:border-box}
+.sidebar.collapsed ~ .main{max-width:calc(100% - var(--shell-sidebar-collapsed))}
+.content,.content>.section{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+#dashboard{overflow:hidden!important}
+#dashboardFrame{display:block;width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important}
+@media(max-width:900px){.main,.sidebar.collapsed ~ .main{max-width:calc(100% - var(--shell-sidebar))}}
 </style>
 
 </head>
@@ -1774,6 +1783,23 @@ submenu names.
    SIDEBAR TOGGLE
 ========================================================= */
 
+function notifyDashboardLayout(){
+    const frame=document.getElementById('dashboardFrame');
+    if(!frame)return;
+    try{frame.contentWindow.postMessage({type:'tcb:layout-resize'},window.location.origin);}catch(e){}
+}
+function scheduleDashboardLayout(){
+    requestAnimationFrame(notifyDashboardLayout);
+    [80,180,320,420].forEach(ms=>setTimeout(notifyDashboardLayout,ms));
+}
+window.addEventListener('resize',scheduleDashboardLayout,{passive:true});
+window.addEventListener('load',function(){
+    const frame=document.getElementById('dashboardFrame');
+    if(frame)frame.addEventListener('load',scheduleDashboardLayout);
+    const main=document.querySelector('.main');
+    if(main&&window.ResizeObserver)new ResizeObserver(scheduleDashboardLayout).observe(main);
+    scheduleDashboardLayout();
+});
 function toggleSidebar() {
 
     const sidebar =
@@ -1784,6 +1810,7 @@ function toggleSidebar() {
 
 
     sidebar.classList.toggle("collapsed");
+    scheduleDashboardLayout();
 
     document.querySelectorAll(".collapsed-tooltip").forEach(function(tooltip) {
         tooltip.style.display = "";
