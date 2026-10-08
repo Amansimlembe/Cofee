@@ -1466,58 +1466,7 @@ tfoot td{font-weight:700!important}
     const clone=paper.cloneNode(true);
     const style='<style>body{font-family:Arial;color:#30251d}table{width:100%;border-collapse:collapse}td,th{border:1px solid #555;padding:5px;font-size:9pt}th{text-align:center}h1{text-align:center}</style>';
     const html='<!doctype html><html><head><meta charset="utf-8">'+style+'</head><body>'+clone.outerHTML+'
-<style id="sales-fixed-slide-css">
-/* Slide 2 is the immutable full-page artwork; only the table overlay changes. */
-#salesDashboardDocument.sales-ppt{
- position:relative!important; width:100%!important; max-width:1100px!important;
- aspect-ratio:2643 / 3738!important; height:auto!important; min-height:0!important;
- margin:0 auto!important; overflow:hidden!important; border:0!important;
- background:#eee url('sales_dashboard_fixed_background.png') center / 100% 100% no-repeat!important;
- box-shadow:0 4px 22px #0002!important;
-}
-#salesDashboardDocument .sales-ppt-header,
-#salesDashboardDocument .sales-ppt-title,
-#salesDashboardDocument .sales-ppt-footer{display:none!important}
-#salesDashboardDocument .sales-ppt-body{
- position:absolute!important;top:21.6%!important;left:0!important;right:auto!important;
- width:1100px!important;max-width:none!important;height:auto!important;
- overflow:visible!important;padding:0!important;margin:0!important;
- background:transparent!important;transform-origin:top left!important;
-}
-#salesDashboardDocument .sales-meta,#salesDashboardDocument .sales-table{
- width:100%!important;min-width:0!important;table-layout:fixed!important;
- border-collapse:collapse!important;background:transparent!important;
-}
-#salesDashboardDocument .sales-meta td,#salesDashboardDocument .sales-meta th,
-#salesDashboardDocument .sales-table td,#salesDashboardDocument .sales-table th{
- font-size:12px!important;line-height:1.18!important;padding:3px 6px!important;
- border:1px solid #49423b!important;background:rgba(255,255,255,.15)!important;
- overflow-wrap:normal!important;white-space:normal!important;
-}
-#salesDashboardDocument .sales-table th{text-align:center!important}
-#salesDashboardDocument .sales-table .sales-label{text-align:left!important}
-#salesDashboardDocument .sales-table .sales-num{text-align:center!important}
-#salesDashboardDocument .sales-table .sales-band td,
-#salesDashboardDocument .sales-table .sales-grand td{background:rgba(226,166,98,.30)!important}
-@media print{#salesDashboardDocument.sales-ppt{break-inside:avoid!important;box-shadow:none!important}}
-</style>
-<script>
-(function(){
- const doc=document.getElementById('salesDashboardDocument');
- if(!doc)return;
- const body=doc.querySelector('.sales-ppt-body');
- function fit(){
-  const width=doc.clientWidth;
-  const available=doc.clientHeight*.475;
-  const scale=Math.min(width/1100,available/Math.max(body.scrollHeight,1));
-  body.style.transform='scale('+Math.max(.01,scale)+')';
- }
- window.addEventListener('resize',fit,{passive:true});
- if('ResizeObserver' in window)new ResizeObserver(fit).observe(doc);
- document.fonts?.ready.then(fit);requestAnimationFrame(fit);
- window.salesDashboardFit=fit;
-})();
-</script>
+
 </body></html>';
     download(new Blob(['\ufeff',html],{type:'application/msword'}),base+'.doc');
    }else{
@@ -1948,6 +1897,58 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
   }catch(err){update(0,'Export failed: '+err.message);alert('Dashboard export failed: '+err.message)}
   finally{busy=false;button.disabled=false;setTimeout(()=>{progress.hidden=true},2400)}
  });
+})();
+</script>
+<style id="sales-fixed-slide-css">
+/* Slide 2 is the immutable full-page artwork; only the table overlay changes. */
+#salesDashboardDocument.sales-ppt{
+ position:relative!important; width:100%!important; max-width:1100px!important;
+ aspect-ratio:2643 / 3738!important; height:auto!important; min-height:0!important;
+ margin:0 auto!important; overflow:hidden!important; border:0!important;
+ background:#eee url('sales_dashboard_fixed_background(1).png') center / 100% 100% no-repeat!important;
+ box-shadow:0 4px 22px #0002!important;
+}
+#salesDashboardDocument .sales-ppt-header,
+#salesDashboardDocument .sales-ppt-title,
+#salesDashboardDocument .sales-ppt-footer{display:none!important}
+#salesDashboardDocument .sales-ppt-body{
+ position:absolute!important;top:21.6%!important;left:0!important;right:auto!important;
+ width:1100px!important;max-width:none!important;height:auto!important;
+ overflow:visible!important;padding:0!important;margin:0!important;
+ background:transparent!important;transform-origin:top left!important;
+}
+#salesDashboardDocument .sales-meta,#salesDashboardDocument .sales-table{
+ width:100%!important;min-width:0!important;table-layout:fixed!important;
+ border-collapse:collapse!important;background:transparent!important;
+}
+#salesDashboardDocument .sales-meta td,#salesDashboardDocument .sales-meta th,
+#salesDashboardDocument .sales-table td,#salesDashboardDocument .sales-table th{
+ font-size:12px!important;line-height:1.18!important;padding:3px 6px!important;
+ border:1px solid #49423b!important;background:rgba(255,255,255,.15)!important;
+ overflow-wrap:normal!important;white-space:normal!important;
+}
+#salesDashboardDocument .sales-table th{text-align:center!important}
+#salesDashboardDocument .sales-table .sales-label{text-align:left!important}
+#salesDashboardDocument .sales-table .sales-num{text-align:center!important}
+#salesDashboardDocument .sales-table .sales-band td,
+#salesDashboardDocument .sales-table .sales-grand td{background:rgba(226,166,98,.30)!important}
+@media print{#salesDashboardDocument.sales-ppt{break-inside:avoid!important;box-shadow:none!important}}
+</style>
+<script>
+(function(){
+ const doc=document.getElementById('salesDashboardDocument');
+ if(!doc)return;
+ const body=doc.querySelector('.sales-ppt-body');
+ function fit(){
+  const width=doc.clientWidth;
+  const available=doc.clientHeight*.475;
+  const scale=Math.min(width/1100,available/Math.max(body.scrollHeight,1));
+  body.style.transform='scale('+Math.max(.01,scale)+')';
+ }
+ window.addEventListener('resize',fit,{passive:true});
+ if('ResizeObserver' in window)new ResizeObserver(fit).observe(doc);
+ document.fonts?.ready.then(fit);requestAnimationFrame(fit);
+ window.salesDashboardFit=fit;
 })();
 </script>
 </body>
