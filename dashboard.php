@@ -35,6 +35,33 @@ if(($_GET['action']??'')==='save_terminal_price'){
  catch(Throwable $e){error_log('Terminal price save: '.$e->getMessage());http_response_code(500);echo json_encode(['success'=>false,'message'=>'Unable to save the price. Please try again.']);}
  exit;
 }
+/* Certified Coffee: manual farmgate figures, independent for each Friday report. */
+function certified_coffee_table(PDO $pdo):void{
+ $pdo->exec("CREATE TABLE IF NOT EXISTS public.dashboard_certified_coffee (season VARCHAR(9) NOT NULL, report_date DATE NOT NULL, week_mt NUMERIC(18,3) NOT NULL DEFAULT 0 CHECK(week_mt>=0), week_value_tzs NUMERIC(22,2) NOT NULL DEFAULT 0 CHECK(week_value_tzs>=0), season_mt NUMERIC(18,3) NOT NULL DEFAULT 0 CHECK(season_mt>=0), season_value_tzs NUMERIC(22,2) NOT NULL DEFAULT 0 CHECK(season_value_tzs>=0), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(season,report_date))");
+}
+if(($_GET['action']??'')==='save_certified_coffee'){
+ header('Content-Type: application/json; charset=utf-8');header('Cache-Control: no-store');
+ try{
+  if(($_SERVER['REQUEST_METHOD']??'')!=='POST')throw new InvalidArgumentException('POST is required.');
+  if(!hash_equals($_SESSION['terminal_price_csrf'],(string)($_POST['csrf']??'')))throw new InvalidArgumentException('Security token expired. Refresh and retry.');
+  $ss=(string)($_POST['season']??'');$dd=(string)($_POST['report_date']??'');
+  if(!preg_match('/^(\d{4})\/(\d{4})$/',$ss,$mm)||(int)$mm[2]!==((int)$mm[1]+1))throw new InvalidArgumentException('Invalid season.');
+  $dt=DateTimeImmutable::createFromFormat('!Y-m-d',$dd);
+  if(!$dt||$dt->format('Y-m-d')!==$dd||$dt->format('N')!=='5'||$dd<$mm[1].'-07-01'||$dd>$mm[2].'-06-30')throw new InvalidArgumentException('Invalid Friday report date.');
+  $values=[];
+  foreach(['week_mt'=>3,'week_value_tzs'=>2,'season_mt'=>3,'season_value_tzs'=>2] as$key=>$dec){
+   $raw=trim((string)($_POST[$key]??''));
+   if(!preg_match('/^\d{1,14}(?:\.\d{1,'.$dec.'})?$/D',$raw))throw new InvalidArgumentException('Invalid '.$key.'; use non-negative numbers with at most '.$dec.' decimal places.');
+   $values[$key]=$raw;
+  }
+  $pdo=terminal_price_db();certified_coffee_table($pdo);
+  $q=$pdo->prepare('INSERT INTO public.dashboard_certified_coffee (season,report_date,week_mt,week_value_tzs,season_mt,season_value_tzs) VALUES (:season,:report_date,:week_mt,:week_value_tzs,:season_mt,:season_value_tzs) ON CONFLICT(season,report_date) DO UPDATE SET week_mt=EXCLUDED.week_mt,week_value_tzs=EXCLUDED.week_value_tzs,season_mt=EXCLUDED.season_mt,season_value_tzs=EXCLUDED.season_value_tzs,updated_at=NOW()');
+  $q->execute(['season'=>$ss,'report_date'=>$dd]+$values);
+  echo json_encode(['success'=>true,'values'=>$values]);
+ }catch(InvalidArgumentException $e){http_response_code(422);echo json_encode(['success'=>false,'message'=>$e->getMessage()]);}
+ catch(Throwable $e){error_log('Certified Coffee save: '.$e->getMessage());http_response_code(500);echo json_encode(['success'=>false,'message'=>'Unable to save Certified Coffee figures.']);}
+ exit;
+}
 $totalCleanView=$_GET['totalclean_view']??'summary';
 if(!in_array($totalCleanView,['summary','analysis'],true))$totalCleanView='summary';
 
@@ -275,6 +302,8 @@ if($display==='sales'){
  $estimatedProduction=85000.0;$productionPct=$estimatedProduction>0?($salesGrandKg/1000)/$estimatedProduction*100:0;
   $terminalPrices=['arabica'=>null,'robusta'=>null];
   try{$tpdo=terminal_price_db();terminal_price_table($tpdo);$tq=$tpdo->prepare('SELECT coffee_type,price_usd_kg FROM public.dashboard_terminal_prices WHERE season=:s AND report_date=:d');$tq->execute(['s'=>$season,'d'=>$salesReportDate]);foreach($tq as$tr)$terminalPrices[$tr['coffee_type']]=(float)$tr['price_usd_kg'];}catch(Throwable $e){error_log('Terminal price read: '.$e->getMessage());}
+ $certifiedCoffee=['week_mt'=>0.0,'week_value_tzs'=>0.0,'season_mt'=>0.0,'season_value_tzs'=>0.0];
+ try{$certDb=terminal_price_db();certified_coffee_table($certDb);$cq=$certDb->prepare('SELECT week_mt,week_value_tzs,season_mt,season_value_tzs FROM public.dashboard_certified_coffee WHERE season=:s AND report_date=:d');$cq->execute(['s'=>$season,'d'=>$salesReportDate]);$saved=$cq->fetch();if($saved)foreach($certifiedCoffee as$k=>$unused)$certifiedCoffee[$k]=(float)$saved[$k];}catch(Throwable $e){error_log('Certified Coffee read: '.$e->getMessage());}
  $dashboardTitle='Sales Dashboard';$dashboardSub='Tanzania Coffee Board · Sales Season (FY)';
 }else
 if($display==='totalclean'){
@@ -1349,10 +1378,10 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
    <tr class="sales-band"><td colspan="5">Farmgate Market</td></tr>
    <tr><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
    <?php foreach(['Dry Cherry','Clean Coffee'] as$ct):$r=$salesFarm[$ct];?><tr><td class="sales-label"><?=htmlspecialchars($ct)?></td><td class="sales-num"><?=nf($r['weekkg']/1000,3)?></td><td class="sales-num"><?=nf($r['weekval'],2)?></td><td class="sales-num"><?=nf($r['seasonkg']/1000,3)?></td><td class="sales-num"><?=nf($r['seasonval'],2)?></td></tr><?php endforeach;?>
-   <tr><td class="sales-label">2&nbsp; Certified Coffee</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td><td class="sales-na">—</td></tr>
+   <tr><td class="sales-label">2&nbsp; Certified Coffee</td><?php foreach(['week_mt','week_value_tzs','season_mt','season_value_tzs'] as $field):$val=$certifiedCoffee[$field];?><td class="sales-num certified-edit" data-field="<?=$field?>" data-value="<?=htmlspecialchars((string)$val,ENT_QUOTES)?>" title="Double-click to edit Certified Coffee" tabindex="0" role="button" aria-label="Edit Certified Coffee <?=htmlspecialchars(str_replace('_',' ',$field))?>"><?=$val?nf($val,str_ends_with($field,'mt')?3:2):'—'?></td><?php endforeach;?></tr>
    <tr><td class="sales-label">3&nbsp; Parchment</td><?php foreach(['weekkg','weekval','seasonkg','seasonval'] as $field): $v=$salesParchment[$field]; ?><td class="sales-num"><?=$v?nf(str_ends_with($field,'kg')?$v/1000:$v,str_ends_with($field,'kg')?3:2):'—'?></td><?php endforeach; ?></tr>
-   <?php $farmWeekKg=array_sum(array_column($salesFarm,'weekkg'))+$salesParchment['weekkg'];$farmWeekVal=array_sum(array_column($salesFarm,'weekval'))+$salesParchment['weekval'];$farmSeasonKg=array_sum(array_column($salesFarm,'seasonkg'))+$salesParchment['seasonkg'];$farmSeasonVal=array_sum(array_column($salesFarm,'seasonval'))+$salesParchment['seasonval']; ?>
-   <tr class="sales-grand"><td>Grand Total</td><td class="sales-num"><?=nf($farmWeekKg/1000,3)?></td><td class="sales-num"><?=nf($farmWeekVal,2)?></td><td class="sales-num"><?=nf($farmSeasonKg/1000,3)?></td><td class="sales-num"><?=nf($farmSeasonVal,2)?></td></tr>
+   <?php $farmWeekKg=array_sum(array_column($salesFarm,'weekkg'))+$salesParchment['weekkg']+$certifiedCoffee['week_mt']*1000;$farmWeekVal=array_sum(array_column($salesFarm,'weekval'))+$salesParchment['weekval']+$certifiedCoffee['week_value_tzs'];$farmSeasonKg=array_sum(array_column($salesFarm,'seasonkg'))+$salesParchment['seasonkg']+$certifiedCoffee['season_mt']*1000;$farmSeasonVal=array_sum(array_column($salesFarm,'seasonval'))+$salesParchment['seasonval']+$certifiedCoffee['season_value_tzs']; ?>
+   <tr class="sales-grand" id="farmgateGrandTotal"><td>Grand Total</td><td class="sales-num"><?=nf($farmWeekKg/1000,3)?></td><td class="sales-num"><?=nf($farmWeekVal,2)?></td><td class="sales-num"><?=nf($farmSeasonKg/1000,3)?></td><td class="sales-num"><?=nf($farmSeasonVal,2)?></td></tr>
    <tr class="sales-band"><td colspan="5">Clean Coffee Market</td></tr>
    <?php foreach($channels as$ci=>$ch): ?>
    <tr><th><?=$ci+1?>&nbsp; <?=htmlspecialchars($ch)?></th><th>This Week (MT)</th><th>Value ($)</th><th>Season Total (MT)</th><th>Total Value ($)</th></tr>
@@ -2041,6 +2070,48 @@ menu.addEventListener('click',async e=>{
    active.textContent=Number(result.price).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:4});
    dialog.hidden=true;dialog.setAttribute('aria-hidden','true');previousFocus?.focus();active=null;window.salesDashboardFit?.();
   }catch(err){error.textContent=err.message||'Unable to save price';}finally{save.disabled=false;save.textContent='Save price';}
+ });
+})();
+</script>
+<style>
+#salesDashboardDocument .certified-edit{cursor:pointer;text-decoration:underline dotted #98663b;text-underline-offset:3px}
+#salesDashboardDocument .certified-edit:hover,#salesDashboardDocument .certified-edit:focus{background:#fff3db;outline:1px solid #b78858}
+</style>
+<div id="certifiedCoffeeDialog" class="terminal-price-dialog" hidden data-html2canvas-ignore="true" aria-hidden="true">
+ <form id="certifiedCoffeeForm" class="terminal-price-card" role="dialog" aria-modal="true" aria-labelledby="certifiedCoffeeHeading">
+  <h3 id="certifiedCoffeeHeading">Edit Certified Coffee</h3><p>Farmgate Market · selected Friday report. Quantities are in MT; values are in TZS.</p>
+  <label for="certWeekMt">This Week (MT)</label><input id="certWeekMt" type="number" min="0" step="0.001" required>
+  <label for="certWeekValue">Value (TZS)</label><input id="certWeekValue" type="number" min="0" step="0.01" required>
+  <label for="certSeasonMt">Season Total (MT)</label><input id="certSeasonMt" type="number" min="0" step="0.001" required>
+  <label for="certSeasonValue">Total Value (TZS)</label><input id="certSeasonValue" type="number" min="0" step="0.01" required>
+  <div id="certifiedCoffeeError" class="error" role="alert"></div>
+  <div class="actions"><button type="button" id="certifiedCoffeeCancel">Cancel</button><button type="submit" id="certifiedCoffeeSave">Save figures</button></div>
+ </form>
+</div>
+<script id="certified-coffee-edit-js">
+(()=>{
+ const dialog=document.getElementById('certifiedCoffeeDialog'),form=document.getElementById('certifiedCoffeeForm');if(!dialog||!form)return;
+ const fields={week_mt:document.getElementById('certWeekMt'),week_value_tzs:document.getElementById('certWeekValue'),season_mt:document.getElementById('certSeasonMt'),season_value_tzs:document.getElementById('certSeasonValue')};
+ const cells=[...document.querySelectorAll('#salesDashboardDocument .certified-edit')],error=document.getElementById('certifiedCoffeeError'),save=document.getElementById('certifiedCoffeeSave');
+ let previousFocus=null;
+ const close=()=>{if(save.disabled)return;dialog.hidden=true;dialog.setAttribute('aria-hidden','true');previousFocus?.focus();};
+ const open=()=>{previousFocus=document.activeElement;cells.forEach(c=>fields[c.dataset.field].value=c.dataset.value||'0');error.textContent='';dialog.hidden=false;dialog.setAttribute('aria-hidden','false');fields.week_mt.focus();};
+ cells.forEach(c=>{c.addEventListener('dblclick',open);c.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});});
+ document.getElementById('certifiedCoffeeCancel').addEventListener('click',close);
+ dialog.addEventListener('click',e=>{if(e.target===dialog)close();});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.hidden)close();});
+ const fmt=(v,dec)=>Number(v).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+ form.addEventListener('submit',async e=>{e.preventDefault();if(save.disabled)return;const values={};
+  for(const [k,input] of Object.entries(fields)){const raw=input.value.trim(),dec=k.endsWith('_mt')?3:2;if(!new RegExp('^\\d{1,14}(?:\\.\\d{1,'+dec+'})?$').test(raw)){error.textContent='Enter valid non-negative numbers (up to '+dec+' decimal places).';input.focus();return;}values[k]=raw;}
+  save.disabled=true;save.textContent='Saving…';error.textContent='';
+  try{
+   const body=new URLSearchParams({...values,csrf:<?=json_encode($_SESSION['terminal_price_csrf'])?>,season:<?=json_encode($season)?>,report_date:<?=json_encode($salesReportDate)?>});
+   const response=await fetch('dashboard.php?action=save_certified_coffee',{method:'POST',body,credentials:'same-origin',headers:{Accept:'application/json'}});
+   const result=await response.json();if(!response.ok||!result.success)throw new Error(result.message||'Saving failed');
+   cells.forEach(c=>{const k=c.dataset.field,v=Number(result.values[k]);c.dataset.value=String(v);c.textContent=v?fmt(v,k.endsWith('_mt')?3:2):'—';});
+   const base=<?=json_encode([$farmWeekKg/1000-$certifiedCoffee['week_mt'],$farmWeekVal-$certifiedCoffee['week_value_tzs'],$farmSeasonKg/1000-$certifiedCoffee['season_mt'],$farmSeasonVal-$certifiedCoffee['season_value_tzs']])?>;
+   const row=document.getElementById('farmgateGrandTotal');if(row){const keys=['week_mt','week_value_tzs','season_mt','season_value_tzs'];keys.forEach((k,i)=>{row.cells[i+1].textContent=fmt(Number(base[i])+Number(result.values[k]),i%2===0?3:2);});}
+   save.disabled=false;dialog.hidden=true;dialog.setAttribute('aria-hidden','true');previousFocus?.focus();window.salesDashboardFit?.();
+  }catch(err){error.textContent=err.message||'Unable to save figures';}finally{save.disabled=false;save.textContent='Save figures';}
  });
 })();
 </script>
