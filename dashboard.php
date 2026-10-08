@@ -1142,8 +1142,49 @@ tfoot td{font-weight:700!important}
 }
 /* Percentage headers already declare the unit; values therefore display as plain numbers. */
 </style>
+<style id="report-sticky-controls">
+/* Sticky report controls: the document scrolls underneath while controls stay available.
+   The export bars are outside the printable paper, so sticky positioning cannot be
+   suppressed by the paper's overflow clipping. */
+html:has(body.report-sticky-mode),body.report-sticky-mode{
+ height:auto!important;min-height:100%!important;overflow-x:hidden!important;overflow-y:auto!important;
+}
+body.report-sticky-mode .dashboard{
+ display:flex!important;flex-direction:column!important;align-items:stretch!important;
+ height:auto!important;min-height:100dvh!important;overflow:visible!important;
+ grid-template-rows:none!important;gap:0!important;
+}
+body.report-sticky-mode .dashboard>.topbar{
+ position:sticky!important;top:0!important;z-index:1000!important;
+ flex:0 0 auto!important;background:#f6f3f1!important;
+ padding:9px 10px!important;border-bottom:1px solid #d9c9bd!important;
+ box-shadow:0 3px 9px rgba(62,39,35,.08)!important;
+}
+body.report-sticky-mode .dashboard>.sales-actions,
+body.report-sticky-mode .dashboard>.pre-export-bar{
+ position:sticky!important;top:var(--report-toolbar-height,56px)!important;
+ z-index:999!important;flex:0 0 auto!important;
+ width:100%!important;max-width:100%!important;
+ margin:0!important;padding:7px 10px!important;
+ justify-content:flex-end!important;background:#f6f3f1!important;
+ border-bottom:1px solid #e4d7cf!important;overflow:visible!important;
+}
+body.report-sticky-mode .dashboard>.pre-report{overflow:visible!important;min-height:0!important;flex:1 1 auto!important;}
+body.report-sticky-mode .dashboard>#salesDashboardDocument{flex:0 0 auto!important;align-self:center!important;}
+body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top:calc(var(--report-toolbar-height,56px) + 50px)!important;z-index:998!important;}
+@media(max-width:600px){
+ body.report-sticky-mode .dashboard>.topbar{padding:8px!important;gap:7px!important;}
+ body.report-sticky-mode .dashboard>.sales-actions,
+ body.report-sticky-mode .dashboard>.pre-export-bar{padding:6px 8px!important;}
+}
+@media print{
+ body.report-sticky-mode .dashboard>.topbar,
+ body.report-sticky-mode .dashboard>.sales-actions,
+ body.report-sticky-mode .dashboard>.pre-export-bar{position:static!important;box-shadow:none!important;}
+}
+</style>
 </head>
-<body>
+<body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
     <div class="topbar">
         <div class="title">
@@ -1177,9 +1218,9 @@ tfoot td{font-weight:700!important}
             <?php endif; ?>
         </form>
             <?php if($display==='preauction'): ?>
+<div class="pre-export-bar" data-html2canvas-ignore="true"><div class="pre-export-wrap"><button type="button" id="preExportBtn" class="pre-export-btn">⇩ Export Report</button><div id="preExportMenu" class="pre-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div>
 <section class="pre-report">
  <div class="pre-paper" id="preAuctionReportPaper">
-  <div class="pre-export-bar" data-html2canvas-ignore="true"><div class="pre-export-wrap"><button type="button" id="preExportBtn" class="pre-export-btn">⇩ Export Report</button><div id="preExportMenu" class="pre-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div>
   <h1 class="pre-main-title">COFFEE SALES OVERVIEW TRADE SEASON ENDING <?=strtoupper(date('jS F Y',strtotime($reportDate)))?></h1>
   <h2>1.0 MARKET SITUATION TODAY</h2>
   <p><?php
@@ -1482,7 +1523,16 @@ tfoot td{font-weight:700!important}
   }
   function word(){
    const table=exportTable();if(!table)return;const clone=table.cloneNode(true);clone.querySelectorAll('th,td').forEach(c=>c.style.cssText='border:1px solid #555;padding:3px;font-family:Arial;font-size:8pt');clone.style.cssText='border-collapse:collapse;width:100%';
-   const html=`<html><head><meta charset="utf-8"></head><body><h3>Clean Coffee Buyer / Supplier-Seller Analysis</h3><p>Sale Season <?=htmlspecialchars($season)?> · ${esc(sel.options[sel.selectedIndex].text)}${search?.value?' · Filter: '+esc(search.value):''}</p>${clone.outerHTML}</body></html>`;
+   const html=`<html><head><meta charset="utf-8"></head><body><h3>Clean Coffee Buyer / Supplier-Seller Analysis</h3><p>Sale Season <?=htmlspecialchars($season)?> · ${esc(sel.options[sel.selectedIndex].text)}${search?.value?' · Filter: '+esc(search.value):''}</p>${clone.outerHTML}<script id="report-sticky-toolbar-height">
+(function(){
+ const toolbar=document.querySelector('body.report-sticky-mode .dashboard > .topbar');
+ if(!toolbar)return;
+ const update=()=>document.documentElement.style.setProperty('--report-toolbar-height',Math.ceil(toolbar.getBoundingClientRect().height)+'px');
+ update();window.addEventListener('resize',update,{passive:true});
+ if(window.ResizeObserver)new ResizeObserver(update).observe(toolbar);
+})();
+</script>
+</body></html>`;
    const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=fname('doc');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);
   }
   exportMenu.addEventListener('click',e=>{const f=e.target.dataset.format;if(!f)return;e.stopPropagation();exportMenu.classList.remove('show');f==='xlsx'?xlsx():f==='pdf'?pdf():word()});
