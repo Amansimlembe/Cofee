@@ -1410,85 +1410,7 @@ tfoot td{font-weight:700!important}
   }
   function word(){
    const table=exportTable();if(!table)return;const clone=table.cloneNode(true);clone.querySelectorAll('th,td').forEach(c=>c.style.cssText='border:1px solid #555;padding:3px;font-family:Arial;font-size:8pt');clone.style.cssText='border-collapse:collapse;width:100%';
-   const html=`<html><head><meta charset="utf-8"></head><body><h3>Clean Coffee Buyer / Supplier-Seller Analysis</h3><p>Sale Season <?=htmlspecialchars($season)?> · ${esc(sel.options[sel.selectedIndex].text)}${search?.value?' · Filter: '+esc(search.value):''}</p>${clone.outerHTML}
-<style>
-.sales-actions{display:flex;justify-content:flex-end;margin:0 0 10px;position:relative;z-index:10}
-.sales-export-control{position:relative}
-#salesExportButton{border:0;background:#60402d;color:white;padding:10px 18px;border-radius:7px;font-weight:700;cursor:pointer}
-#salesExportOptions{position:absolute;right:0;top:100%;background:white;border:1px solid #bda58b;box-shadow:0 7px 22px #0002;min-width:145px;z-index:20}
-#salesExportOptions[hidden],#salesProgress[hidden]{display:none!important}
-#salesExportOptions button{display:block;width:100%;padding:10px;text-align:left;border:0;background:white;cursor:pointer}
-#salesExportOptions button:hover{background:#f1e4d7}
-.sales-progress{position:fixed;bottom:22px;right:22px;z-index:9999;display:flex;gap:12px;align-items:center;flex-wrap:wrap;width:min(370px,calc(100vw - 44px));padding:16px;background:#fff;color:#432d20;border:1px solid #bca18a;border-radius:12px;box-shadow:0 10px 32px #0003}
-.sales-spinner{height:21px;width:21px;border:3px solid #e6d8c9;border-top-color:#785038;border-radius:50%;animation:salesSpin .7s linear infinite}
-@keyframes salesSpin{to{transform:rotate(360deg)}}
-.sales-progress-track{height:7px;background:#e9dfd4;border-radius:5px;overflow:hidden;flex-basis:100%;order:4}
-#salesProgressFill{height:100%;background:#8d613e;width:0;transition:width .2s}
-#salesProgressPercent{margin-left:auto}
-.sales-ppt{width:100%;max-width:100%;overflow:visible;background:#f7f1e8}
-.sales-ppt-header{background-color:#e9dfd0}
-.sales-ppt-body{overflow-x:auto}
-.sales-ppt .sales-table,.sales-ppt .sales-meta{border-collapse:collapse;border:1px solid #55483e;table-layout:fixed;width:100%}
-.sales-ppt .sales-table td,.sales-ppt .sales-table th,.sales-ppt .sales-meta td,.sales-ppt .sales-meta th{border:1px solid #55483e}
-.sales-ppt .sales-table th{text-align:center}
-.sales-ppt .sales-table .sales-label{text-align:left}
-.sales-ppt .sales-table .sales-num{text-align:center}
-.sales-ppt-footer{background-image:url('sales_dashboard_footer_responsive(1).png')!important;background-size:100% 100%!important;background-repeat:no-repeat!important;aspect-ratio:1533/946;height:auto!important}
-@media(max-width:760px){.sales-ppt .sales-table,.sales-ppt .sales-meta{min-width:620px!important}.sales-ppt-header .gov-title{font-size:clamp(11px,2.5vw,16px)}}
-@media print{.sales-actions,.sales-progress{display:none!important}.sales-ppt{border:0;box-shadow:none}.sales-ppt-body{overflow:visible}}
-</style>
-<script>
-(function(){
- const paper=document.getElementById('salesDashboardDocument'),button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions');
- if(!paper||!button||!menu)return;
- const progress=document.getElementById('salesProgress'),label=document.getElementById('salesProgressText'),fill=document.getElementById('salesProgressFill'),pct=document.getElementById('salesProgressPercent');
- const season=<?=json_encode($season??'')?>;
- const base='TCB_Sales_Dashboard_'+season.replace('/','-');
- let busy=false;
- function update(n,message){progress.hidden=false;label.textContent=message;fill.style.width=n+'%';pct.textContent=n+'%'}
- function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
- function load(url,test){return new Promise((resolve,reject)=>{if(test())return resolve();const sc=document.createElement('script');sc.src=url;sc.onload=()=>test()?resolve():reject(new Error('Library unavailable'));sc.onerror=()=>reject(new Error('Could not load export library'));document.head.append(sc)})}
- button.addEventListener('click',()=>{if(busy)return;menu.hidden=!menu.hidden});
- document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control'))menu.hidden=true});
- document.querySelectorAll('.season select').forEach(select=>select.addEventListener('change',()=>{update(10,'Loading selected dashboard…')}));
- menu.addEventListener('click',async e=>{
-  const type=e.target.dataset.type;if(!type||busy)return;menu.hidden=true;busy=true;button.disabled=true;
-  try{
-   update(5,'Preparing dashboard export…');
-   if(type==='xlsx'){
-    await load('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',()=>!!window.XLSX);
-    update(40,'Building Excel workbook…');
-    const wb=XLSX.utils.book_new();
-    paper.querySelectorAll('table').forEach((table,i)=>{const ws=XLSX.utils.table_to_sheet(table);ws['!cols']=[{wch:40},{wch:22},{wch:22},{wch:24},{wch:24}];XLSX.utils.book_append_sheet(wb,ws,i===0?'Season and Market':'Coffee Sales')});
-    update(85,'Generating Excel file…');XLSX.writeFile(wb,base+'.xlsx');
-   }else if(type==='doc'){
-    update(45,'Preparing Word document…');
-    const clone=paper.cloneNode(true);
-    const style='<style>body{font-family:Arial;color:#30251d}table{width:100%;border-collapse:collapse}td,th{border:1px solid #555;padding:5px;font-size:9pt}th{text-align:center}h1{text-align:center}</style>';
-    const html='<!doctype html><html><head><meta charset="utf-8">'+style+'</head><body>'+clone.outerHTML+'
-
-</body></html>';
-    download(new Blob(['\ufeff',html],{type:'application/msword'}),base+'.doc');
-   }else{
-    await load('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
-    await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
-    update(30,'Rendering high-resolution PDF…');
-    await document.fonts.ready;
-    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='1100px';el.style.height='auto'}}});
-    update(76,'Composing PDF pages…');
-    const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
-    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
-    const pagePx=Math.floor(canvas.width*(ph-2*margin)/iw),pageCount=Math.ceil(canvas.height/pagePx);
-    for(let i=0;i<pageCount;i++){if(i)pdf.addPage();const part=document.createElement('canvas');part.width=canvas.width;part.height=Math.min(pagePx,canvas.height-i*pagePx);part.getContext('2d').drawImage(canvas,0,i*pagePx,canvas.width,part.height,0,0,part.width,part.height);pdf.addImage(part.toDataURL('image/png'),'PNG',margin,margin,iw,part.height*iw/canvas.width);update(77+Math.round(18*(i+1)/pageCount),'Writing PDF pages…')}
-    pdf.save(base+'.pdf');
-   }
-   update(100,'Export ready');
-  }catch(err){update(0,'Export failed: '+err.message);alert('Dashboard export failed: '+err.message)}
-  finally{busy=false;button.disabled=false;setTimeout(()=>{progress.hidden=true},2400)}
- });
-})();
-</script>
-</body></html>`;
+   const html=`<html><head><meta charset="utf-8"></head><body><h3>Clean Coffee Buyer / Supplier-Seller Analysis</h3><p>Sale Season <?=htmlspecialchars($season)?> · ${esc(sel.options[sel.selectedIndex].text)}${search?.value?' · Filter: '+esc(search.value):''}</p>${clone.outerHTML}</body></html>`;
    const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=fname('doc');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);
   }
   exportMenu.addEventListener('click',e=>{const f=e.target.dataset.format;if(!f)return;e.stopPropagation();exportMenu.classList.remove('show');f==='xlsx'?xlsx():f==='pdf'?pdf():word()});
@@ -1551,83 +1473,7 @@ tfoot td{font-weight:700!important}
    const cloned=table.cloneNode(true);
    cloned.querySelectorAll('th,td').forEach(c=>c.setAttribute('style','border:1px solid #5b4033;padding:4px;font-family:Arial;font-size:9pt;'));
    cloned.setAttribute('style','border-collapse:collapse;width:100%;');
-   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Coffee Sales Summary</title></head><body><h2 style="font-family:Arial;color:#4b2e20;margin-bottom:3px">Coffee Sales Summary</h2><div style="font-family:Arial;font-size:9pt;margin-bottom:10px">Clean coffee · Sale Season ${season}</div>${cloned.outerHTML}
-<style>
-.sales-actions{display:flex;justify-content:flex-end;margin:0 0 10px;position:relative;z-index:10}
-.sales-export-control{position:relative}
-#salesExportButton{border:0;background:#60402d;color:white;padding:10px 18px;border-radius:7px;font-weight:700;cursor:pointer}
-#salesExportOptions{position:absolute;right:0;top:100%;background:white;border:1px solid #bda58b;box-shadow:0 7px 22px #0002;min-width:145px;z-index:20}
-#salesExportOptions[hidden],#salesProgress[hidden]{display:none!important}
-#salesExportOptions button{display:block;width:100%;padding:10px;text-align:left;border:0;background:white;cursor:pointer}
-#salesExportOptions button:hover{background:#f1e4d7}
-.sales-progress{position:fixed;bottom:22px;right:22px;z-index:9999;display:flex;gap:12px;align-items:center;flex-wrap:wrap;width:min(370px,calc(100vw - 44px));padding:16px;background:#fff;color:#432d20;border:1px solid #bca18a;border-radius:12px;box-shadow:0 10px 32px #0003}
-.sales-spinner{height:21px;width:21px;border:3px solid #e6d8c9;border-top-color:#785038;border-radius:50%;animation:salesSpin .7s linear infinite}
-@keyframes salesSpin{to{transform:rotate(360deg)}}
-.sales-progress-track{height:7px;background:#e9dfd4;border-radius:5px;overflow:hidden;flex-basis:100%;order:4}
-#salesProgressFill{height:100%;background:#8d613e;width:0;transition:width .2s}
-#salesProgressPercent{margin-left:auto}
-.sales-ppt{width:100%;max-width:100%;overflow:visible;background:#f7f1e8}
-.sales-ppt-header{background-color:#e9dfd0}
-.sales-ppt-body{overflow-x:auto}
-.sales-ppt .sales-table,.sales-ppt .sales-meta{border-collapse:collapse;border:1px solid #55483e;table-layout:fixed;width:100%}
-.sales-ppt .sales-table td,.sales-ppt .sales-table th,.sales-ppt .sales-meta td,.sales-ppt .sales-meta th{border:1px solid #55483e}
-.sales-ppt .sales-table th{text-align:center}
-.sales-ppt .sales-table .sales-label{text-align:left}
-.sales-ppt .sales-table .sales-num{text-align:center}
-.sales-ppt-footer{background-image:url('sales_dashboard_footer_responsive(1).png')!important;background-size:100% 100%!important;background-repeat:no-repeat!important;aspect-ratio:1533/946;height:auto!important}
-@media(max-width:760px){.sales-ppt .sales-table,.sales-ppt .sales-meta{min-width:620px!important}.sales-ppt-header .gov-title{font-size:clamp(11px,2.5vw,16px)}}
-@media print{.sales-actions,.sales-progress{display:none!important}.sales-ppt{border:0;box-shadow:none}.sales-ppt-body{overflow:visible}}
-</style>
-<script>
-(function(){
- const paper=document.getElementById('salesDashboardDocument'),button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions');
- if(!paper||!button||!menu)return;
- const progress=document.getElementById('salesProgress'),label=document.getElementById('salesProgressText'),fill=document.getElementById('salesProgressFill'),pct=document.getElementById('salesProgressPercent');
- const season=<?=json_encode($season??'')?>;
- const base='TCB_Sales_Dashboard_'+season.replace('/','-');
- let busy=false;
- function update(n,message){progress.hidden=false;label.textContent=message;fill.style.width=n+'%';pct.textContent=n+'%'}
- function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
- function load(url,test){return new Promise((resolve,reject)=>{if(test())return resolve();const sc=document.createElement('script');sc.src=url;sc.onload=()=>test()?resolve():reject(new Error('Library unavailable'));sc.onerror=()=>reject(new Error('Could not load export library'));document.head.append(sc)})}
- button.addEventListener('click',()=>{if(busy)return;menu.hidden=!menu.hidden});
- document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control'))menu.hidden=true});
- document.querySelectorAll('.season select').forEach(select=>select.addEventListener('change',()=>{update(10,'Loading selected dashboard…')}));
- menu.addEventListener('click',async e=>{
-  const type=e.target.dataset.type;if(!type||busy)return;menu.hidden=true;busy=true;button.disabled=true;
-  try{
-   update(5,'Preparing dashboard export…');
-   if(type==='xlsx'){
-    await load('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',()=>!!window.XLSX);
-    update(40,'Building Excel workbook…');
-    const wb=XLSX.utils.book_new();
-    paper.querySelectorAll('table').forEach((table,i)=>{const ws=XLSX.utils.table_to_sheet(table);ws['!cols']=[{wch:40},{wch:22},{wch:22},{wch:24},{wch:24}];XLSX.utils.book_append_sheet(wb,ws,i===0?'Season and Market':'Coffee Sales')});
-    update(85,'Generating Excel file…');XLSX.writeFile(wb,base+'.xlsx');
-   }else if(type==='doc'){
-    update(45,'Preparing Word document…');
-    const clone=paper.cloneNode(true);
-    const style='<style>body{font-family:Arial;color:#30251d}table{width:100%;border-collapse:collapse}td,th{border:1px solid #555;padding:5px;font-size:9pt}th{text-align:center}h1{text-align:center}</style>';
-    const html='<!doctype html><html><head><meta charset="utf-8">'+style+'</head><body>'+clone.outerHTML+'</body></html>';
-    download(new Blob(['\ufeff',html],{type:'application/msword'}),base+'.doc');
-   }else{
-    await load('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
-    await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
-    update(30,'Rendering high-resolution PDF…');
-    await document.fonts.ready;
-    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='1100px';el.style.height='auto'}}});
-    update(76,'Composing PDF pages…');
-    const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
-    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
-    const pagePx=Math.floor(canvas.width*(ph-2*margin)/iw),pageCount=Math.ceil(canvas.height/pagePx);
-    for(let i=0;i<pageCount;i++){if(i)pdf.addPage();const part=document.createElement('canvas');part.width=canvas.width;part.height=Math.min(pagePx,canvas.height-i*pagePx);part.getContext('2d').drawImage(canvas,0,i*pagePx,canvas.width,part.height,0,0,part.width,part.height);pdf.addImage(part.toDataURL('image/png'),'PNG',margin,margin,iw,part.height*iw/canvas.width);update(77+Math.round(18*(i+1)/pageCount),'Writing PDF pages…')}
-    pdf.save(base+'.pdf');
-   }
-   update(100,'Export ready');
-  }catch(err){update(0,'Export failed: '+err.message);alert('Dashboard export failed: '+err.message)}
-  finally{busy=false;button.disabled=false;setTimeout(()=>{progress.hidden=true},2400)}
- });
-})();
-</script>
-</body></html>`;
+   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Coffee Sales Summary</title></head><body><h2 style="font-family:Arial;color:#4b2e20;margin-bottom:3px">Coffee Sales Summary</h2><div style="font-family:Arial;font-size:9pt;margin-bottom:10px">Clean coffee · Sale Season ${season}</div>${cloned.outerHTML}</body></html>`;
    const blob=new Blob(['\ufeff',html],{type:'application/msword'});
    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename('doc');document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
  }
@@ -1656,83 +1502,7 @@ new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},opti
  document.addEventListener('click',()=>menu.classList.remove('show'));
  const season=<?=json_encode($season??'')?>;
  const base='Pre_Auction_Report_'+String(season||'').replace('/','-');
- function word(){const html='<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial;font-size:10pt}h1{text-align:center;font-size:14pt}h2{font-size:12pt}h3{font-size:11pt}table{border-collapse:collapse;width:100%;margin:6px 0 14px}th,td{border:1px solid #555;padding:4px}th{background:#d9e8f6;text-align:center}td{text-align:right}td:first-child,td:nth-child(2){text-align:left}.gt{font-weight:bold}</style></head><body>'+paper.innerHTML.replace(/<div class="pre-export-bar"[\s\S]*?<\/div>\s*<\/div>/,'')+'
-<style>
-.sales-actions{display:flex;justify-content:flex-end;margin:0 0 10px;position:relative;z-index:10}
-.sales-export-control{position:relative}
-#salesExportButton{border:0;background:#60402d;color:white;padding:10px 18px;border-radius:7px;font-weight:700;cursor:pointer}
-#salesExportOptions{position:absolute;right:0;top:100%;background:white;border:1px solid #bda58b;box-shadow:0 7px 22px #0002;min-width:145px;z-index:20}
-#salesExportOptions[hidden],#salesProgress[hidden]{display:none!important}
-#salesExportOptions button{display:block;width:100%;padding:10px;text-align:left;border:0;background:white;cursor:pointer}
-#salesExportOptions button:hover{background:#f1e4d7}
-.sales-progress{position:fixed;bottom:22px;right:22px;z-index:9999;display:flex;gap:12px;align-items:center;flex-wrap:wrap;width:min(370px,calc(100vw - 44px));padding:16px;background:#fff;color:#432d20;border:1px solid #bca18a;border-radius:12px;box-shadow:0 10px 32px #0003}
-.sales-spinner{height:21px;width:21px;border:3px solid #e6d8c9;border-top-color:#785038;border-radius:50%;animation:salesSpin .7s linear infinite}
-@keyframes salesSpin{to{transform:rotate(360deg)}}
-.sales-progress-track{height:7px;background:#e9dfd4;border-radius:5px;overflow:hidden;flex-basis:100%;order:4}
-#salesProgressFill{height:100%;background:#8d613e;width:0;transition:width .2s}
-#salesProgressPercent{margin-left:auto}
-.sales-ppt{width:100%;max-width:100%;overflow:visible;background:#f7f1e8}
-.sales-ppt-header{background-color:#e9dfd0}
-.sales-ppt-body{overflow-x:auto}
-.sales-ppt .sales-table,.sales-ppt .sales-meta{border-collapse:collapse;border:1px solid #55483e;table-layout:fixed;width:100%}
-.sales-ppt .sales-table td,.sales-ppt .sales-table th,.sales-ppt .sales-meta td,.sales-ppt .sales-meta th{border:1px solid #55483e}
-.sales-ppt .sales-table th{text-align:center}
-.sales-ppt .sales-table .sales-label{text-align:left}
-.sales-ppt .sales-table .sales-num{text-align:center}
-.sales-ppt-footer{background-image:url('sales_dashboard_footer_responsive(1).png')!important;background-size:100% 100%!important;background-repeat:no-repeat!important;aspect-ratio:1533/946;height:auto!important}
-@media(max-width:760px){.sales-ppt .sales-table,.sales-ppt .sales-meta{min-width:620px!important}.sales-ppt-header .gov-title{font-size:clamp(11px,2.5vw,16px)}}
-@media print{.sales-actions,.sales-progress{display:none!important}.sales-ppt{border:0;box-shadow:none}.sales-ppt-body{overflow:visible}}
-</style>
-<script>
-(function(){
- const paper=document.getElementById('salesDashboardDocument'),button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions');
- if(!paper||!button||!menu)return;
- const progress=document.getElementById('salesProgress'),label=document.getElementById('salesProgressText'),fill=document.getElementById('salesProgressFill'),pct=document.getElementById('salesProgressPercent');
- const season=<?=json_encode($season??'')?>;
- const base='TCB_Sales_Dashboard_'+season.replace('/','-');
- let busy=false;
- function update(n,message){progress.hidden=false;label.textContent=message;fill.style.width=n+'%';pct.textContent=n+'%'}
- function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
- function load(url,test){return new Promise((resolve,reject)=>{if(test())return resolve();const sc=document.createElement('script');sc.src=url;sc.onload=()=>test()?resolve():reject(new Error('Library unavailable'));sc.onerror=()=>reject(new Error('Could not load export library'));document.head.append(sc)})}
- button.addEventListener('click',()=>{if(busy)return;menu.hidden=!menu.hidden});
- document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control'))menu.hidden=true});
- document.querySelectorAll('.season select').forEach(select=>select.addEventListener('change',()=>{update(10,'Loading selected dashboard…')}));
- menu.addEventListener('click',async e=>{
-  const type=e.target.dataset.type;if(!type||busy)return;menu.hidden=true;busy=true;button.disabled=true;
-  try{
-   update(5,'Preparing dashboard export…');
-   if(type==='xlsx'){
-    await load('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',()=>!!window.XLSX);
-    update(40,'Building Excel workbook…');
-    const wb=XLSX.utils.book_new();
-    paper.querySelectorAll('table').forEach((table,i)=>{const ws=XLSX.utils.table_to_sheet(table);ws['!cols']=[{wch:40},{wch:22},{wch:22},{wch:24},{wch:24}];XLSX.utils.book_append_sheet(wb,ws,i===0?'Season and Market':'Coffee Sales')});
-    update(85,'Generating Excel file…');XLSX.writeFile(wb,base+'.xlsx');
-   }else if(type==='doc'){
-    update(45,'Preparing Word document…');
-    const clone=paper.cloneNode(true);
-    const style='<style>body{font-family:Arial;color:#30251d}table{width:100%;border-collapse:collapse}td,th{border:1px solid #555;padding:5px;font-size:9pt}th{text-align:center}h1{text-align:center}</style>';
-    const html='<!doctype html><html><head><meta charset="utf-8">'+style+'</head><body>'+clone.outerHTML+'</body></html>';
-    download(new Blob(['\ufeff',html],{type:'application/msword'}),base+'.doc');
-   }else{
-    await load('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
-    await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
-    update(30,'Rendering high-resolution PDF…');
-    await document.fonts.ready;
-    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='1100px';el.style.height='auto'}}});
-    update(76,'Composing PDF pages…');
-    const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
-    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
-    const pagePx=Math.floor(canvas.width*(ph-2*margin)/iw),pageCount=Math.ceil(canvas.height/pagePx);
-    for(let i=0;i<pageCount;i++){if(i)pdf.addPage();const part=document.createElement('canvas');part.width=canvas.width;part.height=Math.min(pagePx,canvas.height-i*pagePx);part.getContext('2d').drawImage(canvas,0,i*pagePx,canvas.width,part.height,0,0,part.width,part.height);pdf.addImage(part.toDataURL('image/png'),'PNG',margin,margin,iw,part.height*iw/canvas.width);update(77+Math.round(18*(i+1)/pageCount),'Writing PDF pages…')}
-    pdf.save(base+'.pdf');
-   }
-   update(100,'Export ready');
-  }catch(err){update(0,'Export failed: '+err.message);alert('Dashboard export failed: '+err.message)}
-  finally{busy=false;button.disabled=false;setTimeout(()=>{progress.hidden=true},2400)}
- });
-})();
-</script>
-</body></html>';const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=base+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+ function word(){const html='<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial;font-size:10pt}h1{text-align:center;font-size:14pt}h2{font-size:12pt}h3{font-size:11pt}table{border-collapse:collapse;width:100%;margin:6px 0 14px}th,td{border:1px solid #555;padding:4px}th{background:#d9e8f6;text-align:center}td{text-align:right}td:first-child,td:nth-child(2){text-align:left}.gt{font-weight:bold}</style></head><body>'+paper.innerHTML.replace(/<div class="pre-export-bar"[\s\S]*?<\/div>\s*<\/div>/,'')+'</body></html>';const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=base+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
  function excel(){if(!window.XLSX){alert('Excel export library is not available.');return}const wb=XLSX.utils.book_new();paper.querySelectorAll('table').forEach((t,i)=>{const ws=XLSX.utils.table_to_sheet(t,{raw:true});XLSX.utils.book_append_sheet(wb,ws,'Table '+(i+1))});XLSX.writeFile(wb,base+'.xlsx')}
  async function pdf(){
   if(!window.html2canvas||!window.jspdf){alert('PDF export library is not available.');return}
@@ -1823,132 +1593,46 @@ function preApplyTableAlignment(root){
 }
 document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document));
 </script>
-
-<style>
-.sales-actions{display:flex;justify-content:flex-end;margin:0 0 10px;position:relative;z-index:10}
-.sales-export-control{position:relative}
-#salesExportButton{border:0;background:#60402d;color:white;padding:10px 18px;border-radius:7px;font-weight:700;cursor:pointer}
-#salesExportOptions{position:absolute;right:0;top:100%;background:white;border:1px solid #bda58b;box-shadow:0 7px 22px #0002;min-width:145px;z-index:20}
-#salesExportOptions[hidden],#salesProgress[hidden]{display:none!important}
-#salesExportOptions button{display:block;width:100%;padding:10px;text-align:left;border:0;background:white;cursor:pointer}
-#salesExportOptions button:hover{background:#f1e4d7}
-.sales-progress{position:fixed;bottom:22px;right:22px;z-index:9999;display:flex;gap:12px;align-items:center;flex-wrap:wrap;width:min(370px,calc(100vw - 44px));padding:16px;background:#fff;color:#432d20;border:1px solid #bca18a;border-radius:12px;box-shadow:0 10px 32px #0003}
-.sales-spinner{height:21px;width:21px;border:3px solid #e6d8c9;border-top-color:#785038;border-radius:50%;animation:salesSpin .7s linear infinite}
-@keyframes salesSpin{to{transform:rotate(360deg)}}
-.sales-progress-track{height:7px;background:#e9dfd4;border-radius:5px;overflow:hidden;flex-basis:100%;order:4}
-#salesProgressFill{height:100%;background:#8d613e;width:0;transition:width .2s}
-#salesProgressPercent{margin-left:auto}
-.sales-ppt{width:100%;max-width:100%;overflow:visible;background:#f7f1e8}
-.sales-ppt-header{background-color:#e9dfd0}
-.sales-ppt-body{overflow-x:auto}
-.sales-ppt .sales-table,.sales-ppt .sales-meta{border-collapse:collapse;border:1px solid #55483e;table-layout:fixed;width:100%}
-.sales-ppt .sales-table td,.sales-ppt .sales-table th,.sales-ppt .sales-meta td,.sales-ppt .sales-meta th{border:1px solid #55483e}
-.sales-ppt .sales-table th{text-align:center}
-.sales-ppt .sales-table .sales-label{text-align:left}
-.sales-ppt .sales-table .sales-num{text-align:center}
-.sales-ppt-footer{background-image:url('sales_dashboard_footer_responsive(1).png')!important;background-size:100% 100%!important;background-repeat:no-repeat!important;aspect-ratio:1533/946;height:auto!important}
-@media(max-width:760px){.sales-ppt .sales-table,.sales-ppt .sales-meta{min-width:620px!important}.sales-ppt-header .gov-title{font-size:clamp(11px,2.5vw,16px)}}
-@media print{.sales-actions,.sales-progress{display:none!important}.sales-ppt{border:0;box-shadow:none}.sales-ppt-body{overflow:visible}}
-</style>
-<script>
-(function(){
- const paper=document.getElementById('salesDashboardDocument'),button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions');
- if(!paper||!button||!menu)return;
- const progress=document.getElementById('salesProgress'),label=document.getElementById('salesProgressText'),fill=document.getElementById('salesProgressFill'),pct=document.getElementById('salesProgressPercent');
- const season=<?=json_encode($season??'')?>;
- const base='TCB_Sales_Dashboard_'+season.replace('/','-');
- let busy=false;
- function update(n,message){progress.hidden=false;label.textContent=message;fill.style.width=n+'%';pct.textContent=n+'%'}
- function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
- function load(url,test){return new Promise((resolve,reject)=>{if(test())return resolve();const sc=document.createElement('script');sc.src=url;sc.onload=()=>test()?resolve():reject(new Error('Library unavailable'));sc.onerror=()=>reject(new Error('Could not load export library'));document.head.append(sc)})}
- button.addEventListener('click',()=>{if(busy)return;menu.hidden=!menu.hidden});
- document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control'))menu.hidden=true});
- document.querySelectorAll('.season select').forEach(select=>select.addEventListener('change',()=>{update(10,'Loading selected dashboard…')}));
- menu.addEventListener('click',async e=>{
-  const type=e.target.dataset.type;if(!type||busy)return;menu.hidden=true;busy=true;button.disabled=true;
-  try{
-   update(5,'Preparing dashboard export…');
-   if(type==='xlsx'){
-    await load('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',()=>!!window.XLSX);
-    update(40,'Building Excel workbook…');
-    const wb=XLSX.utils.book_new();
-    paper.querySelectorAll('table').forEach((table,i)=>{const ws=XLSX.utils.table_to_sheet(table);ws['!cols']=[{wch:40},{wch:22},{wch:22},{wch:24},{wch:24}];XLSX.utils.book_append_sheet(wb,ws,i===0?'Season and Market':'Coffee Sales')});
-    update(85,'Generating Excel file…');XLSX.writeFile(wb,base+'.xlsx');
-   }else if(type==='doc'){
-    update(45,'Preparing Word document…');
-    const clone=paper.cloneNode(true);
-    const style='<style>body{font-family:Arial;color:#30251d}table{width:100%;border-collapse:collapse}td,th{border:1px solid #555;padding:5px;font-size:9pt}th{text-align:center}h1{text-align:center}</style>';
-    const html='<!doctype html><html><head><meta charset="utf-8">'+style+'</head><body>'+clone.outerHTML+'</body></html>';
-    download(new Blob(['\ufeff',html],{type:'application/msword'}),base+'.doc');
-   }else{
-    await load('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
-    await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
-    update(30,'Rendering high-resolution PDF…');
-    await document.fonts.ready;
-    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='1100px';el.style.height='auto'}}});
-    update(76,'Composing PDF pages…');
-    const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
-    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
-    const pagePx=Math.floor(canvas.width*(ph-2*margin)/iw),pageCount=Math.ceil(canvas.height/pagePx);
-    for(let i=0;i<pageCount;i++){if(i)pdf.addPage();const part=document.createElement('canvas');part.width=canvas.width;part.height=Math.min(pagePx,canvas.height-i*pagePx);part.getContext('2d').drawImage(canvas,0,i*pagePx,canvas.width,part.height,0,0,part.width,part.height);pdf.addImage(part.toDataURL('image/png'),'PNG',margin,margin,iw,part.height*iw/canvas.width);update(77+Math.round(18*(i+1)/pageCount),'Writing PDF pages…')}
-    pdf.save(base+'.pdf');
-   }
-   update(100,'Export ready');
-  }catch(err){update(0,'Export failed: '+err.message);alert('Dashboard export failed: '+err.message)}
-  finally{busy=false;button.disabled=false;setTimeout(()=>{progress.hidden=true},2400)}
- });
-})();
-</script>
-<style id="sales-fixed-slide-css">
-/* Slide 2 is the immutable full-page artwork; only the table overlay changes. */
-#salesDashboardDocument.sales-ppt{
- position:relative!important; width:100%!important; max-width:1100px!important;
- aspect-ratio:2643 / 3738!important; height:auto!important; min-height:0!important;
- margin:0 auto!important; overflow:hidden!important; border:0!important;
- background:#eee url('sales_dashboard_fixed_background(1).png') center / 100% 100% no-repeat!important;
- box-shadow:0 4px 22px #0002!important;
-}
-#salesDashboardDocument .sales-ppt-header,
-#salesDashboardDocument .sales-ppt-title,
-#salesDashboardDocument .sales-ppt-footer{display:none!important}
-#salesDashboardDocument .sales-ppt-body{
- position:absolute!important;top:21.6%!important;left:0!important;right:auto!important;
- width:1100px!important;max-width:none!important;height:auto!important;
- overflow:visible!important;padding:0!important;margin:0!important;
- background:transparent!important;transform-origin:top left!important;
-}
-#salesDashboardDocument .sales-meta,#salesDashboardDocument .sales-table{
- width:100%!important;min-width:0!important;table-layout:fixed!important;
- border-collapse:collapse!important;background:transparent!important;
-}
-#salesDashboardDocument .sales-meta td,#salesDashboardDocument .sales-meta th,
-#salesDashboardDocument .sales-table td,#salesDashboardDocument .sales-table th{
- font-size:12px!important;line-height:1.18!important;padding:3px 6px!important;
- border:1px solid #49423b!important;background:rgba(255,255,255,.15)!important;
- overflow-wrap:normal!important;white-space:normal!important;
-}
+<style id="sales-slide-fixed-layout">
+#salesDashboardDocument.sales-ppt{position:relative!important;width:100%!important;max-width:1023px!important;aspect-ratio:1023/1447!important;height:auto!important;min-height:0!important;margin:auto!important;overflow:hidden!important;background:#eee url('sales_dashboard_fixed_background(2).png') center / 100% 100% no-repeat!important;box-shadow:0 4px 20px #0002!important}
+#salesDashboardDocument .sales-ppt-header,#salesDashboardDocument .sales-ppt-title,#salesDashboardDocument .sales-ppt-footer{display:none!important}
+#salesDashboardDocument .sales-ppt-body{position:absolute!important;top:21.6%!important;left:0!important;width:1000px!important;max-width:none!important;box-sizing:border-box!important;height:auto!important;overflow:visible!important;padding:0 15px!important;margin:0!important;background:transparent!important;transform-origin:top left!important}
+#salesDashboardDocument .sales-meta,#salesDashboardDocument .sales-table{width:100%!important;min-width:0!important;table-layout:fixed!important;border-collapse:collapse!important;background:rgba(255,255,255,.64)!important;margin:0 0 7px!important}
+#salesDashboardDocument .sales-meta th,#salesDashboardDocument .sales-meta td,#salesDashboardDocument .sales-table th,#salesDashboardDocument .sales-table td{font-size:12px!important;line-height:1.25!important;padding:4px 6px!important;border:1px solid #685d50!important;white-space:normal!important;overflow-wrap:break-word!important}
 #salesDashboardDocument .sales-table th{text-align:center!important}
 #salesDashboardDocument .sales-table .sales-label{text-align:left!important}
 #salesDashboardDocument .sales-table .sales-num{text-align:center!important}
-#salesDashboardDocument .sales-table .sales-band td,
-#salesDashboardDocument .sales-table .sales-grand td{background:rgba(226,166,98,.30)!important}
-@media print{#salesDashboardDocument.sales-ppt{break-inside:avoid!important;box-shadow:none!important}}
+#salesDashboardDocument .sales-band td,#salesDashboardDocument .sales-grand td{background:rgba(217,171,121,.52)!important;font-weight:bold!important}
+#salesExportOptions[hidden],#salesProgress[hidden]{display:none!important}
+@media print{#salesDashboardDocument{box-shadow:none!important}.sales-actions,.sales-progress{display:none!important}}
 </style>
 <script>
 (function(){
- const doc=document.getElementById('salesDashboardDocument');
- if(!doc)return;
- const body=doc.querySelector('.sales-ppt-body');
- function fit(){
-  const width=doc.clientWidth;
-  const available=doc.clientHeight*.475;
-  const scale=Math.min(width/1100,available/Math.max(body.scrollHeight,1));
-  body.style.transform='scale('+Math.max(.01,scale)+')';
- }
- window.addEventListener('resize',fit,{passive:true});
- if('ResizeObserver' in window)new ResizeObserver(fit).observe(doc);
- document.fonts?.ready.then(fit);requestAnimationFrame(fit);
- window.salesDashboardFit=fit;
+const paper=document.getElementById('salesDashboardDocument');if(!paper)return;
+const body=paper.querySelector('.sales-ppt-body');
+function fit(){if(!body)return;const w=paper.clientWidth;const h=paper.clientHeight;const available=h*.475;const scale=Math.min(w/1000,available/Math.max(body.scrollHeight,1));body.style.transform='scale('+Math.max(.01,scale)+')';}
+window.salesDashboardFit=fit;window.addEventListener('resize',fit,{passive:true});if(window.ResizeObserver)new ResizeObserver(fit).observe(paper);document.fonts?.ready.then(fit);requestAnimationFrame(fit);
+const button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions'),progress=document.getElementById('salesProgress'),status=document.getElementById('salesProgressText'),bar=document.getElementById('salesProgressFill'),percent=document.getElementById('salesProgressPercent');
+if(!button||!menu)return;
+button.addEventListener('click',e=>{e.stopPropagation();menu.hidden=!menu.hidden;});document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control'))menu.hidden=true;});
+function update(n,msg){if(progress)progress.hidden=false;if(bar)bar.style.width=n+'%';if(percent)percent.textContent=n+'%';if(status)status.textContent=msg;}
+function save(blob,name){const a=document.createElement('a'),u=URL.createObjectURL(blob);a.href=u;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);a.remove()},2000);}
+async function library(url,check){if(check())return;await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=url;s.onload=resolve;s.onerror=()=>reject(new Error('Could not load export library'));document.head.appendChild(s);});if(!check())throw new Error('Export library unavailable');}
+function filebase(){return 'TCB_Sales_Dashboard_'+String(<?=json_encode($season)?>).replace(/\W/g,'_');}
+menu.addEventListener('click',async e=>{const type=e.target.closest('[data-type]')?.dataset.type;if(!type)return;menu.hidden=true;button.disabled=true;update(5,'Preparing dashboard…');
+try{
+if(type==='xlsx'){
+await library('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',()=>!!window.XLSX);update(45,'Formatting Excel tables…');const wb=XLSX.utils.book_new();paper.querySelectorAll('table').forEach((t,i)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.table_to_sheet(t),'Table '+(i+1)));update(90,'Saving Excel…');XLSX.writeFile(wb,filebase()+'.xlsx');
+}else if(type==='doc'){
+update(50,'Preparing Word document…');const clone=paper.cloneNode(true);clone.querySelector('.sales-ppt-body')?.removeAttribute('style');const html='<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial}table{width:100%;border-collapse:collapse}td,th{border:1px solid #555;padding:5px;font-size:10pt}th{text-align:center}</style></head><body><h2 style="text-align:center">TANZANIA COFFEE BOARD — SALES DASHBOARD</h2>'+clone.querySelector('.sales-ppt-body').innerHTML+'</body></html>';save(new Blob(['\ufeff',html],{type:'application/msword'}),filebase()+'.doc');
+}else{
+await library('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);update(25,'Loading PDF engine…');await library('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);await document.fonts?.ready;update(45,'Rendering dashboard…');
+const canvas=await html2canvas(paper,{scale:2.5,useCORS:true,backgroundColor:'#ffffff',onclone:d=>{const p=d.getElementById('salesDashboardDocument');p.style.width='1023px';p.style.maxWidth='1023px';p.style.height='1447px';p.style.aspectRatio='auto';const b=p.querySelector('.sales-ppt-body');if(b)b.style.transform='scale('+Math.min(1.023,1447*.475/Math.max(b.scrollHeight,1))+')';}});
+update(85,'Composing high-quality PDF…');const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,210,297);pdf.save(filebase()+'.pdf');
+}
+update(100,'Export completed');
+}catch(err){update(0,'Export failed');alert('Dashboard export failed: '+err.message);}finally{button.disabled=false;setTimeout(()=>{if(progress)progress.hidden=true;},1800);}
+});
 })();
 </script>
 </body>
