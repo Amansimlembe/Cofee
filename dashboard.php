@@ -1195,7 +1195,7 @@ tfoot td{font-weight:700!important}
 <div id="salesProgress" class="sales-progress" role="status" aria-live="polite" hidden><span class="sales-spinner"></span><span id="salesProgressText">Preparing…</span><div class="sales-progress-track"><div id="salesProgressFill"></div></div><strong id="salesProgressPercent">0%</strong></div>
 <section class="sales-ppt" id="salesDashboardDocument">
  <div class="sales-ppt-header"><div class="gov-title">THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div></div>
- <div class="sales-ppt-title">SALES DASHBOARD</div>
+ <div class="sales-ppt-title"><span>SALES DASHBOARD</span></div>
  <div class="sales-ppt-body">
   <table class="sales-meta"><tr><th>Sale Season (FY)</th><td><b><?=htmlspecialchars($season)?></b></td><th>End Date</th><td><b><?=date('d/m/Y',strtotime($salesEnd))?></b></td></tr><tr><th>Terminal Market</th><td>Arabica ($/kg) &nbsp; <b>—</b></td><td colspan="2">Robusta ($/kg) &nbsp; <b>—</b></td></tr></table>
   <table class="sales-table">
@@ -1630,6 +1630,15 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 #salesDashboardDocument .sales-ppt-footer .email{left:10%!important;top:89.6%!important}
 #salesDashboardDocument .sales-ppt-footer .phone{left:10%!important;top:93.2%!important}
 #salesDashboardDocument .sales-ppt-footer .social{left:76%!important;top:89.3%!important}
+/* PowerPoint/PDF reference: bold underline and icon-aligned, live footer labels.
+   Coordinates are percentages of the complete A4 dashboard, not the footer strip. */
+#salesDashboardDocument .sales-ppt-title span{display:inline-block!important;border-bottom:7px solid #9d704a!important;padding:0 4px 2px!important;line-height:1.08!important;text-decoration:none!important}
+#salesDashboardDocument .sales-ppt-footer .contact{left:auto!important;right:auto!important;bottom:auto!important;display:block!important;position:absolute!important;max-width:none!important;overflow:visible!important;white-space:nowrap!important;word-break:normal!important;font:23px/1.2 Arial,sans-serif!important;color:#fff!important}
+#salesDashboardDocument .sales-ppt-footer .web{left:10.2%!important;top:85.55%!important}
+#salesDashboardDocument .sales-ppt-footer .email{left:10.2%!important;top:89.05%!important}
+#salesDashboardDocument .sales-ppt-footer .phone{left:10.2%!important;top:92.6%!important}
+#salesDashboardDocument .sales-ppt-footer .social{left:76.3%!important;top:89.05%!important}
+
 #salesDashboardDocument .sales-table tr.sales-band td{background:rgba(238,139,60,.90)!important}
 #salesDashboardDocument .sales-table tr.sales-grand td{background:rgba(247,236,223,.68)!important}
 </style>
