@@ -1,4 +1,19 @@
 <?php
+/* Versioned, long-lived cache for the static Sales Dashboard poster artwork. */
+if (($_GET['asset'] ?? '') === 'sales-background-d03aa0f474d04') {
+    $backgroundFile = __DIR__ . '/sales_dashboard_background_d03aa0f474d04.png';
+    if (!is_file($backgroundFile)) {
+        http_response_code(404);
+        header('Content-Type: text/plain; charset=utf-8');
+        exit('Sales Dashboard background not found.');
+    }
+    header('Content-Type: image/png');
+    header('Cache-Control: public, max-age=31536000, immutable');
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Length: ' . filesize($backgroundFile));
+    readfile($backgroundFile);
+    exit;
+}
 session_start();
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) { header('Location: login.php'); exit; }
 
@@ -1183,41 +1198,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
  body.report-sticky-mode .dashboard>.pre-export-bar{position:static!important;box-shadow:none!important;}
 }
 </style>
-<style id="sales-background-readiness">
-html.sales-background-pending #salesDashboardDocument .sales-ppt-body,
-html.sales-background-error #salesDashboardDocument .sales-ppt-body{visibility:hidden!important;}
-#salesBackgroundNotice{display:none;max-width:1023px;margin:14px auto;padding:15px 18px;border:1px solid #c9a27b;border-radius:9px;background:#fff9f0;color:#60391f;font:600 14px/1.5 Arial,sans-serif;box-sizing:border-box;}
-html.sales-background-pending #salesBackgroundNotice,html.sales-background-error #salesBackgroundNotice{display:block;}
-</style>
-<?php if($display==='sales'): ?>
-<link rel="preload" href="sales_dashboard_poster_d03aa0f474d0.png" as="image" type="image/png">
-<script>
-(function(){
- document.documentElement.classList.add('sales-background-pending');
- const url='sales_dashboard_poster_d03aa0f474d0.png';
- const image=new Image();
- let finished=false;
- function settle(ok){
-  if(finished)return;finished=true;
-  document.documentElement.classList.remove('sales-background-pending');
-  document.documentElement.classList.add(ok?'sales-background-ready':'sales-background-error');
-  const notice=document.getElementById('salesBackgroundNotice');
-  if(notice)notice.textContent=ok?'':'The Sales Dashboard background could not be loaded. Report tables are hidden to preserve the official report layout. Check that the background image file was deployed, then reload.';
-  if(ok&&typeof window.salesDashboardFit==='function')window.salesDashboardFit();
- }
- image.onload=function(){settle(image.naturalWidth>0&&image.naturalHeight>0)};
- image.onerror=function(){settle(false)};
- image.src=url;
- if(image.complete)settle(image.naturalWidth>0&&image.naturalHeight>0);
- window.salesDashboardBackgroundReady=new Promise((resolve,reject)=>{
-  if(finished){document.documentElement.classList.contains('sales-background-ready')?resolve():reject(new Error('Dashboard background unavailable'));return;}
-  image.addEventListener('load',()=>resolve(),{once:true});
-  image.addEventListener('error',()=>reject(new Error('Dashboard background unavailable')),{once:true});
- });
- window.salesDashboardBackgroundReady.catch(()=>{});
-})();
-</script>
-<?php endif; ?>
+<?php if($display==='sales'): ?><script>document.documentElement.classList.add('sales-background-pending');</script><?php endif; ?>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1342,8 +1323,8 @@ html.sales-background-pending #salesBackgroundNotice,html.sales-background-error
 <?php elseif($display==='sales'): ?>
 <div class="sales-actions" data-html2canvas-ignore="true"><div class="sales-export-control pre-export-wrap"><button type="button" id="salesExportButton" class="pre-export-btn" aria-haspopup="true" aria-expanded="false">⇩ Export Dashboard</button><div id="salesExportOptions" class="pre-export-menu" hidden><button type="button" data-type="pdf">PDF</button><button type="button" data-type="xlsx">Excel</button><button type="button" data-type="doc">Word</button><button type="button" data-type="png">PNG Image</button><button type="button" data-type="jpg">JPEG Image</button></div></div></div>
 <div id="salesProgress" class="sales-progress" role="status" aria-live="polite" hidden><span class="sales-spinner"></span><span id="salesProgressText">Preparing…</span><div class="sales-progress-track"><div id="salesProgressFill"></div></div><strong id="salesProgressPercent">0%</strong></div>
-<div id="salesBackgroundNotice" role="status" aria-live="polite">Loading the Sales Dashboard background before displaying report data…</div>
 <section class="sales-ppt" id="salesDashboardDocument">
+  <div id="salesBackgroundStatus" role="status" aria-live="polite"><div class="sales-bg-status-inner"><div id="salesBackgroundStatusText">Preparing the Sales Dashboard background…</div><button type="button" id="salesBackgroundRetry">Retry loading background</button></div></div>
  <div class="sales-ppt-header"><div class="gov-title">THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div></div>
  <div class="sales-ppt-title"><span>SALES DASHBOARD</span></div>
  <div class="sales-ppt-body">
@@ -1753,7 +1734,7 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 </script>
 
 <style id="sales-slide-fixed-layout">
-#salesDashboardDocument.sales-ppt{position:relative!important;width:100%!important;max-width:1023px!important;aspect-ratio:1023/1447!important;height:auto!important;min-height:0!important;margin:0 auto!important;overflow:hidden!important;background-image:url("sales_dashboard_poster_d03aa0f474d0.png")!important;background-position:center!important;background-size:100% 100%!important;background-repeat:no-repeat!important;box-shadow:0 4px 20px #0002!important}
+#salesDashboardDocument.sales-ppt{position:relative!important;width:100%!important;max-width:1023px!important;aspect-ratio:1023/1447!important;height:auto!important;min-height:0!important;margin:0 auto!important;overflow:hidden!important;background-image:url("dashboard.php?asset=sales-background-d03aa0f474d04")!important;background-position:center!important;background-size:100% 100%!important;background-repeat:no-repeat!important;box-shadow:0 4px 20px #0002!important}
 #salesDashboardDocument .sales-ppt-header,#salesDashboardDocument .sales-ppt-title,#salesDashboardDocument .sales-ppt-footer{display:none!important}
 #salesDashboardDocument .sales-ppt-body{position:absolute!important;top:21.6%!important;left:15px!important;width:993px!important;max-width:none!important;box-sizing:border-box!important;height:auto!important;overflow:visible!important;padding:0!important;margin:0!important;background:transparent!important;transform-origin:top left!important}
 #salesDashboardDocument .sales-meta,#salesDashboardDocument .sales-table{width:100%!important;min-width:0!important;table-layout:fixed!important;border-collapse:collapse!important;background:rgba(255,255,255,.79)!important;margin:0 0 5px!important}
@@ -1887,7 +1868,6 @@ function save(blob,name){const a=document.createElement('a'),u=URL.createObjectU
 function base(){return 'TCB_Sales_Dashboard_'+String(<?=json_encode($season)?>).replace(/\W/g,'_')+'_Friday_'+<?=json_encode($salesReportDate)?>;}
 async function library(url,check){if(check())return;await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=url;s.onload=resolve;s.onerror=()=>reject(new Error('Could not load export library: '+url));document.head.appendChild(s);});if(!check())throw new Error('Export library unavailable');}
 async function snapshot(){
- if(window.salesDashboardBackgroundReady)await window.salesDashboardBackgroundReady;
  await library('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
  if(document.fonts?.ready)await document.fonts.ready;
  update(40,'Rendering full-resolution A4 dashboard…');
@@ -2012,6 +1992,22 @@ menu.addEventListener('click',async e=>{
 #reportTaskBar{height:100%;width:0;background:linear-gradient(90deg,#795548,#ba8b52);border-radius:20px;transition:width .25s ease}
 .report-task-bottom{display:flex;justify-content:space-between;margin-top:10px;font-size:12px;font-weight:700;color:#795548}
 @media(prefers-reduced-motion:reduce){#reportTaskBar{transition:none}}
+
+/* Do not expose report figures before the official poster artwork is ready. */
+html.sales-background-pending #salesDashboardDocument .sales-ppt-body,
+html.sales-background-pending #salesDashboardDocument .sales-ppt-header,
+html.sales-background-pending #salesDashboardDocument .sales-ppt-title,
+html.sales-background-pending #salesDashboardDocument .sales-ppt-footer,
+html.sales-background-error #salesDashboardDocument .sales-ppt-body,
+html.sales-background-error #salesDashboardDocument .sales-ppt-header,
+html.sales-background-error #salesDashboardDocument .sales-ppt-title,
+html.sales-background-error #salesDashboardDocument .sales-ppt-footer{visibility:hidden!important}
+#salesBackgroundStatus{display:none;position:absolute;inset:0;z-index:40;align-items:center;justify-content:center;text-align:center;padding:20px;background:#f5eee7;color:#503526;font:600 15px/1.6 Arial,sans-serif;box-sizing:border-box}
+html.sales-background-pending #salesBackgroundStatus,html.sales-background-error #salesBackgroundStatus{display:flex}
+#salesBackgroundStatus .sales-bg-status-inner{max-width:350px}
+#salesBackgroundStatus button{display:none;margin:12px auto 0;padding:9px 18px;border:0;border-radius:8px;background:#6a402a;color:#fff;font-weight:700;cursor:pointer}
+html.sales-background-error #salesBackgroundStatus button{display:block}
+@media print{#salesBackgroundStatus{display:none!important}}
 </style>
 <div id="reportTaskOverlay" hidden role="status" aria-live="polite" aria-atomic="true" data-html2canvas-ignore="true">
  <div class="report-task-card"><div class="report-task-icon" aria-hidden="true">☕</div>
@@ -2036,5 +2032,48 @@ window.reportTask=(function(){
  document.querySelectorAll('body.report-sticky-mode form.season select').forEach(select=>select.addEventListener('change',()=>{if(select.form){window.reportTask.start('Loading report','Updating the selected report…');window.reportTask.update(18,'Retrieving report data…');}}));
 })();
 </script>
+
+<?php if($display==='sales'): ?>
+<script id="sales-background-ready-gate">
+(function(){
+  'use strict';
+  const asset='dashboard.php?asset=sales-background-d03aa0f474d04';
+  const root=document.documentElement;
+  const status=document.getElementById('salesBackgroundStatusText');
+  const retry=document.getElementById('salesBackgroundRetry');
+  const poster=document.getElementById('salesDashboardDocument');
+  if(!poster){root.classList.remove('sales-background-pending');return;}
+  let attempt=0;
+  function load(){
+    const current=++attempt;
+    root.classList.remove('sales-background-error');
+    root.classList.add('sales-background-pending');
+    if(status)status.textContent='Preparing the Sales Dashboard background…';
+    const img=new Image();
+    img.onload=async function(){
+      if(current!==attempt)return;
+      try{if(img.decode)await img.decode();}catch(e){}
+      if(current!==attempt)return;
+      // Apply the image explicitly before revealing the data; same URL is reused from cache.
+      poster.style.setProperty('background-image','url("'+asset+'")','important');
+      requestAnimationFrame(()=>{
+        if(current!==attempt)return;
+        root.classList.remove('sales-background-pending','sales-background-error');
+        if(typeof window.salesDashboardFit==='function')window.salesDashboardFit();
+      });
+    };
+    img.onerror=function(){
+      if(current!==attempt)return;
+      root.classList.remove('sales-background-pending');
+      root.classList.add('sales-background-error');
+      if(status)status.textContent='The Sales Dashboard background could not be loaded. Report data is hidden to prevent an incomplete display.';
+    };
+    img.src=asset;
+  }
+  if(retry)retry.addEventListener('click',load);
+  load();
+})();
+</script>
+<?php endif; ?>
 </body>
 </html>
