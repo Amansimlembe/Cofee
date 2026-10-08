@@ -1806,6 +1806,13 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 @media(max-width:420px){.pre-report .pre-paper{padding:12px 9px 22px!important}.pre-report .pre-scroll table{min-width:520px!important}.pre-export-bar{justify-content:flex-end!important}}
 @media print{.sales-actions,.pre-export-bar{display:none!important}}
 </style>
+<style id="sales-background-readiness-guard">
+/* Never expose report figures on an empty/unpainted poster. */
+#salesDashboardDocument.sales-ppt:not(.sales-background-ready) .sales-ppt-body{visibility:hidden!important}
+#salesDashboardDocument.sales-ppt.sales-background-failed .sales-ppt-body{visibility:hidden!important}
+#salesDashboardDocument.sales-ppt.sales-background-failed::after{content:"The sales report background could not be loaded. Please refresh the page.";position:absolute;top:42%;left:8%;width:84%;padding:18px 12px;box-sizing:border-box;text-align:center;color:#603923;background:#fff9f1;border:1px solid #c8a88c;border-radius:8px;font:600 14px/1.5 Arial,sans-serif;z-index:8}
+@media print{#salesDashboardDocument.sales-ppt:not(.sales-background-ready) .sales-ppt-body{visibility:hidden!important}}
+</style>
 <style id="sales-iframe-responsive-patch">
 
 /* Responsive report canvas: typography scales with the actual iframe width,
@@ -1841,8 +1848,27 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 (function(){
 const paper=document.getElementById('salesDashboardDocument');if(!paper)return;
 const body=paper.querySelector('.sales-ppt-body');
+/* The poster background is embedded in the CSS. Decode it before showing data.
+   This also guards against a damaged/missing background after deployment. */
+let backgroundReadyResolve;
+const backgroundReady=new Promise(resolve=>{backgroundReadyResolve=resolve;});
+function backgroundDone(ok){
+ if(ok){paper.classList.add('sales-background-ready');paper.classList.remove('sales-background-failed');}
+ else{paper.classList.add('sales-background-failed');paper.classList.remove('sales-background-ready');}
+ backgroundReadyResolve(ok);
+}
+function checkSalesBackground(){
+ const background=getComputedStyle(paper).backgroundImage;
+ const match=background.match(/url\(["']?(.+?)["']?\)/);
+ if(!match){backgroundDone(false);return;}
+ const image=new Image();
+ image.onload=()=>{if(image.naturalWidth>0 && image.naturalHeight>0){requestAnimationFrame(()=>{fit();backgroundDone(true);});}else backgroundDone(false);};
+ image.onerror=()=>backgroundDone(false);
+ image.src=match[1];
+ if(image.complete && image.naturalWidth>0){requestAnimationFrame(()=>{fit();backgroundDone(true);});}
+}
 function fit(){if(!body)return;const width=paper.getBoundingClientRect().width||1023;const height=width*1447/1023;const areaHeight=height*.424;body.style.transform='none';const natural=body.scrollHeight||1;const factor=Math.min(width/1023,areaHeight/natural);body.style.transform='scale('+Math.max(.01,factor)+')';}
-window.salesDashboardFit=fit;window.addEventListener('resize',fit,{passive:true});window.addEventListener('message',function(event){if(event.source!==window.parent)return;if(event.data&&event.data.type==='tcb:layout-resize')requestAnimationFrame(fit);});if(window.ResizeObserver){const ro=new ResizeObserver(()=>requestAnimationFrame(fit));ro.observe(paper);if(paper.parentElement)ro.observe(paper.parentElement);}document.fonts?.ready.then(fit);requestAnimationFrame(fit);
+window.salesDashboardFit=fit;window.addEventListener('resize',fit,{passive:true});window.addEventListener('message',function(event){if(event.source!==window.parent)return;if(event.data&&event.data.type==='tcb:layout-resize')requestAnimationFrame(fit);});if(window.ResizeObserver){const ro=new ResizeObserver(()=>requestAnimationFrame(fit));ro.observe(paper);if(paper.parentElement)ro.observe(paper.parentElement);}document.fonts?.ready.then(fit);requestAnimationFrame(fit);checkSalesBackground();
 const button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions'),progress=document.getElementById('salesProgress'),status=document.getElementById('salesProgressText'),bar=document.getElementById('salesProgressFill'),percent=document.getElementById('salesProgressPercent');
 if(!button||!menu)return;
 button.addEventListener('click',e=>{e.stopPropagation();menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));});document.addEventListener('click',e=>{if(!e.target.closest('.sales-export-control')){menu.hidden=true;button.setAttribute('aria-expanded','false');}});
@@ -1851,6 +1877,7 @@ function save(blob,name){const a=document.createElement('a'),u=URL.createObjectU
 function base(){return 'TCB_Sales_Dashboard_'+String(<?=json_encode($season)?>).replace(/\W/g,'_')+'_Friday_'+<?=json_encode($salesReportDate)?>;}
 async function library(url,check){if(check())return;await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=url;s.onload=resolve;s.onerror=()=>reject(new Error('Could not load export library: '+url));document.head.appendChild(s);});if(!check())throw new Error('Export library unavailable');}
 async function snapshot(){
+ if(!(await backgroundReady))throw new Error('Sales report background is unavailable. Export was stopped to prevent an incomplete report.');
  await library('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
  if(document.fonts?.ready)await document.fonts.ready;
  update(40,'Rendering full-resolution A4 dashboard…');
