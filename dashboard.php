@@ -1601,7 +1601,7 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 #salesDashboardDocument .sales-meta th,#salesDashboardDocument .sales-meta td,#salesDashboardDocument .sales-table th,#salesDashboardDocument .sales-table td{font-size:11.5px!important;line-height:1.18!important;padding:3px 5px!important;border:1px solid #685d50!important;white-space:nowrap!important;overflow-wrap:normal!important;word-break:normal!important;box-sizing:border-box!important;overflow:hidden!important;text-overflow:clip!important}
 #salesDashboardDocument .sales-table th{text-align:center!important}
 #salesDashboardDocument .sales-table td.sales-label{text-align:left!important}
-#salesDashboardDocument .sales-table td.sales-num{text-align:right!important;font-variant-numeric:tabular-nums!important}
+#salesDashboardDocument .sales-table td.sales-num{text-align:center!important;font-variant-numeric:tabular-nums!important}
 #salesDashboardDocument .sales-table th:first-child{width:29%!important}
 #salesDashboardDocument .sales-table th:nth-child(2){width:15%!important}
 #salesDashboardDocument .sales-table th:nth-child(3){width:19%!important}
@@ -1616,7 +1616,7 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 #salesDashboardDocument .sales-table tr.sales-grand td{background:rgba(247,236,223,.68)!important;font-weight:800!important}
 #salesDashboardDocument .sales-table tr.sales-production td{background:rgba(246,237,226,.50)!important;font-weight:800!important;font-style:italic!important}
 #salesDashboardDocument .sales-table tr:not(.sales-band) td.sales-label{background:rgba(255,255,255,.05)!important}
-#salesDashboardDocument .sales-table td.sales-num{white-space:nowrap!important;text-align:right!important}
+#salesDashboardDocument .sales-table td.sales-num{white-space:nowrap!important;text-align:center!important}
 #salesExportOptions[hidden],#salesProgress[hidden]{display:none!important}
 @media print{#salesDashboardDocument{box-shadow:none!important}.sales-actions,.sales-progress{display:none!important}}
 
