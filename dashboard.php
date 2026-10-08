@@ -1465,14 +1465,67 @@ tfoot td{font-weight:700!important}
     update(45,'Preparing Word document…');
     const clone=paper.cloneNode(true);
     const style='<style>body{font-family:Arial;color:#30251d}table{width:100%;border-collapse:collapse}td,th{border:1px solid #555;padding:5px;font-size:9pt}th{text-align:center}h1{text-align:center}</style>';
-    const html='<!doctype html><html><head><meta charset="utf-8">'+style+'</head><body>'+clone.outerHTML+'</body></html>';
+    const html='<!doctype html><html><head><meta charset="utf-8">'+style+'</head><body>'+clone.outerHTML+'
+<style id="sales-fixed-slide-css">
+/* Slide 2 is the immutable full-page artwork; only the table overlay changes. */
+#salesDashboardDocument.sales-ppt{
+ position:relative!important; width:100%!important; max-width:1100px!important;
+ aspect-ratio:2643 / 3738!important; height:auto!important; min-height:0!important;
+ margin:0 auto!important; overflow:hidden!important; border:0!important;
+ background:#eee url('sales_dashboard_fixed_background.png') center / 100% 100% no-repeat!important;
+ box-shadow:0 4px 22px #0002!important;
+}
+#salesDashboardDocument .sales-ppt-header,
+#salesDashboardDocument .sales-ppt-title,
+#salesDashboardDocument .sales-ppt-footer{display:none!important}
+#salesDashboardDocument .sales-ppt-body{
+ position:absolute!important;top:21.6%!important;left:0!important;right:auto!important;
+ width:1100px!important;max-width:none!important;height:auto!important;
+ overflow:visible!important;padding:0!important;margin:0!important;
+ background:transparent!important;transform-origin:top left!important;
+}
+#salesDashboardDocument .sales-meta,#salesDashboardDocument .sales-table{
+ width:100%!important;min-width:0!important;table-layout:fixed!important;
+ border-collapse:collapse!important;background:transparent!important;
+}
+#salesDashboardDocument .sales-meta td,#salesDashboardDocument .sales-meta th,
+#salesDashboardDocument .sales-table td,#salesDashboardDocument .sales-table th{
+ font-size:12px!important;line-height:1.18!important;padding:3px 6px!important;
+ border:1px solid #49423b!important;background:rgba(255,255,255,.15)!important;
+ overflow-wrap:normal!important;white-space:normal!important;
+}
+#salesDashboardDocument .sales-table th{text-align:center!important}
+#salesDashboardDocument .sales-table .sales-label{text-align:left!important}
+#salesDashboardDocument .sales-table .sales-num{text-align:center!important}
+#salesDashboardDocument .sales-table .sales-band td,
+#salesDashboardDocument .sales-table .sales-grand td{background:rgba(226,166,98,.30)!important}
+@media print{#salesDashboardDocument.sales-ppt{break-inside:avoid!important;box-shadow:none!important}}
+</style>
+<script>
+(function(){
+ const doc=document.getElementById('salesDashboardDocument');
+ if(!doc)return;
+ const body=doc.querySelector('.sales-ppt-body');
+ function fit(){
+  const width=doc.clientWidth;
+  const available=doc.clientHeight*.475;
+  const scale=Math.min(width/1100,available/Math.max(body.scrollHeight,1));
+  body.style.transform='scale('+Math.max(.01,scale)+')';
+ }
+ window.addEventListener('resize',fit,{passive:true});
+ if('ResizeObserver' in window)new ResizeObserver(fit).observe(doc);
+ document.fonts?.ready.then(fit);requestAnimationFrame(fit);
+ window.salesDashboardFit=fit;
+})();
+</script>
+</body></html>';
     download(new Blob(['\ufeff',html],{type:'application/msword'}),base+'.doc');
    }else{
     await load('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>!!window.html2canvas);
     await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
     update(30,'Rendering high-resolution PDF…');
     await document.fonts.ready;
-    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='none';el.querySelector('.sales-ppt-body').style.overflow='visible'}}});
+    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='1100px';el.style.height='auto'}}});
     update(76,'Composing PDF pages…');
     const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
     const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
@@ -1611,7 +1664,7 @@ tfoot td{font-weight:700!important}
     await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
     update(30,'Rendering high-resolution PDF…');
     await document.fonts.ready;
-    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='none';el.querySelector('.sales-ppt-body').style.overflow='visible'}}});
+    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='1100px';el.style.height='auto'}}});
     update(76,'Composing PDF pages…');
     const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
     const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
@@ -1716,7 +1769,7 @@ new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},opti
     await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
     update(30,'Rendering high-resolution PDF…');
     await document.fonts.ready;
-    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='none';el.querySelector('.sales-ppt-body').style.overflow='visible'}}});
+    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='1100px';el.style.height='auto'}}});
     update(76,'Composing PDF pages…');
     const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
     const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
@@ -1883,7 +1936,7 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
     await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
     update(30,'Rendering high-resolution PDF…');
     await document.fonts.ready;
-    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='none';el.querySelector('.sales-ppt-body').style.overflow='visible'}}});
+    const canvas=await html2canvas(paper,{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:doc=>{const el=doc.getElementById('salesDashboardDocument');if(el){el.style.width='1100px';el.style.maxWidth='1100px';el.style.height='auto'}}});
     update(76,'Composing PDF pages…');
     const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
     const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),margin=8,iw=pw-margin*2;
