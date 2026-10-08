@@ -545,7 +545,7 @@ body{overflow:hidden}.app{height:100vh;padding:8px;display:grid;grid-template-ro
 select,button,input{height:30px;border:1px solid #d9cfca;border-radius:6px;background:#fff;padding:0 9px;font-size:11px;color:#4b342c}
 button{cursor:pointer;font-weight:700}.primary{background:#5d4037;color:#fff;border-color:#5d4037}
 .danger{color:#9a2f28}.exportwrap{position:relative}
-.exportmenu{display:none;position:absolute;right:0;top:34px;background:#fff;border:1px solid #ddd2cd;border-radius:7px;padding:5px;min-width:110px;z-index:30;box-shadow:0 8px 22px #0002}
+.exportmenu{display:none;position:absolute;right:0;top:34px;background:#fff;border:1px solid #ddd2cd;border-radius:7px;padding:5px;min-width:190px;z-index:30;box-shadow:0 8px 22px #0002}
 .exportmenu.open{display:block}
 .exportmenu button{display:block;width:100%;text-align:left;border:0;background:#fff}
 .exportmenu button:hover{background:#f5f1ef}
@@ -602,7 +602,7 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
     border-collapse:collapse;
     margin:0;
     font-size:9.5px;
-    border:3px solid #000!important;
+    border:1px solid #333!important;
     background:#fff
 }
 .hl-table col{width:33.333%}
@@ -639,10 +639,10 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
     padding-right:8px
 }
 /* Reinforce the workbook-style thick perimeter. */
-.hl-table tr:first-child > *{border-top-width:3px!important}
-.hl-table tr:last-child > *{border-bottom-width:3px!important}
-.hl-table tr > *:first-child{border-left-width:3px!important}
-.hl-table tr > *:last-child{border-right-width:3px!important}
+.hl-table tr:first-child > *{border-top-width:1px!important}
+.hl-table tr:last-child > *{border-bottom-width:1px!important}
+.hl-table tr > *:first-child{border-left-width:1px!important}
+.hl-table tr > *:last-child{border-right-width:1px!important}
 .hl-money{font-variant-numeric:tabular-nums}
 @media(max-width:900px){
     .report{padding:7px}
@@ -674,6 +674,10 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
       <button type="button" onclick="exportHighLow('pdf')">PDF</button>
       <button type="button" onclick="exportHighLow('excel')">Excel</button>
       <button type="button" onclick="exportHighLow('word')">Word</button>
+      <div style="border-top:1px solid #ddd;margin:5px 0"></div>
+      <button type="button" onclick="exportHighLow('all_pdf')">All Auctions · PDF</button>
+      <button type="button" onclick="exportHighLow('all_excel')">All Auctions · Excel</button>
+      <button type="button" onclick="exportHighLow('all_word')">All Auctions · Word</button>
     </div>
    </div>
    <div class="settings"><button onclick="toggleSettings()">⚙ Settings</button><div class="menu" id="settingsMenu">
@@ -701,7 +705,12 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
   <div class="tablewrap" id="tablewrap"><table id="table"></table></div>
  </div>
 </div>
-<script>
+<div id="cleanProgressOverlay" role="status" aria-live="polite" style="display:none;position:fixed;inset:0;z-index:99999;align-items:center;justify-content:center;background:rgba(30,22,17,.42);backdrop-filter:blur(3px)">
+<div style="width:min(380px,92vw);background:white;border-radius:14px;padding:24px;box-shadow:0 15px 55px #0004">
+<div id="cleanProgressTitle" style="font-weight:bold;font-size:17px;margin-bottom:8px">Loading</div>
+<div id="cleanProgressDetail" style="font-size:12px;margin-bottom:16px">Preparing…</div>
+<div style="height:9px;border-radius:8px;background:#eee5dc;overflow:hidden"><div id="cleanProgressBar" style="height:100%;width:0;background:#795548;transition:width .2s"></div></div>
+<div id="cleanProgressPct" style="text-align:right;font-weight:bold;margin-top:9px;color:#795548">0%</div></div></div><script>
 const $=id=>document.getElementById(id);
 const cols=[
  ['lot_no','Lot No.'],['auction_no','Auction No.'],['auction_date','Auction Date'],['seller','Seller'],
@@ -743,6 +752,7 @@ function exportTableMarkup(){
 function exportHighLow(type){
  $('exportMenu').classList.remove('open');
  const mode=$('display').value;
+ if(type.startsWith('all_')){ cleanExportAll(type.slice(4)); return; }
  if(mode==='summary'){
    try{
      if(type==='excel') return exportSaleSummaryExcel();
@@ -1004,15 +1014,17 @@ async function loadReport(){
  if(mode!=='report')return;
  if(!$('auction').value){$('report').innerHTML='<div class="muted">Select an auction to view High & Low.</div>';return}
  let d=await api('clean_auction.php?action=report&season='+encodeURIComponent($('season').value)+'&auction_no='+encodeURIComponent($('auction').value));
- let r=d.report;
+ $('report').innerHTML=cleanHighLowHTML(d.report,$('auction').value);
+}
+function cleanHighLowHTML(r,auctionNo){
  const p=r.prices||{};
  const top=p.top||{low_price:r.top_low,avg_price:r.top_avg,high_price:r.top_high};
  const cg=p.c||{low_price:r.c_low,avg_price:r.c_avg,high_price:r.c_high};
  const low=p.lower||{low_price:r.lower_low,avg_price:r.lower_avg,high_price:r.lower_high};
  const held=r.auction_date ? new Date(r.auction_date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) : '-';
- $('report').innerHTML=`<div class="highlow">
+ return `<div class="highlow">
    <div class="hl-title">TANZANIA COFFEE EXCHANGE</div>
-   <div class="hl-title">AUCTION RESULTS SALE NO TCB/M/${esc($('auction').value)}</div>
+   <div class="hl-title">AUCTION RESULTS SALE NO TCB/M/${esc(auctionNo)}</div>
    <div class="hl-sub">Held On ${esc(held)}</div>
    <table class="hl-table"><colgroup><col><col><col></colgroup>
     <tr class="hl-section"><td colspan="3">Price USD/50KGS</td></tr>
@@ -1060,6 +1072,101 @@ async function editRow(id){
  }
  try{let q=await fetch('clean_auction.php?action=update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});let j=await q.json();if(!q.ok||!j.success)throw new Error(j.message);message(j.message);await refreshAll()}catch(e){message(e.message,false)}
 }
+
+let cleanBusyId=0;
+function cleanProgress(title,pct,detail){
+ const el=$('cleanProgressOverlay'); if(!el)return;
+ el.style.display='flex'; $('cleanProgressTitle').textContent=title;
+ $('cleanProgressBar').style.width=Math.min(100,Math.max(0,pct))+'%';
+ $('cleanProgressPct').textContent=Math.round(pct)+'%';
+ $('cleanProgressDetail').textContent=detail||'Processing…';
+}
+function cleanProgressDone(){
+ cleanProgress('Completed',100,'Your request is ready.');
+ setTimeout(()=>{$('cleanProgressOverlay').style.display='none'},400);
+}
+const cleanOldRefresh=refreshAll;
+refreshAll=async function(){
+ const id=++cleanBusyId;cleanProgress('Loading Clean Auction',12,'Fetching selected auction and display…');
+ try{await cleanOldRefresh();if(id===cleanBusyId)cleanProgressDone()}
+ catch(e){message(e.message,false);if(id===cleanBusyId)$('cleanProgressOverlay').style.display='none'}
+};
+function cleanExportHTML(sections){
+ return '<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4 portrait;margin:12mm}body{font-family:Arial,sans-serif;color:#111;background:#fff}h2{text-align:center;font-size:16px}.clean-export-section{break-inside:avoid;page-break-inside:avoid;margin-bottom:22px}.clean-auction-label{font-size:13px;font-weight:bold;margin:8px 0}.highlow{width:100%;margin:0;padding:0}.hl-title,.hl-sub{text-align:center;font-weight:bold;margin:3px 0}.hl-table{width:100%;border-collapse:collapse;table-layout:fixed}.hl-table th,.hl-table td{border:1px solid #333;padding:5px;text-align:center;vertical-align:middle;background:#fff;color:#111;font-size:11px}.hl-section td,.hl-values td,.hl-percent td{font-weight:bold}.hl-percent td{text-align:right}</style></head><body>'+sections+'</body></html>';
+}
+async function cleanExportAll(type){
+ $('exportMenu').classList.remove('open');
+ const season=$('season').value;
+ if(!season){message('Select a Sale Season first.',false);return}
+ const btn=$('exportButton');btn.disabled=true;
+ cleanProgress('Exporting all auctions',3,'Retrieving auction list…');
+ try{
+  const list=await api('clean_auction.php?action=auctions&season='+encodeURIComponent(season));
+  const auctions=list.auctions||[];
+  if(!auctions.length)throw Error('No auctions found for the selected season.');
+  let sections='';
+  for(let i=0;i<auctions.length;i++){
+   cleanProgress('Exporting all auctions',5+65*i/auctions.length,`Loading auction ${i+1} of ${auctions.length}`);
+   const auction=auctions[i].auction_no;
+   const d=await api('clean_auction.php?action=report&season='+encodeURIComponent(season)+'&auction_no='+encodeURIComponent(auction));
+   sections+=`<section class="clean-export-section"><div class="clean-auction-label">Auction No. ${esc(auction)}</div>${cleanHighLowHTML(d.report,auction)}</section>`;
+  }
+  cleanProgress('Preparing '+type.toUpperCase(),74,'Building document…');
+  const filename='Clean_Auction_High_Low_All_'+season.replace('/','-');
+  const html=cleanExportHTML('<h2>CLEAN COFFEE AUCTION HIGH AND LOW – '+esc(season)+'</h2>'+sections);
+  if(type==='word'||type==='excel'){
+   downloadBlob(new Blob(['\ufeff',html],{type:type==='word'?'application/msword':'application/vnd.ms-excel'}),filename+(type==='word'?'.doc':'.xls'));
+  }else if(type==='pdf'){
+   await cleanPdfFromHtml(html,filename+'.pdf',true);
+  }
+  cleanProgressDone();message('All-auctions '+type.toUpperCase()+' export prepared.');
+ }catch(e){$('cleanProgressOverlay').style.display='none';message(e.message,false)}
+ finally{btn.disabled=false}
+}
+async function cleanPdfFromHtml(html,filename,multiple=false){
+ if(!window.html2canvas||!window.jspdf?.jsPDF)throw Error('PDF libraries unavailable. Check your connection.');
+ const stage=document.createElement('div');
+ stage.style.cssText='position:fixed;left:-12000px;top:0;width:760px;background:white;padding:10px;color:black';
+ stage.innerHTML=html.match(/<body>([\s\S]*)<\/body>/)?.[1]||html;
+ document.body.appendChild(stage);
+ try{
+  const blocks=multiple?[...stage.querySelectorAll('.clean-export-section')]:[stage];
+  const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true});
+  let first=true;
+  for(let i=0;i<blocks.length;i++){
+   cleanProgress('Rendering PDF',76+22*i/blocks.length,`Rendering ${i+1} of ${blocks.length} auction reports…`);
+   const canvas=await html2canvas(blocks[i],{scale:3,backgroundColor:'#fff',useCORS:true,logging:false});
+   const w=190,h=canvas.height*w/canvas.width;
+   if(!first)pdf.addPage();first=false;
+   if(h<=275){pdf.addImage(canvas.toDataURL('image/png'),'PNG',10,10,w,h)}
+   else{
+    const slicePx=Math.floor(275*canvas.width/w);
+    for(let y=0;y<canvas.height;y+=slicePx){
+     if(y)pdf.addPage();
+     const c=document.createElement('canvas');c.width=canvas.width;c.height=Math.min(slicePx,canvas.height-y);
+     c.getContext('2d').drawImage(canvas,0,y,c.width,c.height,0,0,c.width,c.height);
+     pdf.addImage(c.toDataURL('image/png'),'PNG',10,10,w,c.height*w/c.width);
+    }
+   }
+  }
+  cleanProgress('Saving PDF',99,'Preparing download…');pdf.save(filename);
+ }finally{stage.remove()}
+}
+const cleanOldExport=exportHighLow;
+exportHighLow=function(type){
+ if(type.startsWith('all_'))return cleanExportAll(type.slice(4));
+ if(type==='pdf'&&$('display').value==='report'){
+  $('exportMenu').classList.remove('open');
+  try{
+   cleanProgress('Exporting High & Low',20,'Preparing document…');
+   const html=cleanExportHTML(exportTableMarkup());
+   return cleanPdfFromHtml(html,highLowExportName('pdf')).then(()=>{cleanProgressDone();message('PDF prepared.')}).catch(e=>{$('cleanProgressOverlay').style.display='none';message(e.message,false)});
+  }catch(e){$('cleanProgressOverlay').style.display='none';message(e.message,false)}
+ }
+ cleanProgress('Exporting '+type.toUpperCase(),35,'Building report…');
+ try{const result=cleanOldExport(type);Promise.resolve(result).then(()=>cleanProgressDone(),e=>{$('cleanProgressOverlay').style.display='none';message(e.message,false)})}
+ catch(e){$('cleanProgressOverlay').style.display='none';message(e.message,false)}
+};
 $('season').addEventListener('change',async()=>{await loadAuctions();$('auction').value='';await refreshAll()});
 $('auction').addEventListener('change',refreshAll);
 $('display').addEventListener('change',refreshAll);
