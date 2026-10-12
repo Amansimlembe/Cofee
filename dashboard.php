@@ -1305,6 +1305,15 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 .auction-period-controls select{max-width:210px;min-width:105px;padding:8px 10px;border:1px solid #d4c5b6;border-radius:8px;background:#fff;color:#35281e;font:inherit;font-size:12px}
 @media(max-width:650px){.auction-season-kpi{grid-column:1/-1}.auction-period-controls{justify-content:flex-start;width:100%}.auction-period-controls select{flex:1 1 125px;min-width:0}}
 </style>
+<style id="auction-filter-row-layout">
+/* The reporting controls occupy their own full-width row above the auction KPIs. */
+.auction-filter-row{display:block;width:100%;margin-bottom:16px;min-width:0}
+.auction-filter-row>.auction-season-kpi{display:block;width:100%;box-sizing:border-box;min-width:0;grid-column:auto}
+.auction-filter-row .auction-season-row{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.auction-filter-row .auction-period-controls{margin-left:auto}
+.auction-summary-kpis{margin-top:0}
+@media(max-width:700px){.auction-filter-row .auction-season-row{align-items:flex-start}.auction-filter-row .auction-period-controls{margin-left:0;justify-content:flex-start;width:100%}}
+</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1516,8 +1525,10 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 <?php foreach($directRows as$r):?><tr><td><?=htmlspecialchars($r['channel'])?></td><td><?=htmlspecialchars($r['coffee_type'])?></td><td><?=nf($r['kgs'],2)?></td><td><?=nf($r['value_usd'],2)?></td><td><?=nf(pct((float)$r['kgs'],$grandSold),2)?></td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td colspan="2">Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php elseif(in_array($display,['clean','kagera'],true)): ?>
-    <div class="kpis">
+    <div class="auction-filter-row">
  <div class="kpi auction-season-kpi"><div class="auction-season-row"><div><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($auctionSeasonFrom))?> — <?=date('d M Y',strtotime($auctionSeasonTo))?></div></div><form class="auction-period-controls" method="get"><input type="hidden" name="display" value="<?=htmlspecialchars($display,ENT_QUOTES)?>"><input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>"><label for="auctionPeriodType">Period</label><select id="auctionPeriodType" name="auction_period" onchange="this.form.elements['auction_period_value'].value='all';this.form.submit()"><option value="monthly" <?=$auctionPeriod['kind']==='monthly'?'selected':''?>>Monthly</option><option value="quarterly" <?=$auctionPeriod['kind']==='quarterly'?'selected':''?>>Quarterly</option></select><label for="auctionPeriodValue">Select period</label><select id="auctionPeriodValue" name="auction_period_value" onchange="this.form.submit()" aria-label="Select auction reporting period"><?php foreach($auctionPeriod['periods'] as $key=>$p):?><option value="<?=htmlspecialchars($key,ENT_QUOTES)?>" <?=$auctionPeriod['selected']===$key?'selected':''?>><?=htmlspecialchars($p['label'])?></option><?php endforeach;?></select></form></div></div>
+ </div>
+ <div class="kpis auction-summary-kpis">
  <div class="kpi"><span class="label">Auctions</span><strong><?=nf($auctions)?></strong><div class="sub">Held</div></div>
  <?php if($display==='clean'): ?>
  <div class="metric-group dry"><div class="metric"><span class="m-label coffee-name">Clean Coffee · Offered</span><strong><?=nf($offered)?> kg</strong><small>All lots</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($grandSold)?> kg</strong><small><?=nf($soldPct,2)?> of offered</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($avgPrice,2)?></strong><small><?=$priceUnit?></small></div></div>
