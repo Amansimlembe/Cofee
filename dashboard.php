@@ -70,6 +70,28 @@ function pct($a,$b){return $b>0?($a/$b*100):0;}
 /* Keep meaningful decimal digits, never display trailing fractional zeros. */
 function nf_clean($v,$dec=2){if($dec<=0)return number_format((float)$v,0,'.',',');$n=number_format((float)$v,$dec,'.',',');return rtrim(rtrim($n,'0'),'.');}
 
+/* Shared month/quarter selection for the two auction dashboards.
+   Clean Auction starts July; Kagera Auction starts June. */
+function auction_period_filter(string $seasonFrom,string $seasonTo):array {
+  $kind=(string)($_GET['auction_period']??'monthly');
+  if(!in_array($kind,['monthly','quarterly'],true))$kind='monthly';
+  $periods=['all'=>['from'=>$seasonFrom,'to'=>$seasonTo,'label'=>$kind==='monthly'?'All Months':'All Quarters']];
+  $start=new DateTimeImmutable($seasonFrom);
+  for($i=0;$i<($kind==='monthly'?12:4);$i++){
+    $offset=$kind==='monthly'?$i:$i*3;
+    $months=$kind==='monthly'?1:3;
+    $begin=$start->modify('+'.$offset.' months');
+    $end=$begin->modify('+'.$months.' months')->modify('-1 day');
+    $key=($kind==='monthly'?'m':'q').($i+1);
+    $label=$kind==='monthly'?$begin->format('F Y'):'Q'.($i+1).' ('.$begin->format('M Y').' – '.$end->format('M Y').')';
+    $periods[$key]=['from'=>$begin->format('Y-m-d'),'to'=>$end->format('Y-m-d'),'label'=>$label];
+  }
+  $selected=(string)($_GET['auction_period_value']??'all');
+  if(!isset($periods[$selected]))$selected='all';
+  return ['kind'=>$kind,'selected'=>$selected,'periods'=>$periods,'from'=>$periods[$selected]['from'],'to'=>$periods[$selected]['to']];
+}
+
+
 
 
 if($display==='preauction'){
@@ -413,6 +435,9 @@ if($display==='clean'){
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM auction_date)::int y,EXTRACT(MONTH FROM auction_date)::int m FROM public.clean_auction_results WHERE auction_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as $r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+  $auctionSeasonFrom=$from;$auctionSeasonTo=$to;
+  $auctionPeriod=auction_period_filter($auctionSeasonFrom,$auctionSeasonTo);
+  $from=$auctionPeriod['from'];$to=$auctionPeriod['to'];
  $sold="UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
  $valid="($sold AND price_per_50kg IS NOT NULL AND price_per_50kg>0)";
  $q=$db->prepare("SELECT COUNT(DISTINCT NULLIF(BTRIM(auction_no),'')) FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t");$q->execute(['f'=>$from,'t'=>$to]);$auctions=(int)$q->fetchColumn();
@@ -441,6 +466,9 @@ if($display==='clean'){
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM auction_date)::int y,EXTRACT(MONTH FROM auction_date)::int m FROM(SELECT auction_date FROM public.kagera_auction_results UNION ALL SELECT auction_date FROM public.kagera_auction_catalogue)d WHERE auction_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=6)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+  $auctionSeasonFrom=$from;$auctionSeasonTo=$to;
+  $auctionPeriod=auction_period_filter($auctionSeasonFrom,$auctionSeasonTo);
+  $from=$auctionPeriod['from'];$to=$auctionPeriod['to'];
  $summary=['Dry Cherry Coffee'=>['offered'=>0,'sold'=>0,'value'=>0,'avg'=>0,'pct'=>0],'Clean Coffee'=>['offered'=>0,'sold'=>0,'value'=>0,'avg'=>0,'pct'=>0]];$case=coffee_case_sql();
  $q=$db->prepare("SELECT $case type,SUM(COALESCE(kgs,0)) offered FROM public.kagera_auction_catalogue WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['f'=>$from,'t'=>$to]);foreach($q as$r)if(isset($summary[$r['type']]))$summary[$r['type']]['offered']=(float)$r['offered'];
  $q=$db->prepare("SELECT $case type,SUM(COALESCE(kgs,0)) sold,SUM(COALESCE(kgs,0)*COALESCE(price,0)) val FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['f'=>$from,'t'=>$to]);
@@ -1269,6 +1297,14 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 <style id="tc-period-responsive-style">
 .tc-season-kpi{min-width:0;grid-column:span 2}.tc-season-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.tc-period-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}.tc-period-controls label{font-size:12px;font-weight:650;white-space:nowrap}.tc-period-controls select{min-width:105px;max-width:220px;border:1px solid #c9d5c9;border-radius:8px;background:#fff;color:#24352b;padding:8px 9px;font:inherit;font-size:12px}.tc-selected-period{margin-top:8px;font-size:12px;opacity:.78}@media(max-width:650px){.tc-season-kpi{grid-column:1/-1}.tc-season-row{align-items:stretch}.tc-period-controls{justify-content:flex-start}.tc-period-controls select{max-width:100%}}
 </style>
+<style id="auction-period-responsive-style">
+.auction-season-kpi{min-width:0;grid-column:span 2}
+.auction-season-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.auction-period-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.auction-period-controls label{font-size:12px;font-weight:700;white-space:nowrap}
+.auction-period-controls select{max-width:210px;min-width:105px;padding:8px 10px;border:1px solid #d4c5b6;border-radius:8px;background:#fff;color:#35281e;font:inherit;font-size:12px}
+@media(max-width:650px){.auction-season-kpi{grid-column:1/-1}.auction-period-controls{justify-content:flex-start;width:100%}.auction-period-controls select{flex:1 1 125px;min-width:0}}
+</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1294,6 +1330,10 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
               <?php foreach(array_reverse($salesFridayDates) as $friday): ?><option value="<?=htmlspecialchars($friday)?>" <?=$friday===$salesReportDate?'selected':''?>><?=date('D, d M Y',strtotime($friday))?></option><?php endforeach; ?>
               <?php if(!$salesFridayDates): ?><option value="<?=htmlspecialchars($salesReportDate)?>">No Friday yet this season</option><?php endif; ?>
             </select>
+            <?php endif; ?>
+            <?php if(in_array($display,['clean','kagera'],true)): ?>
+            <input type="hidden" name="auction_period" value="<?=htmlspecialchars($auctionPeriod['kind'],ENT_QUOTES)?>">
+            <input type="hidden" name="auction_period_value" value="<?=htmlspecialchars($auctionPeriod['selected'],ENT_QUOTES)?>">
             <?php endif; ?>
             <?php if($display==='totalclean'): ?>
             <label>View</label>
@@ -1477,7 +1517,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 </tbody><tfoot><tr><td colspan="2">Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php elseif(in_array($display,['clean','kagera'],true)): ?>
     <div class="kpis">
- <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
+ <div class="kpi auction-season-kpi"><div class="auction-season-row"><div><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($auctionSeasonFrom))?> — <?=date('d M Y',strtotime($auctionSeasonTo))?></div></div><form class="auction-period-controls" method="get"><input type="hidden" name="display" value="<?=htmlspecialchars($display,ENT_QUOTES)?>"><input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>"><label for="auctionPeriodType">Period</label><select id="auctionPeriodType" name="auction_period" onchange="this.form.elements['auction_period_value'].value='all';this.form.submit()"><option value="monthly" <?=$auctionPeriod['kind']==='monthly'?'selected':''?>>Monthly</option><option value="quarterly" <?=$auctionPeriod['kind']==='quarterly'?'selected':''?>>Quarterly</option></select><label for="auctionPeriodValue">Select period</label><select id="auctionPeriodValue" name="auction_period_value" onchange="this.form.submit()" aria-label="Select auction reporting period"><?php foreach($auctionPeriod['periods'] as $key=>$p):?><option value="<?=htmlspecialchars($key,ENT_QUOTES)?>" <?=$auctionPeriod['selected']===$key?'selected':''?>><?=htmlspecialchars($p['label'])?></option><?php endforeach;?></select></form></div></div>
  <div class="kpi"><span class="label">Auctions</span><strong><?=nf($auctions)?></strong><div class="sub">Held</div></div>
  <?php if($display==='clean'): ?>
  <div class="metric-group dry"><div class="metric"><span class="m-label coffee-name">Clean Coffee · Offered</span><strong><?=nf($offered)?> kg</strong><small>All lots</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($grandSold)?> kg</strong><small><?=nf($soldPct,2)?> of offered</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($avgPrice,2)?></strong><small><?=$priceUnit?></small></div></div>
