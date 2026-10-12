@@ -72,23 +72,6 @@ function nf_clean($v,$dec=2){if($dec<=0)return number_format((float)$v,0,'.',','
 
 
 
-
-/* Shared season-relative filters for the three sales summary dashboards. */
-function dashboard_summary_period(string $from,string $to,string $type,string $value):array{
- $type=in_array($type,['monthly','quarterly'],true)?$type:'monthly';
- $periods=['all'=>['from'=>$from,'to'=>$to,'label'=>$type==='monthly'?'All Months':'All Quarters']];
- $start=new DateTimeImmutable($from);
- for($i=0;$i<($type==='monthly'?12:4);$i++){
-  $months=$type==='monthly'?1:3;
-  $begin=$start->modify('+'.($i*$months).' months');
-  $end=$begin->modify('+'.$months.' months')->modify('-1 day');
-  $key=($type==='monthly'?'m':'q').($i+1);
-  $label=$type==='monthly'?$begin->format('F Y'):'Q'.($i+1).' ('.$begin->format('M Y').' – '.$end->format('M Y').')';
-  $periods[$key]=['from'=>$begin->format('Y-m-d'),'to'=>$end->format('Y-m-d'),'label'=>$label];
- }
- if(!isset($periods[$value]))$value='all';
- return ['type'=>$type,'value'=>$value,'periods'=>$periods,'from'=>$periods[$value]['from'],'to'=>$periods[$value]['to']];
-}
 if($display==='preauction'){
  require_once __DIR__.'/kagera_database.php';
  require_once __DIR__.'/clean_database.php';
@@ -396,9 +379,6 @@ if($display==='direct'){
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM invoice_date)::int y,EXTRACT(MONTH FROM invoice_date)::int m FROM public.direct_sales WHERE invoice_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
- $summarySeasonFrom=$from;$summarySeasonTo=$to;
- $summaryPeriod=dashboard_summary_period($from,$to,(string)($_GET['summary_period']??'monthly'),(string)($_GET['summary_period_value']??'all'));
- $from=$summaryPeriod['from'];$to=$summaryPeriod['to'];
  $channelCase="CASE WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('DE','DIRECT EXPORT') THEN 'Direct Export' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LS','LOCAL SALE') THEN 'Local Sale' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LR','LOCAL ROAST','LOCAL ROAST SALE','SLS') THEN 'Local Roast' ELSE NULL END";
  /* Local Sale dashboard quantity is ALWAYS Local Sale Balance. */
  $lsBalanceExpr="GREATEST(
@@ -433,9 +413,6 @@ if($display==='clean'){
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM auction_date)::int y,EXTRACT(MONTH FROM auction_date)::int m FROM public.clean_auction_results WHERE auction_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as $r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
- $summarySeasonFrom=$from;$summarySeasonTo=$to;
- $summaryPeriod=dashboard_summary_period($from,$to,(string)($_GET['summary_period']??'monthly'),(string)($_GET['summary_period_value']??'all'));
- $from=$summaryPeriod['from'];$to=$summaryPeriod['to'];
  $sold="UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
  $valid="($sold AND price_per_50kg IS NOT NULL AND price_per_50kg>0)";
  $q=$db->prepare("SELECT COUNT(DISTINCT NULLIF(BTRIM(auction_no),'')) FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t");$q->execute(['f'=>$from,'t'=>$to]);$auctions=(int)$q->fetchColumn();
@@ -464,9 +441,6 @@ if($display==='clean'){
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM auction_date)::int y,EXTRACT(MONTH FROM auction_date)::int m FROM(SELECT auction_date FROM public.kagera_auction_results UNION ALL SELECT auction_date FROM public.kagera_auction_catalogue)d WHERE auction_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=6)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
- $summarySeasonFrom=$from;$summarySeasonTo=$to;
- $summaryPeriod=dashboard_summary_period($from,$to,(string)($_GET['summary_period']??'monthly'),(string)($_GET['summary_period_value']??'all'));
- $from=$summaryPeriod['from'];$to=$summaryPeriod['to'];
  $summary=['Dry Cherry Coffee'=>['offered'=>0,'sold'=>0,'value'=>0,'avg'=>0,'pct'=>0],'Clean Coffee'=>['offered'=>0,'sold'=>0,'value'=>0,'avg'=>0,'pct'=>0]];$case=coffee_case_sql();
  $q=$db->prepare("SELECT $case type,SUM(COALESCE(kgs,0)) offered FROM public.kagera_auction_catalogue WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['f'=>$from,'t'=>$to]);foreach($q as$r)if(isset($summary[$r['type']]))$summary[$r['type']]['offered']=(float)$r['offered'];
  $q=$db->prepare("SELECT $case type,SUM(COALESCE(kgs,0)) sold,SUM(COALESCE(kgs,0)*COALESCE(price,0)) val FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['f'=>$from,'t'=>$to]);
@@ -1295,62 +1269,6 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 <style id="tc-period-responsive-style">
 .tc-season-kpi{min-width:0;grid-column:span 2}.tc-season-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.tc-period-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}.tc-period-controls label{font-size:12px;font-weight:650;white-space:nowrap}.tc-period-controls select{min-width:105px;max-width:220px;border:1px solid #c9d5c9;border-radius:8px;background:#fff;color:#24352b;padding:8px 9px;font:inherit;font-size:12px}.tc-selected-period{margin-top:8px;font-size:12px;opacity:.78}@media(max-width:650px){.tc-season-kpi{grid-column:1/-1}.tc-season-row{align-items:stretch}.tc-period-controls{justify-content:flex-start}.tc-period-controls select{max-width:100%}}
 </style>
-<style>
-
-/* Responsive summary controls and KPI cards — Clean, Kagera, Direct, Total Clean. */
-@media (min-width: 901px) {
-  .kpis:has(> .tc-season-kpi) { grid-template-columns: repeat(12,minmax(0,1fr)); align-items:stretch; }
-  .kpis:has(> .tc-season-kpi) > .tc-season-kpi { grid-column:span 10; }
-  .kpis:has(> .tc-season-kpi) > .kpi:not(.tc-season-kpi) { grid-column:span 2; }
-  .kpis:has(> .tc-season-kpi) > .metric-group { grid-column:span 6; }
-  .direct-kpis:has(> .tc-season-kpi) > .metric-group { grid-column:span 4; }
-}
-.kpis:has(> .tc-season-kpi) {min-width:0;align-items:stretch;}
-.kpis:has(> .tc-season-kpi) > * {min-width:0;}
-.kpis:has(> .tc-season-kpi) .tc-season-kpi {min-width:0;padding:12px 14px;}
-.kpis:has(> .tc-season-kpi) .tc-season-row {display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,auto);gap:12px 20px;align-items:center;}
-.kpis:has(> .tc-season-kpi) .tc-season-row > div {min-width:0;}
-.kpis:has(> .tc-season-kpi) .tc-season-kpi .label {font-size:11px;overflow:visible;white-space:normal;}
-.kpis:has(> .tc-season-kpi) .tc-season-kpi strong {font-size:clamp(16px,1.8vw,22px);overflow:visible;white-space:normal;}
-.kpis:has(> .tc-season-kpi) .tc-season-kpi .sub {font-size:11px;line-height:1.5;white-space:normal;overflow:visible;}
-.kpis:has(> .tc-season-kpi) .tc-period-controls {display:grid;grid-template-columns:auto minmax(110px,140px) auto minmax(170px,260px);align-items:center;gap:8px;min-width:0;max-width:100%;}
-.kpis:has(> .tc-season-kpi) .tc-period-controls label {font-size:11px;white-space:normal;}
-.kpis:has(> .tc-season-kpi) .tc-period-controls select {width:100%;min-width:0;max-width:none;height:36px;padding:7px 9px;font-size:12px;}
-.kpis:has(> .tc-season-kpi) .tc-selected-period {font-size:11px;line-height:1.5;overflow-wrap:anywhere;margin-top:9px;}
-.kpis:has(> .tc-season-kpi) .kpi:not(.tc-season-kpi) {padding:12px;display:flex;flex-direction:column;justify-content:center;}
-.kpis:has(> .tc-season-kpi) .kpi:not(.tc-season-kpi) .label {font-size:10px;white-space:normal;overflow:visible;}
-.kpis:has(> .tc-season-kpi) .kpi:not(.tc-season-kpi) strong {font-size:clamp(16px,2vw,24px);overflow:visible;white-space:normal;overflow-wrap:anywhere;}
-.kpis:has(> .tc-season-kpi) .kpi:not(.tc-season-kpi) .sub {font-size:10px;white-space:normal;overflow:visible;}
-.kpis:has(> .tc-season-kpi) .metric-group {min-width:0;grid-template-columns:repeat(3,minmax(0,1fr));}
-.kpis:has(> .tc-season-kpi) .metric {padding:12px 10px;min-width:0;}
-.kpis:has(> .tc-season-kpi) .metric .m-label {font-size:10px;white-space:normal;line-height:1.4;overflow-wrap:anywhere;}
-.kpis:has(> .tc-season-kpi) .metric strong {font-size:clamp(13px,1.6vw,19px);line-height:1.3;white-space:normal;overflow:visible;overflow-wrap:anywhere;}
-.kpis:has(> .tc-season-kpi) .metric small {font-size:10px;white-space:normal;line-height:1.4;}
-@media (max-width:1200px) {
- .kpis:has(> .tc-season-kpi) .tc-season-row {grid-template-columns:1fr;}
- .kpis:has(> .tc-season-kpi) .tc-period-controls {justify-content:start;}
-}
-@media (max-width:900px) {
- .kpis:has(> .tc-season-kpi) {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
- .kpis:has(> .tc-season-kpi) > .tc-season-kpi {grid-column:1/-1;}
- .kpis:has(> .tc-season-kpi) > .metric-group {grid-column:1/-1;}
-}
-@media (max-width:600px) {
- .kpis:has(> .tc-season-kpi) .tc-period-controls {width:100%;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 10px;}
- .kpis:has(> .tc-season-kpi) .tc-period-controls label {grid-row:1;}
- .kpis:has(> .tc-season-kpi) .tc-period-controls select {grid-row:2;}
- .kpis:has(> .tc-season-kpi) .tc-season-kpi {padding:12px;}
- .kpis:has(> .tc-season-kpi) .metric-group {grid-template-columns:1fr;}
- .kpis:has(> .tc-season-kpi) .metric {border-right:0;border-bottom:1px solid #eee7e2;padding:10px 12px;}
- .kpis:has(> .tc-season-kpi) .metric:last-child {border-bottom:0;}
-}
-@media (max-width:360px) {
- .kpis:has(> .tc-season-kpi) {grid-template-columns:1fr;}
- .kpis:has(> .tc-season-kpi) .tc-period-controls {grid-template-columns:1fr;}
- .kpis:has(> .tc-season-kpi) .tc-period-controls label,.kpis:has(> .tc-season-kpi) .tc-period-controls select {grid-row:auto;}
-}
-
-</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1364,10 +1282,6 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
             <select name="season" onchange="this.form.submit()"><?php foreach($seasons ?: [$season] as $s): ?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach ?></select>
             <label>Display</label>
             <select name="display" onchange="this.form.submit()"><option value="sales" <?=$display==='sales'?'selected':''?>>Sales Dashboard</option><option value="preauction" <?=$display==='preauction'?'selected':''?>>Pre Auction Report</option><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option><option value="direct" <?=$display==='direct'?'selected':''?>>Direct Sales Summary</option><option value="totalclean" <?=$display==='totalclean'?'selected':''?>>Total Clean Coffee Summary</option></select>
-            <?php if(in_array($display,['clean','kagera','direct'],true)): ?>
-            <input type="hidden" name="summary_period" value="<?=htmlspecialchars($summaryPeriod['type'],ENT_QUOTES)?>">
-            <input type="hidden" name="summary_period_value" value="<?=htmlspecialchars($summaryPeriod['value'],ENT_QUOTES)?>">
-            <?php endif; ?>
             <?php if($display==='preauction'): ?>
             <label>Report Date</label>
             <select name="report_date" onchange="this.form.submit()" title="Wednesday cut-off for the Pre Auction Report used at Thursday's 10:30 AM auction">
@@ -1542,7 +1456,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 <?php endif; ?>
 <?php elseif($display==='direct'): ?>
 <div class="kpis direct-kpis">
- <div class="kpi tc-season-kpi"><div class="tc-season-row"><div><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></div></div><form class="tc-period-controls" method="get"><input type="hidden" name="display" value="<?=htmlspecialchars($display,ENT_QUOTES)?>"><input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>"><label for="summaryPeriodType">Period</label><select id="summaryPeriodType" name="summary_period" onchange="this.form.elements.summary_period_value.value='all';this.form.submit()"><option value="monthly" <?=$summaryPeriod['type']==='monthly'?'selected':''?>>Monthly</option><option value="quarterly" <?=$summaryPeriod['type']==='quarterly'?'selected':''?>>Quarterly</option></select><label for="summaryPeriodValue">Select period</label><select id="summaryPeriodValue" name="summary_period_value" onchange="this.form.submit()"><?php foreach($summaryPeriod['periods'] as $periodKey=>$period):?><option value="<?=htmlspecialchars($periodKey,ENT_QUOTES)?>" <?=$periodKey===$summaryPeriod['value']?'selected':''?>><?=htmlspecialchars($period['label'])?></option><?php endforeach;?></select></form></div><div class="tc-selected-period">Showing <?=htmlspecialchars($summaryPeriod['periods'][$summaryPeriod['value']]['label'])?> · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
+ <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
  <?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?>
  <div class="metric-group <?=$ch==='Direct Export'?'dry':'clean'?>"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small>Net weight</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Qty Share</span><strong><?=nf(pct($x['kgs'],$grandSold),2)?></strong><small>of total</small></div></div>
  <?php endforeach;?>
@@ -1563,7 +1477,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 </tbody><tfoot><tr><td colspan="2">Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php elseif(in_array($display,['clean','kagera'],true)): ?>
     <div class="kpis">
- <div class="kpi tc-season-kpi"><div class="tc-season-row"><div><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></div></div><form class="tc-period-controls" method="get"><input type="hidden" name="display" value="<?=htmlspecialchars($display,ENT_QUOTES)?>"><input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>"><label for="summaryPeriodType">Period</label><select id="summaryPeriodType" name="summary_period" onchange="this.form.elements.summary_period_value.value='all';this.form.submit()"><option value="monthly" <?=$summaryPeriod['type']==='monthly'?'selected':''?>>Monthly</option><option value="quarterly" <?=$summaryPeriod['type']==='quarterly'?'selected':''?>>Quarterly</option></select><label for="summaryPeriodValue">Select period</label><select id="summaryPeriodValue" name="summary_period_value" onchange="this.form.submit()"><?php foreach($summaryPeriod['periods'] as $periodKey=>$period):?><option value="<?=htmlspecialchars($periodKey,ENT_QUOTES)?>" <?=$periodKey===$summaryPeriod['value']?'selected':''?>><?=htmlspecialchars($period['label'])?></option><?php endforeach;?></select></form></div><div class="tc-selected-period">Showing <?=htmlspecialchars($summaryPeriod['periods'][$summaryPeriod['value']]['label'])?> · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
+ <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
  <div class="kpi"><span class="label">Auctions</span><strong><?=nf($auctions)?></strong><div class="sub">Held</div></div>
  <?php if($display==='clean'): ?>
  <div class="metric-group dry"><div class="metric"><span class="m-label coffee-name">Clean Coffee · Offered</span><strong><?=nf($offered)?> kg</strong><small>All lots</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($grandSold)?> kg</strong><small><?=nf($soldPct,2)?> of offered</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($avgPrice,2)?></strong><small><?=$priceUnit?></small></div></div>
