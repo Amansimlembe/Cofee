@@ -87,7 +87,7 @@ function report_period_setup(string $from,string $to):array{
 }
 function report_period_kpi(string $display,string $season,string $seasonFrom,string $seasonTo,string $from,string $to,string $type,array $periods,string $selected):void{
  ?>
- <div class="kpi tc-season-kpi"><div class="tc-season-row"><div><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($seasonFrom))?> — <?=date('d M Y',strtotime($seasonTo))?></div></div>
+ <div class="kpi tc-season-kpi report-period-section"><div class="tc-season-row"><div><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($seasonFrom))?> — <?=date('d M Y',strtotime($seasonTo))?></div></div>
  <form class="tc-period-controls" method="get"><input type="hidden" name="display" value="<?=htmlspecialchars($display,ENT_QUOTES)?>"><input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>">
  <label for="reportPeriodType">Period</label><select id="reportPeriodType" name="period_type" onchange="this.form.elements.period_value.value='all';this.form.submit()"><option value="monthly" <?=$type==='monthly'?'selected':''?>>Monthly</option><option value="quarterly" <?=$type==='quarterly'?'selected':''?>>Quarterly</option></select>
  <label for="reportPeriodValue">Select period</label><select id="reportPeriodValue" name="period_value" onchange="this.form.submit()">
@@ -1303,6 +1303,13 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 </style>
 <style id="tc-period-responsive-style">
 .tc-season-kpi{min-width:0;grid-column:span 2}.tc-season-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.tc-period-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}.tc-period-controls label{font-size:12px;font-weight:650;white-space:nowrap}.tc-period-controls select{min-width:105px;max-width:220px;border:1px solid #c9d5c9;border-radius:8px;background:#fff;color:#24352b;padding:8px 9px;font:inherit;font-size:12px}.tc-selected-period{margin-top:8px;font-size:12px;opacity:.78}@media(max-width:650px){.tc-season-kpi{grid-column:1/-1}.tc-season-row{align-items:stretch}.tc-period-controls{justify-content:flex-start}.tc-period-controls select{max-width:100%}}
+
+/* Dedicated full-width season/period panel above the sales KPI grid. */
+.report-period-section{display:block;width:100%;box-sizing:border-box;margin:0 0 16px;padding:18px 22px;grid-column:auto}
+.report-period-section .tc-season-row{width:100%}
+.report-period-section .tc-period-controls{margin-left:auto}
+.report-period-section .tc-selected-period{margin-top:12px}
+@media(max-width:650px){.report-period-section{padding:15px;margin-bottom:12px}.report-period-section .tc-period-controls{margin-left:0}}
 </style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
@@ -1493,8 +1500,8 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 </section>
 <?php endif; ?>
 <?php elseif($display==='direct'): ?>
+<?php report_period_kpi($display,$season,$reportSeasonFrom,$reportSeasonTo,$from,$to,$reportPeriodType,$reportPeriods,$reportPeriodValue); ?>
 <div class="kpis direct-kpis">
- <?php report_period_kpi($display,$season,$reportSeasonFrom,$reportSeasonTo,$from,$to,$reportPeriodType,$reportPeriods,$reportPeriodValue); ?>
  <?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?>
  <div class="metric-group <?=$ch==='Direct Export'?'dry':'clean'?>"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small>Net weight</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Qty Share</span><strong><?=nf(pct($x['kgs'],$grandSold),2)?></strong><small>of total</small></div></div>
  <?php endforeach;?>
@@ -1514,8 +1521,8 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 <?php foreach($directRows as$r):?><tr><td><?=htmlspecialchars($r['channel'])?></td><td><?=htmlspecialchars($r['coffee_type'])?></td><td><?=nf($r['kgs'],2)?></td><td><?=nf($r['value_usd'],2)?></td><td><?=nf(pct((float)$r['kgs'],$grandSold),2)?></td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td colspan="2">Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php elseif(in_array($display,['clean','kagera'],true)): ?>
+    <?php report_period_kpi($display,$season,$reportSeasonFrom,$reportSeasonTo,$from,$to,$reportPeriodType,$reportPeriods,$reportPeriodValue); ?>
     <div class="kpis">
- <?php report_period_kpi($display,$season,$reportSeasonFrom,$reportSeasonTo,$from,$to,$reportPeriodType,$reportPeriods,$reportPeriodValue); ?>
  <div class="kpi"><span class="label">Auctions</span><strong><?=nf($auctions)?></strong><div class="sub">Held</div></div>
  <?php if($display==='clean'): ?>
  <div class="metric-group dry"><div class="metric"><span class="m-label coffee-name">Clean Coffee · Offered</span><strong><?=nf($offered)?> kg</strong><small>All lots</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($grandSold)?> kg</strong><small><?=nf($soldPct,2)?> of offered</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($avgPrice,2)?></strong><small><?=$priceUnit?></small></div></div>
