@@ -319,6 +319,27 @@ if($display==='totalclean'){
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM d)::int y,EXTRACT(MONTH FROM d)::int m FROM (SELECT auction_date d FROM public.clean_auction_results WHERE auction_date IS NOT NULL UNION SELECT invoice_date d FROM public.direct_sales WHERE invoice_date IS NOT NULL)x ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+  /* Total Clean Coffee period controls: season starts in July (Q1 Jul-Sep). */
+  $tcSeasonFrom=$from;$tcSeasonTo=$to;
+  $tcPeriodType=(string)($_GET['tc_period']??'monthly');
+  if(!in_array($tcPeriodType,['monthly','quarterly'],true))$tcPeriodType='monthly';
+  $tcPeriods=[];$tcStart=new DateTimeImmutable($tcSeasonFrom);
+  for($i=0;$i<($tcPeriodType==='monthly'?12:4);$i++){
+    $offset=$tcPeriodType==='monthly'?$i:$i*3;
+    $months=$tcPeriodType==='monthly'?1:3;
+    $begin=$tcStart->modify('+'.$offset.' months');
+    $end=$begin->modify('+'.$months.' months')->modify('-1 day');
+    $key=($tcPeriodType==='monthly'?'m':'q').($i+1);
+    $label=$tcPeriodType==='monthly'?$begin->format('F Y'):'Q'.($i+1).' ('.$begin->format('M Y').' – '.$end->format('M Y').')';
+    $tcPeriods[$key]=['from'=>$begin->format('Y-m-d'),'to'=>$end->format('Y-m-d'),'label'=>$label];
+  }
+  $tcPeriodValue=(string)($_GET['tc_period_value']??'');
+  if(!isset($tcPeriods[$tcPeriodValue])){
+    $todayTc=new DateTimeImmutable('today',new DateTimeZone('Africa/Dar_es_Salaam'));
+    $tcPeriodValue=array_key_first($tcPeriods);
+    foreach($tcPeriods as $key=>$period){if($period['from']<=$todayTc->format('Y-m-d'))$tcPeriodValue=$key;}
+  }
+  $from=$tcPeriods[$tcPeriodValue]['from'];$to=$tcPeriods[$tcPeriodValue]['to'];
  $types=['M-Arabica','H-Arabica','Robusta']; $channels=['Auction Sale','Local Sale','Direct Export','Local Roast'];
  $totalClean=[];foreach($types as$ct)foreach($channels as$ch)$totalClean[$ct][$ch]=['kgs'=>0,'value'=>0,'avg'=>0];
  /* Clean auction: only SOLD lots. Classify Robusta explicitly; H grades as H-Arabica; remaining Arabica as M-Arabica. */
@@ -1248,6 +1269,9 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
  body.report-sticky-mode .dashboard>.pre-export-bar{position:static!important;box-shadow:none!important;}
 }
 </style>
+<style id="tc-period-responsive-style">
+.tc-season-kpi{min-width:0;grid-column:span 2}.tc-season-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.tc-period-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}.tc-period-controls label{font-size:12px;font-weight:650;white-space:nowrap}.tc-period-controls select{min-width:105px;max-width:220px;border:1px solid #c9d5c9;border-radius:8px;background:#fff;color:#24352b;padding:8px 9px;font:inherit;font-size:12px}.tc-selected-period{margin-top:8px;font-size:12px;opacity:.78}@media(max-width:650px){.tc-season-kpi{grid-column:1/-1}.tc-season-row{align-items:stretch}.tc-period-controls{justify-content:flex-start}.tc-period-controls select{max-width:100%}}
+</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1276,7 +1300,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
             <?php endif; ?>
             <?php if($display==='totalclean'): ?>
             <label>View</label>
-            <select name="totalclean_view" class="totalclean-view-select" onchange="this.form.submit()">
+            <input type="hidden" name="tc_period" value="<?=htmlspecialchars($tcPeriodType,ENT_QUOTES)?>"><input type="hidden" name="tc_period_value" value="<?=htmlspecialchars($tcPeriodValue,ENT_QUOTES)?>"><select name="totalclean_view" class="totalclean-view-select" onchange="this.form.submit()">
               <option value="summary" <?=$totalCleanView==='summary'?'selected':''?>>Coffee Sales Summary</option>
               <option value="analysis" <?=$totalCleanView==='analysis'?'selected':''?>>Buyer / Supplier-Seller Analysis</option>
             </select>
@@ -1403,7 +1427,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 
 <?php if($display==='totalclean'): ?>
 <div class="kpis totalclean-kpis">
- <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
+ <div class="kpi tc-season-kpi"><div class="tc-season-row"><div><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($tcSeasonFrom))?> — <?=date('d M Y',strtotime($tcSeasonTo))?></div></div><form class="tc-period-controls" method="get"><input type="hidden" name="display" value="totalclean"><input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>"><input type="hidden" name="totalclean_view" value="<?=htmlspecialchars($totalCleanView,ENT_QUOTES)?>"><label for="tcPeriodType">Period</label><select id="tcPeriodType" name="tc_period" onchange="this.form.elements.tc_period_value.value='';this.form.submit()"><option value="monthly" <?=$tcPeriodType==='monthly'?'selected':''?>>Monthly</option><option value="quarterly" <?=$tcPeriodType==='quarterly'?'selected':''?>>Quarterly</option></select><label for="tcPeriodValue">Select period</label><select id="tcPeriodValue" name="tc_period_value" onchange="this.form.submit()"><option value="" hidden></option><?php foreach($tcPeriods as $periodKey=>$period):?><option value="<?=htmlspecialchars($periodKey,ENT_QUOTES)?>" <?=$periodKey===$tcPeriodValue?'selected':''?>><?=htmlspecialchars($period['label'])?></option><?php endforeach;?></select></form></div><div class="tc-selected-period">Showing <?=htmlspecialchars($tcPeriods[$tcPeriodValue]['label'])?> · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
  <?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><div class="metric-group"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small><?=nf(pct($x['kgs'],$tcGrandKg),2)?> of total</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small>USD/50kg</small></div></div><?php endforeach;?>
 </div>
 <?php if($totalCleanView==='summary'): ?>
