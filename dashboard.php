@@ -1301,6 +1301,36 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 </style>
 <style id="tc-period-responsive-style">
 .tc-season-kpi{min-width:0;grid-column:span 2}.tc-season-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.tc-period-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}.tc-period-controls label{font-size:12px;font-weight:650;white-space:nowrap}.tc-period-controls select{min-width:105px;max-width:220px;border:1px solid #c9d5c9;border-radius:8px;background:#fff;color:#24352b;padding:8px 9px;font:inherit;font-size:12px}.tc-selected-period{margin-top:8px;font-size:12px;opacity:.78}@media(max-width:650px){.tc-season-kpi{grid-column:1/-1}.tc-season-row{align-items:stretch}.tc-period-controls{justify-content:flex-start}.tc-period-controls select{max-width:100%}}
+
+/* Auction summary: harmonized with the Total Clean Coffee season/filter card. */
+.auction-summary-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch;margin-bottom:16px}
+.auction-summary-kpis>.tc-season-kpi{grid-column:1/-1;padding:18px 20px;border:1px solid #e6e3dc;border-radius:13px;background:linear-gradient(120deg,#fff 0%,#f8faf6 100%);box-shadow:0 3px 14px rgba(38,49,35,.045)}
+.auction-summary-kpis .tc-season-row{display:grid;grid-template-columns:minmax(190px,1fr) minmax(0,auto);gap:16px 24px;align-items:center}
+.auction-summary-kpis .tc-season-row>.tc-period-controls{display:grid;grid-template-columns:minmax(120px,160px) minmax(175px,240px);column-gap:12px;row-gap:6px;align-items:end;justify-content:end}
+.auction-summary-kpis .tc-period-controls label{display:block;font-size:11px;font-weight:700;letter-spacing:.25px;color:#655d50}
+.auction-summary-kpis .tc-period-controls label[for="summaryPeriodMode"]{grid-column:1;grid-row:1}
+.auction-summary-kpis .tc-period-controls #summaryPeriodMode{grid-column:1;grid-row:2}
+.auction-summary-kpis .tc-period-controls label[for="summaryPeriodValue"]{grid-column:2;grid-row:1}
+.auction-summary-kpis .tc-period-controls #summaryPeriodValue{grid-column:2;grid-row:2}
+.auction-summary-kpis .tc-period-controls select{box-sizing:border-box;width:100%;min-width:0;max-width:none;height:39px;padding:8px 32px 8px 11px;border:1px solid #cdd9cd;border-radius:9px;background:#fff;color:#2e4033;font-size:12px;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.025)}
+.auction-summary-kpis .tc-period-controls select:focus-visible{outline:2px solid #497d57;outline-offset:2px}
+.auction-summary-kpis .tc-season-kpi .label{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#7c796d}
+.auction-summary-kpis .tc-season-kpi strong{display:block;font-size:23px;line-height:1.2;margin:4px 0 5px;color:#2b4733}
+.auction-summary-kpis .tc-season-kpi .sub{font-size:12px;color:#746e62}
+.auction-summary-kpis .tc-selected-period{margin-top:14px;padding:9px 12px;border-radius:8px;background:#edf4ed;color:#3a6043;font-size:12px;font-weight:600;opacity:1}
+.auction-summary-kpis>.kpi:not(.tc-season-kpi){grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:12px 18px;border-radius:11px;border:1px solid #e7e5df;background:#fff}
+.auction-summary-kpis>.kpi:not(.tc-season-kpi) .label{font-size:12px;font-weight:700;color:#766b61}
+.auction-summary-kpis>.kpi:not(.tc-season-kpi) strong{font-size:22px;color:#3e342e}
+.auction-summary-kpis>.kpi:not(.tc-season-kpi) .sub{margin-left:auto;font-size:11px;color:#93877b}
+.auction-summary-kpis>.metric-group{min-width:0;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid #e9e3dc;border-top:3px solid #76513f;border-radius:11px;box-shadow:0 3px 12px rgba(47,33,24,.035)}
+.auction-summary-kpis>.metric-group.clean{border-top-color:#9a8068}
+.auction-summary-kpis .metric{padding:16px 14px;min-width:0}
+.auction-summary-kpis .metric .m-label{font-size:10px;font-weight:700;letter-spacing:.35px;white-space:normal;line-height:1.4}
+.auction-summary-kpis .metric strong{font-size:clamp(13px,1.4vw,19px);line-height:1.35;margin-top:7px;white-space:normal;overflow-wrap:anywhere}
+.auction-summary-kpis .metric small{font-size:10px;margin-top:6px;white-space:normal}
+@media(max-width:900px){.auction-summary-kpis .tc-season-row{grid-template-columns:1fr}.auction-summary-kpis .tc-season-row>.tc-period-controls{justify-content:stretch;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+@media(max-width:600px){.auction-summary-kpis{grid-template-columns:1fr;gap:10px}.auction-summary-kpis>.tc-season-kpi{padding:15px}.auction-summary-kpis .tc-season-row>.tc-period-controls{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 8px}.auction-summary-kpis .metric{padding:12px 9px}.auction-summary-kpis .metric strong{font-size:13px}.auction-summary-kpis .metric .m-label{font-size:9px}}
+@media(max-width:390px){.auction-summary-kpis .tc-season-row>.tc-period-controls{grid-template-columns:1fr}.auction-summary-kpis .tc-period-controls label[for="summaryPeriodValue"]{grid-column:1;grid-row:3}.auction-summary-kpis .tc-period-controls #summaryPeriodValue{grid-column:1;grid-row:4}.auction-summary-kpis>.metric-group{grid-template-columns:1fr}.auction-summary-kpis .metric{border-right:0;border-bottom:1px solid #eee7e2}.auction-summary-kpis .metric:last-child{border-bottom:0}}
 </style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
@@ -1512,7 +1542,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 <?php foreach($directRows as$r):?><tr><td><?=htmlspecialchars($r['channel'])?></td><td><?=htmlspecialchars($r['coffee_type'])?></td><td><?=nf($r['kgs'],2)?></td><td><?=nf($r['value_usd'],2)?></td><td><?=nf(pct((float)$r['kgs'],$grandSold),2)?></td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td colspan="2">Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php elseif(in_array($display,['clean','kagera'],true)): ?>
-    <div class="kpis">
+    <div class="kpis auction-summary-kpis">
  <div class="kpi tc-season-kpi"><div class="tc-season-row"><div><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($fullSeasonFrom))?> — <?=date('d M Y',strtotime($fullSeasonTo))?></div></div><?=summary_period_controls($display,$season,$periodMode,$periodValue,$periodOptions)?></div><div class="tc-selected-period"><?=htmlspecialchars($periodOptions[$periodValue]['label'])?> · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
  <div class="kpi"><span class="label">Auctions</span><strong><?=nf($auctions)?></strong><div class="sub">Held</div></div>
  <?php if($display==='clean'): ?>
