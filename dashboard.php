@@ -1295,6 +1295,62 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 <style id="tc-period-responsive-style">
 .tc-season-kpi{min-width:0;grid-column:span 2}.tc-season-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.tc-period-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}.tc-period-controls label{font-size:12px;font-weight:650;white-space:nowrap}.tc-period-controls select{min-width:105px;max-width:220px;border:1px solid #c9d5c9;border-radius:8px;background:#fff;color:#24352b;padding:8px 9px;font:inherit;font-size:12px}.tc-selected-period{margin-top:8px;font-size:12px;opacity:.78}@media(max-width:650px){.tc-season-kpi{grid-column:1/-1}.tc-season-row{align-items:stretch}.tc-period-controls{justify-content:flex-start}.tc-period-controls select{max-width:100%}}
 </style>
+<style>
+
+/* Responsive summary controls and KPI cards — Clean, Kagera, Direct, Total Clean. */
+@media (min-width: 901px) {
+  .kpis:has(> .tc-season-kpi) { grid-template-columns: repeat(12,minmax(0,1fr)); align-items:stretch; }
+  .kpis:has(> .tc-season-kpi) > .tc-season-kpi { grid-column:span 10; }
+  .kpis:has(> .tc-season-kpi) > .kpi:not(.tc-season-kpi) { grid-column:span 2; }
+  .kpis:has(> .tc-season-kpi) > .metric-group { grid-column:span 6; }
+  .direct-kpis:has(> .tc-season-kpi) > .metric-group { grid-column:span 4; }
+}
+.kpis:has(> .tc-season-kpi) {min-width:0;align-items:stretch;}
+.kpis:has(> .tc-season-kpi) > * {min-width:0;}
+.kpis:has(> .tc-season-kpi) .tc-season-kpi {min-width:0;padding:12px 14px;}
+.kpis:has(> .tc-season-kpi) .tc-season-row {display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,auto);gap:12px 20px;align-items:center;}
+.kpis:has(> .tc-season-kpi) .tc-season-row > div {min-width:0;}
+.kpis:has(> .tc-season-kpi) .tc-season-kpi .label {font-size:11px;overflow:visible;white-space:normal;}
+.kpis:has(> .tc-season-kpi) .tc-season-kpi strong {font-size:clamp(16px,1.8vw,22px);overflow:visible;white-space:normal;}
+.kpis:has(> .tc-season-kpi) .tc-season-kpi .sub {font-size:11px;line-height:1.5;white-space:normal;overflow:visible;}
+.kpis:has(> .tc-season-kpi) .tc-period-controls {display:grid;grid-template-columns:auto minmax(110px,140px) auto minmax(170px,260px);align-items:center;gap:8px;min-width:0;max-width:100%;}
+.kpis:has(> .tc-season-kpi) .tc-period-controls label {font-size:11px;white-space:normal;}
+.kpis:has(> .tc-season-kpi) .tc-period-controls select {width:100%;min-width:0;max-width:none;height:36px;padding:7px 9px;font-size:12px;}
+.kpis:has(> .tc-season-kpi) .tc-selected-period {font-size:11px;line-height:1.5;overflow-wrap:anywhere;margin-top:9px;}
+.kpis:has(> .tc-season-kpi) .kpi:not(.tc-season-kpi) {padding:12px;display:flex;flex-direction:column;justify-content:center;}
+.kpis:has(> .tc-season-kpi) .kpi:not(.tc-season-kpi) .label {font-size:10px;white-space:normal;overflow:visible;}
+.kpis:has(> .tc-season-kpi) .kpi:not(.tc-season-kpi) strong {font-size:clamp(16px,2vw,24px);overflow:visible;white-space:normal;overflow-wrap:anywhere;}
+.kpis:has(> .tc-season-kpi) .kpi:not(.tc-season-kpi) .sub {font-size:10px;white-space:normal;overflow:visible;}
+.kpis:has(> .tc-season-kpi) .metric-group {min-width:0;grid-template-columns:repeat(3,minmax(0,1fr));}
+.kpis:has(> .tc-season-kpi) .metric {padding:12px 10px;min-width:0;}
+.kpis:has(> .tc-season-kpi) .metric .m-label {font-size:10px;white-space:normal;line-height:1.4;overflow-wrap:anywhere;}
+.kpis:has(> .tc-season-kpi) .metric strong {font-size:clamp(13px,1.6vw,19px);line-height:1.3;white-space:normal;overflow:visible;overflow-wrap:anywhere;}
+.kpis:has(> .tc-season-kpi) .metric small {font-size:10px;white-space:normal;line-height:1.4;}
+@media (max-width:1200px) {
+ .kpis:has(> .tc-season-kpi) .tc-season-row {grid-template-columns:1fr;}
+ .kpis:has(> .tc-season-kpi) .tc-period-controls {justify-content:start;}
+}
+@media (max-width:900px) {
+ .kpis:has(> .tc-season-kpi) {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+ .kpis:has(> .tc-season-kpi) > .tc-season-kpi {grid-column:1/-1;}
+ .kpis:has(> .tc-season-kpi) > .metric-group {grid-column:1/-1;}
+}
+@media (max-width:600px) {
+ .kpis:has(> .tc-season-kpi) .tc-period-controls {width:100%;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 10px;}
+ .kpis:has(> .tc-season-kpi) .tc-period-controls label {grid-row:1;}
+ .kpis:has(> .tc-season-kpi) .tc-period-controls select {grid-row:2;}
+ .kpis:has(> .tc-season-kpi) .tc-season-kpi {padding:12px;}
+ .kpis:has(> .tc-season-kpi) .metric-group {grid-template-columns:1fr;}
+ .kpis:has(> .tc-season-kpi) .metric {border-right:0;border-bottom:1px solid #eee7e2;padding:10px 12px;}
+ .kpis:has(> .tc-season-kpi) .metric:last-child {border-bottom:0;}
+}
+@media (max-width:360px) {
+ .kpis:has(> .tc-season-kpi) {grid-template-columns:1fr;}
+ .kpis:has(> .tc-season-kpi) .tc-period-controls {grid-template-columns:1fr;}
+ .kpis:has(> .tc-season-kpi) .tc-period-controls label,.kpis:has(> .tc-season-kpi) .tc-period-controls select {grid-row:auto;}
+}
+
+</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
