@@ -1528,10 +1528,10 @@ body:has(#kageraSalesSummaryPanel) #kageraRankingPanels{height:auto!important;mi
 /* Direct sales: single matrix, reliable view visibility, responsive KPI cards */
 #directSummaryPanel[hidden],#directRankingPanels[hidden],#directTrendPanel[hidden]{display:none!important}
 body:has(#directSummaryPanel) .direct-view-tabs{display:block;min-width:0;width:100%}
-body:has(#directSummaryPanel) .direct-channel-cards{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important;width:100%;min-width:0;margin:12px 0 16px!important}
+body:has(#directSummaryPanel) .direct-channel-cards{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px!important;width:100%;min-width:0;margin:10px 0 14px!important}
 body:has(#directSummaryPanel) .direct-channel-cards>.metric-group{grid-column:auto!important;min-width:0;width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))!important;border-radius:10px;box-shadow:0 2px 10px rgba(57,35,20,.05)}
-body:has(#directSummaryPanel) .direct-channel-cards .metric{min-width:0;padding:13px 10px;overflow-wrap:anywhere}
-body:has(#directSummaryPanel) .direct-channel-cards .metric strong{font-size:clamp(13px,1.18vw,20px);font-variant-numeric:tabular-nums;white-space:normal;overflow-wrap:anywhere}
+body:has(#directSummaryPanel) .direct-channel-cards .metric{min-width:0;padding:11px 8px;overflow-wrap:anywhere}
+body:has(#directSummaryPanel) .direct-channel-cards .metric strong{font-size:clamp(12px,1.08vw,18px);font-variant-numeric:tabular-nums;white-space:normal;overflow-wrap:anywhere}
 #directSummaryPanel{width:100%;min-width:0}
 #directSummaryPanel .direct-matrix-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
 #directSummaryTable{border-collapse:separate;border-spacing:0;width:100%;min-width:1260px;font-variant-numeric:tabular-nums}
@@ -1544,7 +1544,8 @@ body:has(#directSummaryPanel) .direct-channel-cards .metric strong{font-size:cla
 #directSummaryTable tbody tr:nth-child(even) td{background:#faf7f4}
 #directSummaryTable .direct-matrix-total{background:#f2e9df;font-weight:700}
 #directSummaryTable tfoot th,#directSummaryTable tfoot td{background:#e9ded2;color:#3e2b20;font-weight:800}
-@media(max-width:1050px){body:has(#directSummaryPanel) .direct-channel-cards{grid-template-columns:1fr!important}body:has(#directSummaryPanel) .direct-channel-cards>.metric-group{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media(min-width:761px) and (max-width:1280px){body:has(#directSummaryPanel) .direct-channel-cards>.metric-group{grid-template-columns:1fr!important}body:has(#directSummaryPanel) .direct-channel-cards .metric{padding:7px 13px!important}body:has(#directSummaryPanel) .direct-channel-cards .metric strong{font-size:16px!important}}
+@media(max-width:760px){body:has(#directSummaryPanel) .direct-channel-cards{grid-template-columns:1fr!important}body:has(#directSummaryPanel) .direct-channel-cards>.metric-group{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @media(max-width:520px){body:has(#directSummaryPanel) .direct-channel-cards>.metric-group{grid-template-columns:1fr!important}body:has(#directSummaryPanel) .direct-channel-cards .metric{padding:12px 16px}#directSummaryPanel .panel-head{flex-wrap:wrap;gap:10px}}
 </style>
 </head>
