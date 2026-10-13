@@ -1524,6 +1524,29 @@ body:has(#kageraSalesSummaryPanel) #kageraRankingPanels{height:auto!important;mi
 #kageraDashboardView{min-width:180px}.summary-period-toolbar:has(#kageraDashboardView) .tc-period-controls{flex-wrap:wrap}
 @media(max-width:720px){.kagera-sales-summary-panel{padding:9px}.kagera-summary-heading{align-items:flex-start}.summary-period-toolbar:has(#kageraDashboardView) .tc-period-controls{display:flex!important;flex-wrap:wrap!important}.summary-period-toolbar:has(#kageraDashboardView) .tc-period-controls select{flex:1 1 145px!important}}
 </style>
+<style id="direct-matrix-responsive-css">
+/* Direct sales: single matrix, reliable view visibility, responsive KPI cards */
+#directSummaryPanel[hidden],#directRankingPanels[hidden],#directTrendPanel[hidden]{display:none!important}
+body:has(#directSummaryPanel) .direct-view-tabs{display:block;min-width:0;width:100%}
+body:has(#directSummaryPanel) .direct-channel-cards{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important;width:100%;min-width:0;margin:12px 0 16px!important}
+body:has(#directSummaryPanel) .direct-channel-cards>.metric-group{grid-column:auto!important;min-width:0;width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))!important;border-radius:10px;box-shadow:0 2px 10px rgba(57,35,20,.05)}
+body:has(#directSummaryPanel) .direct-channel-cards .metric{min-width:0;padding:13px 10px;overflow-wrap:anywhere}
+body:has(#directSummaryPanel) .direct-channel-cards .metric strong{font-size:clamp(13px,1.18vw,20px);font-variant-numeric:tabular-nums;white-space:normal;overflow-wrap:anywhere}
+#directSummaryPanel{width:100%;min-width:0}
+#directSummaryPanel .direct-matrix-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+#directSummaryTable{border-collapse:separate;border-spacing:0;width:100%;min-width:1260px;font-variant-numeric:tabular-nums}
+#directSummaryTable th,#directSummaryTable td{padding:11px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid #e8dfd7}
+#directSummaryTable thead th{text-align:center;background:#634737;color:#fff}
+#directSummaryTable thead tr:nth-child(2) th{background:#80614d;font-size:12px}
+#directSummaryTable th:first-child{text-align:left;position:sticky;left:0;z-index:2;min-width:135px}
+#directSummaryTable tbody th{background:#fff;color:#503a2d;font-weight:700}
+#directSummaryTable tbody tr:nth-child(even) th{background:#faf7f4}
+#directSummaryTable tbody tr:nth-child(even) td{background:#faf7f4}
+#directSummaryTable .direct-matrix-total{background:#f2e9df;font-weight:700}
+#directSummaryTable tfoot th,#directSummaryTable tfoot td{background:#e9ded2;color:#3e2b20;font-weight:800}
+@media(max-width:1050px){body:has(#directSummaryPanel) .direct-channel-cards{grid-template-columns:1fr!important}body:has(#directSummaryPanel) .direct-channel-cards>.metric-group{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media(max-width:520px){body:has(#directSummaryPanel) .direct-channel-cards>.metric-group{grid-template-columns:1fr!important}body:has(#directSummaryPanel) .direct-channel-cards .metric{padding:12px 16px}#directSummaryPanel .panel-head{flex-wrap:wrap;gap:10px}}
+</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1684,7 +1707,7 @@ body:has(#kageraSalesSummaryPanel) #kageraRankingPanels{height:auto!important;mi
 <?php if($display==='totalclean'): ?>
 <div class="kpis totalclean-kpis">
  <div class="kpi tc-season-kpi"><div class="tc-season-row"><div><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($tcSeasonFrom))?> — <?=date('d M Y',strtotime($tcSeasonTo))?></div></div><form class="tc-period-controls" method="get"><input type="hidden" name="display" value="totalclean"><input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>"><input type="hidden" name="totalclean_view" value="<?=htmlspecialchars($totalCleanView,ENT_QUOTES)?>"><label for="tcPeriodType">Period</label><select id="tcPeriodType" name="tc_period" onchange="this.form.elements.tc_period_value.value='';this.form.submit()"><option value="monthly" <?=$tcPeriodType==='monthly'?'selected':''?>>Monthly</option><option value="quarterly" <?=$tcPeriodType==='quarterly'?'selected':''?>>Quarterly</option></select><label for="tcPeriodValue">Select period</label><select id="tcPeriodValue" name="tc_period_value" onchange="this.form.submit()"><?php foreach($tcPeriods as $periodKey=>$period):?><option value="<?=htmlspecialchars($periodKey,ENT_QUOTES)?>" <?=$periodKey===$tcPeriodValue?'selected':''?>><?=htmlspecialchars($period['label'])?></option><?php endforeach;?></select></form></div><div class="tc-selected-period">Showing <?=htmlspecialchars($tcPeriods[$tcPeriodValue]['label'])?> · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
- <?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><div class="metric-group"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small><?=nf(pct($x['kgs'],$tcGrandKg),2)?> of total</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small>USD/50kg</small></div></div><?php endforeach;?>
+ <?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><div class="metric-group"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf_clean($x['kgs']/1000,3)?> MT</strong><small><?=nf(pct($x['kgs'],$tcGrandKg),2)?> of total</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small>USD/50kg</small></div></div><?php endforeach;?>
 </div>
 <?php if($totalCleanView==='summary'): ?>
 <section class="panel totalclean-panel"><div class="panel-head totalclean-head"><div><strong>Coffee Sales Summary</strong><span>Clean coffee · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></span></div><div class="tc-export"><button type="button" id="tcExportBtn" class="tc-export-btn" title="Export Coffee Sales Summary">⇩ Export</button><div id="tcExportMenu" class="tc-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div><div class="table-box"><table id="totalCleanSalesTable" class="totalclean-table">
@@ -1736,18 +1759,22 @@ body:has(#kageraSalesSummaryPanel) #kageraRankingPanels{height:auto!important;mi
   </select>
   <label for="directDashboardView">View</label><select id="directDashboardView" aria-label="Direct sales dashboard view" onchange="window.setDirectDashboardView(this.value)"><option value="summary">Sales Summary</option><option value="rankings">Top 15 Buyers &amp; Sellers</option><option value="trend">Sales Performance Trend</option></select>
  </form></div>
-<div class="kpis direct-kpis">
+<div class="kpis direct-kpis direct-channel-cards">
  <?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?>
  <div class="metric-group <?=$ch==='Direct Export'?'dry':'clean'?>"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small>Net weight</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Qty Share</span><strong><?=nf(pct($x['kgs'],$grandSold),2)?></strong><small>of total</small></div></div>
  <?php endforeach;?>
 </div>
 <div class="direct-view-tabs" style="margin-top:14px">
 <section id="directSummaryPanel" class="panel">
- <div class="panel-head"><strong>Direct Sales Summary</strong><div class="rank-panel-actions"><span>Sales channel × coffee type · quantity in MT</span><button type="button" data-direct-export="xlsx">Excel</button><button type="button" data-direct-export="doc">Word</button><button type="button" data-direct-export="pdf">PDF</button></div></div>
- <div class="table-box"><table id="directSummaryTable"><thead><tr><th>Sales Channel</th><th>Coffee Type</th><th>Net Weight (MT)</th><th>Value (USD)</th><th>Qty Share (%)</th></tr></thead><tbody>
- <?php foreach(['Direct Export','Local Sale','Local Roast'] as $channel):$chKg=0;$chVal=0;foreach($directRows as $r):if($r['channel']!==$channel)continue;$chKg+=(float)$r['kgs'];$chVal+=(float)$r['value_usd'];?><tr><td><?=htmlspecialchars($channel)?></td><td><?=htmlspecialchars($r['coffee_type'])?></td><td><?=nf_clean((float)$r['kgs']/1000,3)?></td><td><?=nf((float)$r['value_usd'],2)?></td><td><?=nf(pct((float)$r['kgs'],$grandSold),2)?></td></tr><?php endforeach;?>
- <tr style="font-weight:700;background:rgba(112,80,48,.07)"><td><?=htmlspecialchars($channel)?> Total</td><td>All coffee types</td><td><?=nf_clean($chKg/1000,3)?></td><td><?=nf($chVal,2)?></td><td><?=nf(pct($chKg,$grandSold),2)?></td></tr><?php endforeach;?>
- </tbody><tfoot><tr><td>Grand Total</td><td>All channels and coffee types</td><td><?=nf_clean($grandSold/1000,3)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div>
+ <div class="panel-head"><strong>Direct Sales Summary</strong><div class="rank-panel-actions"><span>Coffee types by sales channel · quantity in MT</span><button type="button" data-direct-export="xlsx">Excel</button><button type="button" data-direct-export="doc">Word</button><button type="button" data-direct-export="pdf">PDF</button></div></div>
+ <div class="table-box direct-matrix-scroll"><table id="directSummaryTable"><thead><tr><th rowspan="2" scope="col">Coffee Type</th><th colspan="3" scope="colgroup">Direct Export</th><th colspan="3" scope="colgroup">Local Sale</th><th colspan="3" scope="colgroup">Local Roast</th><th colspan="3" scope="colgroup">Grand Total</th></tr><tr><?php foreach(['Direct Export','Local Sale','Local Roast','Grand Total'] as $channel):?><th>Qty (MT)</th><th>Value (USD)</th><th>Share (%)</th><?php endforeach;?></tr></thead><tbody>
+ <?php
+ $directMatrix=[];foreach(['Arabica','H/Arabica','Robusta'] as $ct)$directMatrix[$ct]=[];
+ foreach($directRows as $r){$ct=trim((string)$r['coffee_type']);$ch=trim((string)$r['channel']);if(!isset($directMatrix[$ct]))$directMatrix[$ct]=[];$directMatrix[$ct][$ch]=['kgs'=>(float)$r['kgs'],'value'=>(float)$r['value_usd']];}
+ foreach($directMatrix as $ct=>$channelData):$rowKg=0;$rowValue=0;?><tr><th scope="row"><?=htmlspecialchars($ct,ENT_QUOTES,'UTF-8')?></th>
+ <?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$v=$channelData[$ch]??['kgs'=>0,'value'=>0];$rowKg+=$v['kgs'];$rowValue+=$v['value'];?><td><?=nf_clean($v['kgs']/1000,3)?></td><td><?=nf($v['value'],2)?></td><td><?=nf(pct($v['kgs'],$grandSold),2)?></td><?php endforeach;?>
+ <td class="direct-matrix-total"><?=nf_clean($rowKg/1000,3)?></td><td class="direct-matrix-total"><?=nf($rowValue,2)?></td><td class="direct-matrix-total"><?=nf(pct($rowKg,$grandSold),2)?></td></tr><?php endforeach;?>
+ </tbody><tfoot><tr><th scope="row">Grand Total</th><?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$v=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?><td><?=nf_clean((float)$v['kgs']/1000,3)?></td><td><?=nf((float)$v['value'],2)?></td><td><?=nf(pct((float)$v['kgs'],$grandSold),2)?></td><?php endforeach;?><td><?=nf_clean($grandSold/1000,3)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div>
 </section>
 <div id="directRankingPanels" class="analytics" hidden>
 <?php foreach(['buyer'=>'Top 15 Buyers','supplier_seller'=>'Top 15 Sellers'] as $partyKey=>$heading):$all=$directRankings[$partyKey];$top=array_slice($all,0,15);$other=array_slice($all,15);$otherQty=array_sum(array_map(fn($r)=>(float)$r['total_qty'],$other));$otherVal=array_sum(array_map(fn($r)=>(float)$r['total_value'],$other));?>
@@ -1856,9 +1883,9 @@ body:has(#kageraSalesSummaryPanel) #kageraRankingPanels{height:auto!important;mi
  const season=<?=json_encode($season)?>,period=<?=json_encode($summaryPeriods[$summaryPeriodValue]['label']??'')?>,range=<?=json_encode($from.' to '.$to)?>,title='Direct Sales - Consolidated Sales Summary',base='Direct_Sales_Summary_'+season.replace('/','-')+'_'+<?=json_encode($summaryPeriodValue??'all')?>;
  const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
  summary.querySelectorAll('[data-direct-export]').forEach(button=>button.addEventListener('click',()=>{const type=button.dataset.directExport,data=rows();
- if(type==='xlsx'){if(!window.XLSX)return alert('Excel export library unavailable');const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet([['TANZANIA COFFEE BOARD'],[title],['Season: '+season,'Period: '+period,'Dates: '+range],[],...data]);ws['!cols']=[{wch:25},{wch:23},{wch:20},{wch:23},{wch:16}];XLSX.utils.book_append_sheet(wb,ws,'Sales Summary');XLSX.writeFile(wb,base+'.xlsx');return}
+ if(type==='xlsx'){if(!window.XLSX)return alert('Excel export library unavailable');const wb=XLSX.utils.book_new(),ws=XLSX.utils.table_to_sheet(table);XLSX.utils.sheet_add_aoa(ws,[['TANZANIA COFFEE BOARD'],[title],['Season: '+season+' | Period: '+period+' | Dates: '+range]],{origin:-1});ws['!cols']=[{wch:22},...Array.from({length:12},()=>({wch:17}))];XLSX.utils.book_append_sheet(wb,ws,'Sales Summary');XLSX.writeFile(wb,base+'.xlsx');return}
  if(type==='doc'){const html='<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial;color:#483027}table{border-collapse:collapse;width:100%}th{background:#51382c;color:white}th,td{border:1px solid #ddd0c4;padding:7px;text-align:right}th:first-child,td:first-child{text-align:left}tr:last-child{background:#f0e7df;font-weight:bold}</style></head><body><h3>TANZANIA COFFEE BOARD</h3><h2>'+esc(title)+'</h2><p>'+esc(season)+' | '+esc(period)+' | '+esc(range)+'</p><table>'+data.map((r,i)=>'<tr>'+r.map(c=>'<'+(i?'td':'th')+'>'+esc(c)+'</'+(i?'td':'th')+'>').join('')+'</tr>').join('')+'</table></body></html>';const url=URL.createObjectURL(new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=base+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);return}
- if(type==='pdf'){if(!window.jspdf?.jsPDF)return alert('PDF export library unavailable');const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});doc.setFontSize(12);doc.text('TANZANIA COFFEE BOARD',12,13);doc.setFontSize(15);doc.text(title,12,22);doc.setFontSize(9);doc.text('Season: '+season+' | '+period+' | '+range,12,30);if(!doc.autoTable)return alert('PDF table library unavailable');doc.autoTable({head:[data[0]],body:data.slice(1),startY:36,theme:'grid',styles:{fontSize:9},headStyles:{fillColor:[81,56,44]}});doc.save(base+'.pdf')}
+ if(type==='pdf'){if(!window.jspdf?.jsPDF)return alert('PDF export library unavailable');const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});doc.setFontSize(12);doc.text('TANZANIA COFFEE BOARD',12,13);doc.setFontSize(15);doc.text(title,12,22);doc.setFontSize(9);doc.text('Season: '+season+' | '+period+' | '+range,12,30);if(!doc.autoTable)return alert('PDF table library unavailable');doc.autoTable({html:'#directSummaryTable',startY:36,theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[81,56,44]},margin:{left:6,right:6}});doc.save(base+'.pdf')}
  }));
 })();
 </script>
