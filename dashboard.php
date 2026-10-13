@@ -1307,6 +1307,31 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 .summary-period-toolbar .tc-period-controls select[name="summary_period_value"]{min-width:160px}
 @media(max-width:780px){.summary-period-toolbar{align-items:stretch}.summary-period-toolbar .tc-period-controls{justify-content:flex-start}.summary-period-toolbar .tc-period-controls select{max-width:100%}}
 </style>
+
+<style id="summary-season-chart-responsive">
+.summary-period-caption{gap:2px}
+.summary-season-value{font-size:15px;line-height:1.12;color:#3d2a22;font-weight:800}
+.summary-period-dates{font-size:10px;white-space:nowrap}
+.trend-panel{min-width:0;width:100%;max-width:100%}
+.trend-head{height:auto;min-height:32px;flex:0 0 auto;gap:8px;flex-wrap:wrap;padding:7px 12px}
+.trend-head strong{font-size:11px;line-height:1.3}
+.trend-head span{font-size:10px;line-height:1.35;text-align:right}
+.trend-wrap{box-sizing:border-box;width:100%;min-width:0;height:clamp(280px,38vh,480px);min-height:280px;flex:1 1 auto;overflow:hidden}
+.trend-wrap canvas{display:block;width:100%!important;height:100%!important}
+@media(max-width:900px){
+ .trend-panel{height:auto;min-height:350px}
+ .trend-wrap{height:clamp(290px,46vh,440px);min-height:290px}
+ .trend-head span{display:block}
+}
+@media(max-width:560px){
+ .summary-period-toolbar{gap:10px}
+ .summary-period-toolbar .tc-period-controls{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px 9px}
+ .summary-period-toolbar .tc-period-controls select,.summary-period-toolbar .tc-period-controls select[name="summary_period_value"]{width:100%;max-width:100%;min-width:0}
+ .trend-head{align-items:flex-start;flex-direction:column;gap:3px}
+ .trend-head span{text-align:left;font-size:9px}
+ .trend-wrap{height:310px;min-height:310px;padding:8px 5px 16px!important}
+}
+</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1497,7 +1522,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 </section>
 <?php endif; ?>
 <?php elseif($display==='direct'): ?>
-<div class="summary-period-toolbar"><div class="summary-period-caption"><span class="summary-period-heading">Reporting period</span><span class="summary-period-dates"><?=htmlspecialchars($summaryPeriods[$summaryPeriodValue]['label'])?> · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></span></div><form class="tc-period-controls" method="get">
+<div class="summary-period-toolbar"><div class="summary-period-caption"><span class="summary-period-heading">Season</span><strong class="summary-season-value"><?=htmlspecialchars($season)?></strong><span class="summary-period-dates"><?=date('d M',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></span></div><form class="tc-period-controls" method="get">
   <input type="hidden" name="display" value="<?=htmlspecialchars($display,ENT_QUOTES)?>">
   <input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>">
   <label for="summaryPeriodType">Period</label>
@@ -1533,7 +1558,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 <?php foreach($directRows as$r):?><tr><td><?=htmlspecialchars($r['channel'])?></td><td><?=htmlspecialchars($r['coffee_type'])?></td><td><?=nf($r['kgs'],2)?></td><td><?=nf($r['value_usd'],2)?></td><td><?=nf(pct((float)$r['kgs'],$grandSold),2)?></td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td colspan="2">Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php elseif(in_array($display,['clean','kagera'],true)): ?>
-    <div class="summary-period-toolbar"><div class="summary-period-caption"><span class="summary-period-heading">Reporting period</span><span class="summary-period-dates"><?=htmlspecialchars($summaryPeriods[$summaryPeriodValue]['label'])?> · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></span></div><form class="tc-period-controls" method="get">
+    <div class="summary-period-toolbar"><div class="summary-period-caption"><span class="summary-period-heading">Season</span><strong class="summary-season-value"><?=htmlspecialchars($season)?></strong><span class="summary-period-dates"><?=date('d M',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></span></div><form class="tc-period-controls" method="get">
   <input type="hidden" name="display" value="<?=htmlspecialchars($display,ENT_QUOTES)?>">
   <input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>">
   <label for="summaryPeriodType">Period</label>
@@ -1763,7 +1788,7 @@ if(ctx&&window.Chart){const datasets=cleanMode?[
 {type:'bar',label:'Clean Coffee Qty (kg)',data:auctionTrend.map(r=>Number(r.clean_qty)||0),yAxisID:'yQty',borderWidth:0,maxBarThickness:18},
 {type:'line',label:'Dry Cherry Avg Price',data:auctionTrend.map(r=>r.dry_avg_price===null?null:Number(r.dry_avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25},
 {type:'line',label:'Clean Coffee Avg Price',data:auctionTrend.map(r=>r.clean_avg_price===null?null:Number(r.clean_avg_price)),yAxisID:'yPrice',borderWidth:2,pointRadius:2,tension:.25}];
-new Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'top',labels:{boxWidth:9,boxHeight:9,font:{size:8},padding:8}}},scales:{x:{grid:{display:false},ticks:{font:{size:8},autoSkip:false},title:{display:true,text:'Auction No.',font:{size:8}}},yQty:{position:'left',beginAtZero:true,title:{display:true,text:'Quantity sold (kg)',font:{size:8}},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}},yPrice:{position:'right',title:{display:true,text:cleanMode?'Avg. price (USD/50kg)':'Avg. price (TZS/kg)',font:{size:8}},grid:{drawOnChartArea:false},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}}}}});}
+const compactChart=()=>window.innerWidth<640;\nnew Chart(ctx,{data:{labels:auctionTrend.map(r=>'A'+r.auction_no),datasets},options:{responsive:true,maintainAspectRatio:false,resizeDelay:120,layout:{padding:{top:5,right:5,bottom:3,left:3}},interaction:{mode:'index',intersect:false},plugins:{legend:{position:'top',labels:{boxWidth:10,boxHeight:10,font:{size:10},padding:10}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},autoSkip:true,maxTicksLimit:compactChart()?6:18,maxRotation:0,minRotation:0},title:{display:true,text:'Auction No.',font:{size:8}}},yQty:{position:'left',beginAtZero:true,title:{display:true,text:'Quantity sold (kg)',font:{size:8}},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}},yPrice:{position:'right',title:{display:true,text:cleanMode?'Avg. price (USD/50kg)':'Avg. price (TZS/kg)',font:{size:8}},grid:{drawOnChartArea:false},ticks:{font:{size:8},callback:v=>Number(v).toLocaleString()}}}}});}
 </script>
 
 <script>
