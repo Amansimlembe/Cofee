@@ -1779,18 +1779,23 @@ body:has(.rank-export-panel){height:auto!important;min-height:100vh!important;ov
    toggle.querySelector('.ranking-other-hint').textContent=expand?'Hide details':'Show details';
    panel.querySelectorAll('.ranking-other-detail').forEach(tr=>{tr.hidden=!expand;});
   });
-  const rows=()=>[...table.rows].filter(tr=>!tr.hidden && !(tr.classList.contains('ranking-other-detail')&&tr.hasAttribute('hidden'))).map(tr=>[...tr.cells].map(td=>{const clone=td.cloneNode(true);clone.querySelectorAll('.rank,.ranking-other-hint,.ranking-other-chevron').forEach(el=>el.remove());return clone.textContent.trim().replace(/\s+/g,' ')}));
+  const rows=()=>[...table.rows].filter(tr=>!tr.hidden && !(tr.classList.contains('ranking-other-detail')&&tr.hasAttribute('hidden'))).map((tr,i)=>{
+   const cells=[...tr.cells].map(td=>{const clone=td.cloneNode(true);clone.querySelectorAll('.rank,.ranking-other-hint,.ranking-other-chevron').forEach(el=>el.remove());return clone.textContent.trim().replace(/\s+/g,' ')});
+   if(i===0)return ['S/No',...cells];
+   const rank=tr.querySelector('td:first-child .rank')?.textContent.trim()||'';
+   return [rank,...cells];
+  });
   const filename=ext=>base+'.'+ext;
   panel.querySelector('.rank-export-button:not(.rank-word-button):not(.rank-pdf-button)')?.addEventListener('click',()=>{
    if(!window.XLSX){alert('Excel library unavailable. Refresh the page and retry.');return}
    const data=rows(),book=XLSX.utils.book_new();
    const sheet=XLSX.utils.aoa_to_sheet([['TANZANIA COFFEE BOARD'],[title],['Season: '+season,'Period: '+period,'Dates: '+range],[],...data]);
-   sheet['!cols']=data[0].map((_,i)=>({wch:Math.min(52,Math.max(17,...data.map(r=>String(r[i]||'').length)))}));
+   sheet['!cols']=data[0].map((_,i)=>({wch:i===0?8:Math.min(52,Math.max(17,...data.map(r=>String(r[i]||'').length)))}));
    XLSX.utils.book_append_sheet(book,sheet,'Top 15');XLSX.writeFile(book,filename('xlsx'));
   });
   panel.querySelector('.rank-word-button')?.addEventListener('click',()=>{
    const escape=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-   const data=rows();const html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Calibri,Arial,sans-serif;color:#38271f}h2{color:#50372c}table{border-collapse:collapse;width:100%;font-size:10pt}td,th{border:1px solid #d7cac2;padding:5px;text-align:right}td:first-child,th:first-child{text-align:left}tr:first-child{background:#50372c;color:white;font-weight:bold}tr:last-child{background:#f1e9e3;font-weight:bold}</style></head><body><h3>TANZANIA COFFEE BOARD</h3><h2>'+escape(title)+'</h2><p>Season: '+escape(season)+' | '+escape(period)+' | '+escape(range)+'</p><table>'+data.map((r,i)=>'<tr>'+r.map(c=>'<'+(i===0?'th':'td')+'>'+escape(c)+'</'+(i===0?'th':'td')+'>').join('')+'</tr>').join('')+'</table></body></html>';
+   const data=rows();const html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Calibri,Arial,sans-serif;color:#38271f}h2{color:#50372c}table{border-collapse:collapse;width:100%;font-size:10pt}td,th{border:1px solid #d7cac2;padding:5px;text-align:right}td:first-child,th:first-child{text-align:center;width:45px}td:nth-child(2),th:nth-child(2){text-align:left}tr:first-child{background:#50372c;color:white;font-weight:bold}tr:last-child{background:#f1e9e3;font-weight:bold}</style></head><body><h3>TANZANIA COFFEE BOARD</h3><h2>'+escape(title)+'</h2><p>Season: '+escape(season)+' | '+escape(period)+' | '+escape(range)+'</p><table>'+data.map((r,i)=>'<tr>'+r.map(c=>'<'+(i===0?'th':'td')+'>'+escape(c)+'</'+(i===0?'th':'td')+'>').join('')+'</tr>').join('')+'</table></body></html>';
    const blob=new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename('doc');document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
   });
   panel.querySelector('.rank-pdf-button')?.addEventListener('click',()=>{
