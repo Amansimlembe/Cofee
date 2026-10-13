@@ -1333,36 +1333,39 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 }
 </style>
 
-<style id="auction-kpi-responsive-v2">
-/* Scoped to the Clean and Kagera Auction summary KPIs only. */
-.auction-summary-kpis{display:grid;grid-template-columns:minmax(110px,.52fr) repeat(2,minmax(0,1fr));gap:10px;align-items:stretch;min-width:0}
-.auction-summary-kpis>.kpi,.auction-summary-kpis>.metric-group{min-width:0;height:100%;box-sizing:border-box;border-radius:10px;box-shadow:0 2px 8px rgba(62,39,35,.045)}
-.auction-summary-kpis>.kpi{display:flex;flex-direction:column;justify-content:center;padding:12px 14px}
-.auction-summary-kpis>.kpi .label{font-size:10px;line-height:1.4;white-space:normal}
-.auction-summary-kpis>.kpi strong{font-size:clamp(18px,1.65vw,26px);line-height:1.3;overflow:visible;white-space:normal}
-.auction-summary-kpis>.kpi .sub{font-size:10px;white-space:normal}
-.auction-summary-kpis>.metric-group{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch}
-.auction-summary-kpis .metric{display:flex;flex-direction:column;justify-content:center;gap:5px;padding:12px clamp(8px,1vw,16px);min-width:0;overflow:hidden}
-.auction-summary-kpis .metric .m-label{font-size:clamp(9px,.8vw,11px);line-height:1.35;white-space:normal;overflow-wrap:break-word;letter-spacing:.2px}
-.auction-summary-kpis .metric strong{font-size:clamp(13px,1.2vw,19px);line-height:1.25;white-space:normal;overflow-wrap:anywhere;overflow:visible;text-overflow:clip;font-variant-numeric:tabular-nums;margin:0}
-.auction-summary-kpis .metric small{font-size:clamp(9px,.72vw,11px);line-height:1.3;white-space:normal;overflow-wrap:break-word;margin:0}
-@media(max-width:1250px){
- .auction-summary-kpis{grid-template-columns:minmax(110px,.45fr) minmax(0,1fr)}
- .auction-summary-kpis>.metric-group:last-child{grid-column:1/-1}
+<style id="auction-summary-responsive-kpis">
+.summary-period-toolbar{display:flex;align-items:center;gap:clamp(10px,2vw,24px)}
+.summary-period-caption{flex:0 0 auto}
+.summary-toolbar-stat{flex:0 1 auto;display:flex;flex-direction:column;justify-content:center;min-width:110px;padding:3px 14px;border-left:1px solid #e8ddd6}
+.summary-stat-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.35px;color:#78665c}
+.summary-toolbar-stat strong{font-size:clamp(14px,1.5vw,19px);font-weight:800;line-height:1.4;color:#3f2b24;white-space:nowrap}
+.summary-stat-sub{font-size:10px;color:#877970}
+.summary-period-toolbar .tc-period-controls{margin-left:auto;min-width:0}
+.auction-summary-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(8px,1vw,14px);align-items:stretch}
+.auction-summary-kpis>.metric-group{min-width:0;width:100%;grid-template-columns:repeat(3,minmax(0,1fr));border-radius:9px}
+.auction-summary-kpis .metric{padding:clamp(10px,1.15vw,16px);min-width:0;overflow:hidden}
+.auction-summary-kpis .metric .m-label{display:block;white-space:normal;overflow-wrap:anywhere;font-size:clamp(9px,.9vw,12px);line-height:1.3}
+.auction-summary-kpis .metric strong{font-size:clamp(12px,1.15vw,17px);line-height:1.35;white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
+.auction-summary-kpis .metric small{font-size:clamp(9px,.8vw,11px);white-space:normal;overflow-wrap:anywhere;line-height:1.3}
+@media(max-width:1100px){
+ .auction-summary-kpis{grid-template-columns:minmax(0,1fr)}
+ .auction-summary-kpis .metric{padding:12px}
+ .summary-period-toolbar .tc-period-controls{flex:1 1 100%;justify-content:flex-start;margin-left:0}
 }
-@media(max-width:780px){
- .auction-summary-kpis{grid-template-columns:minmax(0,1fr);gap:9px}
- .auction-summary-kpis>.metric-group:last-child{grid-column:auto}
- .auction-summary-kpis>.kpi{padding:10px 13px}
- .auction-summary-kpis>.metric-group{grid-column:auto;grid-template-columns:repeat(3,minmax(0,1fr))}
- .auction-summary-kpis .metric{padding:11px 9px}
- .auction-summary-kpis .metric strong{font-size:clamp(12px,2.8vw,17px)}
-}
-@media(max-width:410px){
- .auction-summary-kpis>.metric-group{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:600px){
+ .summary-period-toolbar{align-items:flex-start;gap:10px}
+ .summary-toolbar-stat{min-width:0;padding:3px 0 3px 12px}
+ .summary-period-toolbar .tc-period-controls{width:100%}
+ .auction-summary-kpis .metric-group{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .auction-summary-kpis .metric{padding:10px 11px;border-bottom:1px solid #eee7e2}
  .auction-summary-kpis .metric:nth-child(2){border-right:0}
- .auction-summary-kpis .metric:nth-child(3){grid-column:1/-1;border-top:1px solid #eee7e2}
- .auction-summary-kpis .metric strong{font-size:15px}
+ .auction-summary-kpis .metric:last-child{grid-column:1/-1;border-bottom:0}
+ .auction-summary-kpis .metric strong{font-size:clamp(13px,3.6vw,17px)}
+}
+@media(max-width:360px){
+ .auction-summary-kpis .metric-group{grid-template-columns:minmax(0,1fr)}
+ .auction-summary-kpis .metric:last-child{grid-column:auto}
+ .auction-summary-kpis .metric{border-right:0;border-bottom:1px solid #eee7e2}
 }
 </style>
 </head>
@@ -1555,7 +1558,13 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 </section>
 <?php endif; ?>
 <?php elseif($display==='direct'): ?>
-<div class="summary-period-toolbar"><div class="summary-period-caption"><span class="summary-period-heading">Season</span><strong class="summary-season-value"><?=htmlspecialchars($season)?></strong><span class="summary-period-dates"><?=date('d M',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></span></div><form class="tc-period-controls" method="get">
+<div class="summary-period-toolbar"><div class="summary-period-caption"><span class="summary-period-heading">Season</span><strong class="summary-season-value"><?=htmlspecialchars($season)?></strong><span class="summary-period-dates"><?=date('d M',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></span></div><div class="summary-toolbar-stat">
+<?php if(in_array($display,['clean','kagera'],true)): ?>
+ <span class="summary-stat-label">Auctions</span><strong><?=nf($auctions)?></strong><span class="summary-stat-sub">Held</span>
+<?php else: ?>
+ <span class="summary-stat-label">Total Sold</span><strong><?=nf($grandSold,2)?> kg</strong><span class="summary-stat-sub">Direct sales channels</span>
+<?php endif; ?>
+</div><form class="tc-period-controls" method="get">
   <input type="hidden" name="display" value="<?=htmlspecialchars($display,ENT_QUOTES)?>">
   <input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>">
   <label for="summaryPeriodType">Period</label>
@@ -1590,7 +1599,13 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 <?php foreach($directRows as$r):?><tr><td><?=htmlspecialchars($r['channel'])?></td><td><?=htmlspecialchars($r['coffee_type'])?></td><td><?=nf($r['kgs'],2)?></td><td><?=nf($r['value_usd'],2)?></td><td><?=nf(pct((float)$r['kgs'],$grandSold),2)?></td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td colspan="2">Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php elseif(in_array($display,['clean','kagera'],true)): ?>
-    <div class="summary-period-toolbar"><div class="summary-period-caption"><span class="summary-period-heading">Season</span><strong class="summary-season-value"><?=htmlspecialchars($season)?></strong><span class="summary-period-dates"><?=date('d M',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></span></div><form class="tc-period-controls" method="get">
+    <div class="summary-period-toolbar"><div class="summary-period-caption"><span class="summary-period-heading">Season</span><strong class="summary-season-value"><?=htmlspecialchars($season)?></strong><span class="summary-period-dates"><?=date('d M',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></span></div><div class="summary-toolbar-stat">
+<?php if(in_array($display,['clean','kagera'],true)): ?>
+ <span class="summary-stat-label">Auctions</span><strong><?=nf($auctions)?></strong><span class="summary-stat-sub">Held</span>
+<?php else: ?>
+ <span class="summary-stat-label">Total Sold</span><strong><?=nf($grandSold,2)?> kg</strong><span class="summary-stat-sub">Direct sales channels</span>
+<?php endif; ?>
+</div><form class="tc-period-controls" method="get">
   <input type="hidden" name="display" value="<?=htmlspecialchars($display,ENT_QUOTES)?>">
   <input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>">
   <label for="summaryPeriodType">Period</label>
@@ -1606,7 +1621,6 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
   </select>
  </form></div>
     <div class="kpis auction-summary-kpis">
- <div class="kpi"><span class="label">Auctions</span><strong><?=nf($auctions)?></strong><div class="sub">Held</div></div>
  <?php if($display==='clean'): ?>
  <div class="metric-group dry"><div class="metric"><span class="m-label coffee-name">Clean Coffee · Offered</span><strong><?=nf($offered)?> kg</strong><small>All lots</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($grandSold)?> kg</strong><small><?=nf($soldPct,2)?> of offered</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($avgPrice,2)?></strong><small><?=$priceUnit?></small></div></div>
  <div class="metric-group clean"><div class="metric"><span class="m-label coffee-name">Sales Value</span><strong><?=nf($grandValue,2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Unsold</span><strong><?=nf(max(0,$offered-$grandSold))?> kg</strong><small><?=nf(max(0,100-$soldPct),2)?></small></div><div class="metric"><span class="m-label">Sale Rate</span><strong><?=nf($soldPct,2)?></strong><small>Season</small></div></div>
