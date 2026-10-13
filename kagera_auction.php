@@ -1765,8 +1765,8 @@ function handle_kagera_report()
             TRIM(CAST(grade AS TEXT)) AS grade,
             COALESCE(SUM(kgs), 0) AS kilos_offered
         FROM public.kagera_auction_catalogue
-        " . ($catalogueWhere ? 'WHERE ' . implode(' AND ', $catalogueWhere) : '') . "
-        AND TRIM(CAST(grade AS TEXT)) <> ''
+        " . ($catalogueWhere ? 'WHERE (' . implode(' AND ', $catalogueWhere) . ') AND ' : 'WHERE ') . "
+        TRIM(CAST(grade AS TEXT)) <> ''
         GROUP BY TRIM(CAST(grade AS TEXT))
     ";
 
@@ -3526,11 +3526,11 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
         <table id="kageraSalesSummaryTable" class="kagera-report-table" style="display:none;">
             <thead>
                 <tr>
-                    <th>TYPE OF COFFEE</th>
-                    <th>KILOS OFFERED</th>
-                    <th>KILOS SOLD</th>
-                    <th>TOTAL VALUE (TZS)</th>
-                    <th>PERCENTAGE SOLD</th>
+                    <th>Coffee Type</th>
+                    <th>Quantity Offered (MT)</th>
+                    <th>Quantity Sold (MT)</th>
+                    <th>VALUE (TZS)</th>
+                    <th>% Share</th>
                 </tr>
             </thead>
             <tbody id="kageraSalesSummaryBody">
@@ -4813,7 +4813,7 @@ function kageraExportSourceClone() {
     const table=document.getElementById('kageraSalesSummaryTable');
     if(mode!=='sales_summary'||!table||table.style.display==='none')throw new Error('Sales Summary is not ready yet.');
     const wrapper=document.createElement('div');wrapper.className='kagera-export-sheet';
-    const title=document.createElement('h3');title.textContent='KAGERA COFFEE EXCHANGE — SALES SUMMARY';wrapper.appendChild(title);wrapper.appendChild(table.cloneNode(true));
+    const title=document.createElement('h3');title.textContent='KAGERA COFFEE EXCHANGE — SALES SUMMARY · Season '+(document.getElementById('kageraSeasonFilter')?.value||'All')+' · Auction '+(document.getElementById('kageraAuctionFilter')?.value||'All');wrapper.appendChild(title);wrapper.appendChild(table.cloneNode(true));
     return wrapper;
 }
 function kageraExportDocumentHtml() {
@@ -5346,53 +5346,49 @@ async function kageraShowReport()
                     : 0;
             });
 
-            const gradeRows = Object.keys(gradeGroups);
-
-            let totalOffered = 0;
-            let totalSold = 0;
-            let totalValue = 0;
-
-            gradeRows.forEach(function(grade) {
-                const g = gradeGroups[grade] || {};
-                totalOffered += kageraNumber(g.kilos_offered);
-                totalSold += kageraNumber(g.kilos_sold);
-                totalValue += kageraNumber(g.total_value);
+            // Group by the Grade field; normalize coffee type and preparation.
+            // Preserve any unrecognized grades separately rather than losing totals.
+            const categories = [
+                "Robusta (Clean Coffee)", "Arabica (Clean Coffee)",
+                "Robusta (Dry Cherry)", "Arabica (Dry Cherry)"
+            ];
+            const summary = Object.fromEntries(categories.map(k => [k, {
+                kilos_offered:0, kilos_sold:0, total_value:0
+            }]));
+            Object.entries(gradeGroups).forEach(([grade, g]) => {
+                const name = grade.replace(/_/g, " ").toLowerCase();
+                const species = /robusta|robu ta/.test(name) ? "Robusta" :
+                                /arabica/.test(name) ? "Arabica" : null;
+                const preparation = /clean/.test(name) ? "Clean Coffee" :
+                                    /dry|cherry/.test(name) ? "Dry Cherry" : null;
+                const key = species && preparation
+                    ? `${species} (${preparation})`
+                    : `Other: ${grade.replace(/_/g, " ")}`;
+                if (!summary[key]) summary[key] = {kilos_offered:0,kilos_sold:0,total_value:0};
+                summary[key].kilos_offered += kageraNumber(g.kilos_offered);
+                summary[key].kilos_sold += kageraNumber(g.kilos_sold);
+                summary[key].total_value += kageraNumber(g.total_value);
             });
-
+            const entries = Object.entries(summary);
+            const totalOffered = entries.reduce((n,[,g])=>n+g.kilos_offered,0);
+            const totalSold = entries.reduce((n,[,g])=>n+g.kilos_sold,0);
+            const totalValue = entries.reduce((n,[,g])=>n+g.total_value,0);
+            const mt = n => (n/1000).toLocaleString("en-US", {
+                minimumFractionDigits:3, maximumFractionDigits:3
+            });
             if (body) {
-                if (!gradeRows.length) {
-                    body.innerHTML =
-                        '<tr><td colspan="5" class="kagera-empty-state">' +
-                        'No Sales Summary data available for the selected Auction.' +
-                        '</td></tr>';
-                } else {
-                    body.innerHTML = gradeRows.map(function(grade) {
-                        const g = gradeGroups[grade] || {};
-
-                        return "<tr>" +
-                            "<td>" + escapeKageraHtml(grade) + "</td>" +
-                            "<td>" + kageraReportKg(g.kilos_offered) + "</td>" +
-                            "<td>" + kageraReportKg(g.kilos_sold) + "</td>" +
-                            "<td>" + kageraReportMoney(g.total_value) + "</td>" +
-                            "<td>" +
-                                kageraNumber(g.percentage_sold).toFixed(2) +
-                                "%" +
-                            "</td>" +
-                            "</tr>";
-                    }).join("") +
-                    "<tr class=\"kagera-high-low-total-row\">" +
-                        "<td>Total</td>" +
-                        "<td>" + kageraReportKg(totalOffered) + "</td>" +
-                        "<td>" + kageraReportKg(totalSold) + "</td>" +
-                        "<td>" + kageraReportMoney(totalValue) + "</td>" +
-                        "<td>" +
-                            (totalOffered > 0
-                                ? ((totalSold / totalOffered) * 100).toFixed(2)
-                                : "0.00") +
-                            "%" +
-                        "</td>" +
-                    "</tr>";
-                }
+                body.innerHTML = entries.map(([name,g]) => "<tr>" +
+                    "<td>" + escapeKageraHtml(name) + "</td>" +
+                    "<td>" + mt(g.kilos_offered) + "</td>" +
+                    "<td>" + mt(g.kilos_sold) + "</td>" +
+                    "<td>" + kageraReportMoney(g.total_value) + "</td>" +
+                    "<td>" + (totalSold ? 100*g.kilos_sold/totalSold : 0).toFixed(2) + "%</td>" +
+                    "</tr>").join("") +
+                    '<tr class="kagera-high-low-total-row">' +
+                    '<td>Grand Total</td><td>' + mt(totalOffered) +
+                    '</td><td>' + mt(totalSold) +
+                    '</td><td>' + kageraReportMoney(totalValue) +
+                    '</td><td>' + (totalSold ? "100.00%" : "0.00%") + '</td></tr>';
             }
         }
 
