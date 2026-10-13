@@ -1451,7 +1451,21 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
  .auction-summary-kpis .metric strong{font-size:13px!important}
 }
 </style>
-</head>
+<style id="auction-ranking-full-height-fix">
+/* Let all 15 rows, Other and Grand Total participate in document height. */
+body:has(.rank-export-panel){height:auto!important;min-height:100vh!important;overflow-y:auto!important}
+.dashboard:has(.rank-export-panel){height:auto!important;min-height:100vh!important;grid-template-rows:auto auto auto auto!important;overflow:visible!important;align-content:start!important}
+.dashboard:has(.rank-export-panel) .analytics{height:auto!important;min-height:0!important;grid-template-rows:auto!important;align-items:stretch!important}
+.rank-export-panel{height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important}
+.rank-export-panel .table-box{height:auto!important;max-height:none!important;overflow-x:auto!important;overflow-y:visible!important;flex:0 0 auto!important}
+.rank-export-panel table{height:auto!important;min-height:0!important}
+.rank-export-panel tbody tr{display:table-row!important;visibility:visible!important}
+.rank-export-panel tbody td,.rank-export-panel tfoot td{height:auto!important;min-height:20px!important;line-height:1.25!important;padding:4px 3px!important}
+.rank-export-panel .panel-head{min-height:34px!important;gap:8px}
+.rank-panel-actions{flex-wrap:wrap;justify-content:flex-end}
+.rank-export-panel .rank-export-button{padding:5px 9px!important;min-height:24px!important}
+@media(max-width:700px){.rank-export-panel table{min-width:640px!important}.rank-export-panel{margin-bottom:8px!important}.rank-panel-actions>span{display:none}}
+</style></head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
     <div class="topbar">
@@ -1713,7 +1727,7 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
  </div>
  <div class="analytics">
  <?php foreach([['Top 15 Buyers',$buyersCombined,'Buyer'],[$rank2,$amcosCombined,$rank2First]] as[$heading,$rows,$firstLabel]):?>
- <section class="panel rank-export-panel"><div class="panel-head"><strong><?=$heading?></strong><div class="rank-panel-actions"><span>Ranked by sold quantity</span><button type="button" class="rank-export-button" aria-label="Download <?=htmlspecialchars($heading,ENT_QUOTES)?> as Excel" title="Download Excel (.xlsx)">↓ Excel</button><button type="button" class="rank-export-button rank-csv-button" aria-label="Download <?=htmlspecialchars($heading,ENT_QUOTES)?> as CSV" title="Download CSV">CSV</button></div></div><div class="table-box"><table>
+ <section class="panel rank-export-panel"><div class="panel-head"><strong><?=$heading?></strong><div class="rank-panel-actions"><span>Ranked by sold quantity</span><button type="button" class="rank-export-button" aria-label="Download <?=htmlspecialchars($heading,ENT_QUOTES)?> as Excel" title="Download Excel (.xlsx)">Excel</button><button type="button" class="rank-export-button rank-word-button" title="Download Word document">Word</button><button type="button" class="rank-export-button rank-pdf-button" title="Download PDF document">PDF</button></div></div><div class="table-box"><table>
  <?php if($display==='clean'):?>
  <thead><tr><th><?=$firstLabel?></th><th>Sold Qty<br>(kg)</th><th>Value<br>(USD)</th><th>Share<br>(%)</th></tr></thead><tbody>
  <?php if(!$rows):?><tr><td colspan="4" class="empty">No sold data for this season</td></tr><?php endif;foreach($rows as$i=>$r):?><tr><td title="<?=htmlspecialchars($r['name'])?>"><?php if(empty($r['_other'])):?><span class="rank"><?=$i+1?></span><?php endif;?><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['total_qty'],2)?></td><td><?=nf($r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?></td></tr><?php endforeach;?></tbody><tfoot><tr><td>Season Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot>
@@ -1739,26 +1753,34 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 
 <script id="auction-ranking-downloads">
 (function(){
- function filename(s){return String(s||'Ranking').replace(/[^a-z0-9_-]+/gi,'_').replace(/^_+|_+$/g,'').slice(0,80)}
- function quote(v){let str=String(v??'');if(/^[=+@\-\t\r]/.test(str))str="'"+str;return '"'+str.replace(/"/g,'""')+'"'}
+ const safe=s=>String(s||'Ranking').replace(/[^a-z0-9_-]+/gi,'_').replace(/^_+|_+$/g,'').slice(0,90);
+ const season=<?=json_encode($season)?>,channel=<?=json_encode($display)?>;
+ const range=<?=json_encode(date('d M Y',strtotime($from)).' — '.date('d M Y',strtotime($to)))?>;
+ const period=<?=json_encode($summaryPeriods[$summaryPeriodValue]['label'])?>;
  document.querySelectorAll('.rank-export-panel').forEach(panel=>{
-  const table=panel.querySelector('table');
-  const heading=panel.querySelector('.panel-head strong')?.textContent?.trim()||'Ranking';
-  const season=<?=json_encode($season)?>;
-  const period=<?=json_encode($summaryPeriodValue)?>;
-  const base=filename(<?=json_encode($display)?>+'_'+heading+'_'+season+'_'+period);
-  function rows(){return [...table.rows].map(row=>[...row.cells].map(cell=>{const copy=cell.cloneNode(true);copy.querySelectorAll('.rank').forEach(el=>el.remove());return copy.textContent.trim().replace(/\s+/g,' ')}))}
-  panel.querySelector('.rank-export-button:not(.rank-csv-button)')?.addEventListener('click',()=>{
-   if(!window.XLSX){alert('Excel export library is unavailable. Please use CSV.');return}
-   const data=rows(), wb=XLSX.utils.book_new(), ws=XLSX.utils.aoa_to_sheet(data);
-   ws['!cols']=data[0].map((_,i)=>({wch:Math.min(48,Math.max(15,...data.map(r=>String(r[i]||'').length)))}));
-   XLSX.utils.book_append_sheet(wb,ws,'Top 15');
-   XLSX.writeFile(wb,base+'.xlsx');
+  const table=panel.querySelector('table'),title=panel.querySelector('.panel-head strong')?.textContent.trim()||'Ranking';
+  const base=safe(channel+'_'+title+'_'+season+'_'+period);
+  const rows=()=>[...table.rows].map(tr=>[...tr.cells].map(td=>{const clone=td.cloneNode(true);clone.querySelectorAll('.rank').forEach(el=>el.remove());return clone.textContent.trim().replace(/\s+/g,' ')}));
+  const filename=ext=>base+'.'+ext;
+  panel.querySelector('.rank-export-button:not(.rank-word-button):not(.rank-pdf-button)')?.addEventListener('click',()=>{
+   if(!window.XLSX){alert('Excel library unavailable. Refresh the page and retry.');return}
+   const data=rows(),book=XLSX.utils.book_new();
+   const sheet=XLSX.utils.aoa_to_sheet([['TANZANIA COFFEE BOARD'],[title],['Season: '+season,'Period: '+period,'Dates: '+range],[],...data]);
+   sheet['!cols']=data[0].map((_,i)=>({wch:Math.min(52,Math.max(17,...data.map(r=>String(r[i]||'').length)))}));
+   XLSX.utils.book_append_sheet(book,sheet,'Top 15');XLSX.writeFile(book,filename('xlsx'));
   });
-  panel.querySelector('.rank-csv-button')?.addEventListener('click',()=>{
-   const csv='\uFEFF'+rows().map(r=>r.map(quote).join(',')).join('\r\n');
-   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
-   const a=document.createElement('a');a.href=url;a.download=base+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+  panel.querySelector('.rank-word-button')?.addEventListener('click',()=>{
+   const escape=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+   const data=rows();const html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Calibri,Arial,sans-serif;color:#38271f}h2{color:#50372c}table{border-collapse:collapse;width:100%;font-size:10pt}td,th{border:1px solid #d7cac2;padding:5px;text-align:right}td:first-child,th:first-child{text-align:left}tr:first-child{background:#50372c;color:white;font-weight:bold}tr:last-child{background:#f1e9e3;font-weight:bold}</style></head><body><h3>TANZANIA COFFEE BOARD</h3><h2>'+escape(title)+'</h2><p>Season: '+escape(season)+' | '+escape(period)+' | '+escape(range)+'</p><table>'+data.map((r,i)=>'<tr>'+r.map(c=>'<'+(i===0?'th':'td')+'>'+escape(c)+'</'+(i===0?'th':'td')+'>').join('')+'</tr>').join('')+'</table></body></html>';
+   const blob=new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename('doc');document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+  });
+  panel.querySelector('.rank-pdf-button')?.addEventListener('click',()=>{
+   if(!window.jspdf?.jsPDF){alert('PDF library unavailable. Refresh and retry.');return}
+   const data=rows(),doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+   doc.setFontSize(11);doc.setTextColor(65,44,35);doc.text('TANZANIA COFFEE BOARD',12,13);doc.setFontSize(15);doc.text(title,12,21);doc.setFontSize(9);doc.text('Season: '+season+'   |   '+period+'   |   '+range,12,28);
+   if(typeof doc.autoTable!=='function'){alert('PDF table library unavailable. Refresh and retry.');return}
+   doc.autoTable({head:[data[0]],body:data.slice(1),startY:34,theme:'grid',styles:{fontSize:8,cellPadding:2,overflow:'linebreak'},headStyles:{fillColor:[75,52,44],textColor:255},alternateRowStyles:{fillColor:[249,246,243]},didParseCell:function(info){if(info.section==='body'&&info.row.index===data.length-2){info.cell.styles.fontStyle='bold';info.cell.styles.fillColor=[239,231,224]}}});
+   doc.save(filename('pdf'));
   });
  });
 })();
