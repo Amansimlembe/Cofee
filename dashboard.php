@@ -450,13 +450,13 @@ if($display==='clean'){
   SUM(CASE WHEN $sold AND price_per_50kg IS NOT NULL AND price_per_50kg>0 THEN COALESCE(n_kgs,0)*price_per_50kg/50.0 ELSE 0 END) total_value
   FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1 HAVING SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END)>0 ORDER BY total_qty DESC,total_value DESC";
   $q=$db->prepare($sql);$q->execute(['f'=>$f,'t'=>$t]);return$q->fetchAll();}
- function top5c($rows,$label){$top=array_slice($rows,0,5);$other=array_slice($rows,5);if($other){$a=['name'=>'Other ('.count($other).' '.$label.')','total_qty'=>0,'total_value'=>0,'_other'=>1];foreach($other as$r){$a['total_qty']+=(float)$r['total_qty'];$a['total_value']+=(float)$r['total_value'];}$top[]=$a;}return$top;}
- $buyersCombined=top5c(clean_rank($db,$from,$to,'buyer'),'buyers');$amcosCombined=top5c(clean_rank($db,$from,$to,'seller'),'sellers');
+ function top15c($rows,$label){$top=array_slice($rows,0,15);$other=array_slice($rows,15);if($other){$a=['name'=>'Other ('.count($other).' '.$label.')','total_qty'=>0,'total_value'=>0,'_other'=>1];foreach($other as$r){$a['total_qty']+=(float)$r['total_qty'];$a['total_value']+=(float)$r['total_value'];}$top[]=$a;}return$top;}
+ $buyersCombined=top15c(clean_rank($db,$from,$to,'buyer'),'buyers');$amcosCombined=top15c(clean_rank($db,$from,$to,'seller'),'sellers');
  $q=$db->prepare("SELECT auction_no,MIN(auction_date) auction_date,SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END) qty,
  CASE WHEN SUM(CASE WHEN $valid THEN n_kgs ELSE 0 END)>0 THEN SUM(CASE WHEN $valid THEN n_kgs*price_per_50kg ELSE 0 END)/SUM(CASE WHEN $valid THEN n_kgs ELSE 0 END) END avg_price
  FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY auction_no ORDER BY MIN(auction_date),CASE WHEN auction_no ~ '^[0-9]+$' THEN auction_no::int ELSE NULL END NULLS LAST,auction_no");
  $q->execute(['f'=>$from,'t'=>$to]);$auctionTrend=$q->fetchAll();
- $dashboardTitle='Clean Auction — Season Performance';$dashboardSub='Clean coffee auction analytical summary';$priceUnit='USD/50kg';$rank2='Top 5 Sellers';$rank2First='Seller';
+ $dashboardTitle='Clean Auction — Season Performance';$dashboardSub='Clean coffee auction analytical summary';$priceUnit='USD/50kg';$rank2='Top 15 Sellers';$rank2First='Seller';
 }else{
  require_once __DIR__.'/kagera_database.php';ensure_kagera_table();ensure_kagera_catalogue_table();$db=kagera_db();
  function season_bounds($s){if(!preg_match('/^(\d{4})\/(\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-06-01',$m[2].'-05-31'];}
@@ -496,11 +496,11 @@ if($display==='clean'){
  $avgPrice=$grandSold>0?$grandValue/$grandSold:0;
  $soldPct=pct($grandSold,$offered);
  function kr($db,$f,$t,$col){$case=coffee_case_sql();$sql="SELECT COALESCE(NULLIF(BTRIM($col),''),'Unspecified') name,SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) cherry_qty,SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) clean_qty,SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END) total_qty,SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END) total_value FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t AND $case IS NOT NULL GROUP BY 1 HAVING SUM(CASE WHEN $case IS NOT NULL THEN COALESCE(kgs,0) ELSE 0 END)>0 ORDER BY total_qty DESC,total_value DESC";$q=$db->prepare($sql);$q->execute(['f'=>$f,'t'=>$t]);return$q->fetchAll();}
- function top5k($rows,$label){$top=array_slice($rows,0,5);$o=array_slice($rows,5);if($o){$a=['name'=>'Other ('.count($o).' '.$label.')','cherry_qty'=>0,'clean_qty'=>0,'total_qty'=>0,'total_value'=>0,'_other'=>1];foreach($o as$r)foreach(['cherry_qty','clean_qty','total_qty','total_value']as$k)$a[$k]+=(float)$r[$k];$top[]=$a;}return$top;}
- $buyersCombined=top5k(kr($db,$from,$to,'buyer'),'buyers');$amcosCombined=top5k(kr($db,$from,$to,'warehouse'),'AMCOS / warehouses');
+ function top15k($rows,$label){$top=array_slice($rows,0,15);$o=array_slice($rows,15);if($o){$a=['name'=>'Other ('.count($o).' '.$label.')','cherry_qty'=>0,'clean_qty'=>0,'total_qty'=>0,'total_value'=>0,'_other'=>1];foreach($o as$r)foreach(['cherry_qty','clean_qty','total_qty','total_value']as$k)$a[$k]+=(float)$r[$k];$top[]=$a;}return$top;}
+ $buyersCombined=top15k(kr($db,$from,$to,'buyer'),'buyers');$amcosCombined=top15k(kr($db,$from,$to,'warehouse'),'AMCOS / warehouses');
  $q=$db->prepare("SELECT auction_no,MIN(auction_date) auction_date,SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) dry_qty,SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) clean_qty,CASE WHEN SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END)>0 THEN SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END)/SUM(CASE WHEN $case='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) END dry_avg_price,CASE WHEN SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END)>0 THEN SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END)/SUM(CASE WHEN $case='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) END clean_avg_price FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t AND $case IS NOT NULL GROUP BY auction_no ORDER BY CASE WHEN auction_no ~ '^[0-9]+$' THEN auction_no::int ELSE NULL END,auction_no");
  $q->execute(['f'=>$from,'t'=>$to]);$auctionTrend=$q->fetchAll();
- $dashboardTitle='Kagera Auction — Season Performance';$dashboardSub='Compact analytical summary';$priceUnit='TZS/kg';$rank2='Top 5 AMCOS / Warehouses';$rank2First='AMCOS / Warehouse';
+ $dashboardTitle='Kagera Auction — Season Performance';$dashboardSub='Compact analytical summary';$priceUnit='TZS/kg';$rank2='Top 15 AMCOS / Warehouses';$rank2First='AMCOS / Warehouse';
 }
 
 function farm_display_name(string $name):string{
@@ -1368,6 +1368,89 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
  .auction-summary-kpis .metric{border-right:0;border-bottom:1px solid #eee7e2}
 }
 </style>
+
+<style id="auction-layout-final-responsive">
+/* Compact season/auction/period controls: one row when there is room. */
+.summary-period-toolbar{
+ display:grid!important;grid-template-columns:max-content max-content minmax(0,1fr);
+ align-items:center!important;column-gap:clamp(10px,1.5vw,20px)!important;
+ row-gap:7px!important;padding:8px 12px!important;min-width:0;
+}
+.summary-period-caption{min-width:0;gap:1px!important}
+.summary-period-dates{white-space:normal!important;line-height:1.2}
+.summary-toolbar-stat{min-width:0!important;padding:0 0 0 12px!important}
+.summary-period-toolbar .tc-period-controls{
+ display:flex!important;flex:0 1 auto!important;flex-wrap:nowrap!important;
+ align-items:center!important;justify-content:flex-end!important;
+ margin:0!important;width:auto!important;min-width:0!important;
+ gap:clamp(5px,.7vw,10px)!important;
+}
+.summary-period-toolbar .tc-period-controls label{flex:0 0 auto;white-space:nowrap}
+.summary-period-toolbar .tc-period-controls select{
+ box-sizing:border-box;min-width:0!important;max-width:none!important;width:auto!important;
+ flex:0 1 135px;height:31px!important;padding:4px 24px 4px 8px!important;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.summary-period-toolbar .tc-period-controls select[name="summary_period_value"]{
+ flex:1 1 150px;min-width:110px!important;max-width:220px!important;
+}
+.auction-summary-kpis{
+ display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+ gap:8px!important;min-width:0!important;margin-bottom:8px!important;
+}
+.auction-summary-kpis>.metric-group{
+ display:grid!important;grid-column:auto!important;
+ grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,.9fr)!important;
+ width:auto!important;min-width:0!important;gap:0!important;
+}
+.auction-summary-kpis .metric{
+ padding:7px clamp(5px,.7vw,11px)!important;
+ display:flex;flex-direction:column;justify-content:center;
+ min-width:0!important;overflow:visible!important;
+}
+.auction-summary-kpis .metric .m-label{font-size:clamp(9px,.85vw,11px)!important;line-height:1.2}
+.auction-summary-kpis .metric strong{
+ font-size:clamp(11px,1.05vw,17px)!important;
+ line-height:1.3!important;overflow-wrap:anywhere;word-break:normal;
+}
+.auction-summary-kpis .metric small{font-size:10px!important;line-height:1.2}
+.rank-panel-actions{display:flex;align-items:center;gap:6px;min-width:0}
+.rank-panel-actions>span{font-size:10px;white-space:nowrap}
+.rank-export-button{
+ cursor:pointer;border:1px solid rgba(255,255,255,.38);background:rgba(255,255,255,.1);
+ color:#fff;border-radius:5px;padding:4px 7px;font-size:10px;
+ font-weight:700;line-height:1;white-space:nowrap;
+}
+.rank-export-button:hover,.rank-export-button:focus-visible{background:rgba(255,255,255,.24)}
+.rank-export-panel .panel-head{height:auto!important;min-height:34px!important;flex:0 0 auto!important;gap:6px;flex-wrap:wrap;padding:5px 9px!important}
+.rank-export-panel .panel-head strong{font-size:11px}
+@media(max-width:850px){
+ .summary-period-toolbar{grid-template-columns:max-content max-content minmax(0,1fr)!important}
+ .summary-period-toolbar .tc-period-controls{grid-column:1/-1;justify-content:flex-start!important}
+ .summary-period-toolbar .tc-period-controls select[name="summary_period_value"]{flex:0 1 230px;max-width:230px!important}
+}
+@media(max-width:800px){
+ .auction-summary-kpis{grid-template-columns:minmax(0,1fr)!important}
+ .auction-summary-kpis>.metric-group{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,.9fr)!important}
+ .auction-summary-kpis .metric strong{font-size:clamp(13px,2.2vw,17px)!important}
+}
+@media(max-width:520px){
+ .summary-period-toolbar{grid-template-columns:minmax(0,1fr) max-content!important;column-gap:10px!important}
+ .summary-period-toolbar .tc-period-controls{grid-column:1/-1;display:grid!important;grid-template-columns:auto minmax(0,1fr)!important;gap:5px 8px!important}
+ .summary-period-toolbar .tc-period-controls select,.summary-period-toolbar .tc-period-controls select[name="summary_period_value"]{width:100%!important;max-width:none!important;min-width:0!important}
+ .summary-toolbar-stat{padding-left:10px!important}
+ .auction-summary-kpis>.metric-group{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+ .auction-summary-kpis .metric{padding:7px 5px!important;border-bottom:0!important}
+ .auction-summary-kpis .metric:last-child{grid-column:auto!important}
+ .auction-summary-kpis .metric strong{font-size:clamp(11px,3vw,14px)!important}
+ .rank-panel-actions>span{display:none}
+}
+@media(max-width:350px){
+ .auction-summary-kpis>.metric-group{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .auction-summary-kpis .metric:last-child{grid-column:1/-1!important;border-top:1px solid #eee7e2}
+ .auction-summary-kpis .metric strong{font-size:13px!important}
+}
+</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1629,8 +1712,8 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
  <?php endforeach;endif;?>
  </div>
  <div class="analytics">
- <?php foreach([['Top 5 Buyers',$buyersCombined,'Buyer'],[$rank2,$amcosCombined,$rank2First]] as[$heading,$rows,$firstLabel]):?>
- <section class="panel"><div class="panel-head"><strong><?=$heading?></strong><span>Ranked by sold quantity</span></div><div class="table-box"><table>
+ <?php foreach([['Top 15 Buyers',$buyersCombined,'Buyer'],[$rank2,$amcosCombined,$rank2First]] as[$heading,$rows,$firstLabel]):?>
+ <section class="panel rank-export-panel"><div class="panel-head"><strong><?=$heading?></strong><div class="rank-panel-actions"><span>Ranked by sold quantity</span><button type="button" class="rank-export-button" aria-label="Download <?=htmlspecialchars($heading,ENT_QUOTES)?> as Excel" title="Download Excel (.xlsx)">↓ Excel</button><button type="button" class="rank-export-button rank-csv-button" aria-label="Download <?=htmlspecialchars($heading,ENT_QUOTES)?> as CSV" title="Download CSV">CSV</button></div></div><div class="table-box"><table>
  <?php if($display==='clean'):?>
  <thead><tr><th><?=$firstLabel?></th><th>Sold Qty<br>(kg)</th><th>Value<br>(USD)</th><th>Share<br>(%)</th></tr></thead><tbody>
  <?php if(!$rows):?><tr><td colspan="4" class="empty">No sold data for this season</td></tr><?php endif;foreach($rows as$i=>$r):?><tr><td title="<?=htmlspecialchars($r['name'])?>"><?php if(empty($r['_other'])):?><span class="rank"><?=$i+1?></span><?php endif;?><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['total_qty'],2)?></td><td><?=nf($r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?></td></tr><?php endforeach;?></tbody><tfoot><tr><td>Season Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot>
@@ -1653,6 +1736,34 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+<script id="auction-ranking-downloads">
+(function(){
+ function filename(s){return String(s||'Ranking').replace(/[^a-z0-9_-]+/gi,'_').replace(/^_+|_+$/g,'').slice(0,80)}
+ function quote(v){let str=String(v??'');if(/^[=+@\-\t\r]/.test(str))str="'"+str;return '"'+str.replace(/"/g,'""')+'"'}
+ document.querySelectorAll('.rank-export-panel').forEach(panel=>{
+  const table=panel.querySelector('table');
+  const heading=panel.querySelector('.panel-head strong')?.textContent?.trim()||'Ranking';
+  const season=<?=json_encode($season)?>;
+  const period=<?=json_encode($summaryPeriodValue)?>;
+  const base=filename(<?=json_encode($display)?>+'_'+heading+'_'+season+'_'+period);
+  function rows(){return [...table.rows].map(row=>[...row.cells].map(cell=>{const copy=cell.cloneNode(true);copy.querySelectorAll('.rank').forEach(el=>el.remove());return copy.textContent.trim().replace(/\s+/g,' ')}))}
+  panel.querySelector('.rank-export-button:not(.rank-csv-button)')?.addEventListener('click',()=>{
+   if(!window.XLSX){alert('Excel export library is unavailable. Please use CSV.');return}
+   const data=rows(), wb=XLSX.utils.book_new(), ws=XLSX.utils.aoa_to_sheet(data);
+   ws['!cols']=data[0].map((_,i)=>({wch:Math.min(48,Math.max(15,...data.map(r=>String(r[i]||'').length)))}));
+   XLSX.utils.book_append_sheet(wb,ws,'Top 15');
+   XLSX.writeFile(wb,base+'.xlsx');
+  });
+  panel.querySelector('.rank-csv-button')?.addEventListener('click',()=>{
+   const csv='\uFEFF'+rows().map(r=>r.map(quote).join(',')).join('\r\n');
+   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+   const a=document.createElement('a');a.href=url;a.download=base+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+  });
+ });
+})();
+</script>
+
 <script>
 (function(){
  const sel=document.getElementById('tcAnalysisType'),box=document.getElementById('tcAnalysisTable'),
