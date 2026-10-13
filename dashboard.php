@@ -65,6 +65,26 @@ if(($_GET['action']??'')==='save_certified_coffee'){
 $totalCleanView=$_GET['totalclean_view']??'summary';
 if(!in_array($totalCleanView,['summary','analysis'],true))$totalCleanView='summary';
 
+
+function dashboard_summary_period(string $season,string $start,string $end):array {
+    $type=(string)($_GET['summary_period']??'monthly');
+    if(!in_array($type,['monthly','quarterly'],true))$type='monthly';
+    $periods=['all'=>['from'=>$start,'to'=>$end,'label'=>$type==='monthly'?'All Months':'All Quarters']];
+    $base=new DateTimeImmutable($start);
+    for($i=0;$i<($type==='monthly'?12:4);$i++){
+        $offset=$type==='monthly'?$i:$i*3;
+        $count=$type==='monthly'?1:3;
+        $begin=$base->modify('+'.$offset.' months');
+        $finish=$begin->modify('+'.$count.' months')->modify('-1 day');
+        $key=($type==='monthly'?'m':'q').($i+1);
+        $label=$type==='monthly'?$begin->format('F Y'):'Q'.($i+1).' ('.$begin->format('M Y').' – '.$finish->format('M Y').')';
+        $periods[$key]=['from'=>$begin->format('Y-m-d'),'to'=>$finish->format('Y-m-d'),'label'=>$label];
+    }
+    $selected=(string)($_GET['summary_period_value']??'all');
+    if(!isset($periods[$selected]))$selected='all';
+    return [$type,$selected,$periods,$periods[$selected]['from'],$periods[$selected]['to']];
+}
+
 function nf($v,$dec=0){$v=(float)$v;$d=(abs($v-round($v))<0.000001)?0:$dec;return number_format($v,$d,'.',',');}
 function pct($a,$b){return $b>0?($a/$b*100):0;}
 /* Keep meaningful decimal digits, never display trailing fractional zeros. */
@@ -379,6 +399,8 @@ if($display==='direct'){
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM invoice_date)::int y,EXTRACT(MONTH FROM invoice_date)::int m FROM public.direct_sales WHERE invoice_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $summarySeasonFrom=$from;$summarySeasonTo=$to;
+ [$summaryPeriodType,$summaryPeriodValue,$summaryPeriods,$from,$to]=dashboard_summary_period($season,$from,$to);
  $channelCase="CASE WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('DE','DIRECT EXPORT') THEN 'Direct Export' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LS','LOCAL SALE') THEN 'Local Sale' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LR','LOCAL ROAST','LOCAL ROAST SALE','SLS') THEN 'Local Roast' ELSE NULL END";
  /* Local Sale dashboard quantity is ALWAYS Local Sale Balance. */
  $lsBalanceExpr="GREATEST(
@@ -413,6 +435,8 @@ if($display==='clean'){
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM auction_date)::int y,EXTRACT(MONTH FROM auction_date)::int m FROM public.clean_auction_results WHERE auction_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as $r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $summarySeasonFrom=$from;$summarySeasonTo=$to;
+ [$summaryPeriodType,$summaryPeriodValue,$summaryPeriods,$from,$to]=dashboard_summary_period($season,$from,$to);
  $sold="UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
  $valid="($sold AND price_per_50kg IS NOT NULL AND price_per_50kg>0)";
  $q=$db->prepare("SELECT COUNT(DISTINCT NULLIF(BTRIM(auction_no),'')) FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t");$q->execute(['f'=>$from,'t'=>$to]);$auctions=(int)$q->fetchColumn();
@@ -441,6 +465,8 @@ if($display==='clean'){
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM auction_date)::int y,EXTRACT(MONTH FROM auction_date)::int m FROM(SELECT auction_date FROM public.kagera_auction_results UNION ALL SELECT auction_date FROM public.kagera_auction_catalogue)d WHERE auction_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=6)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $summarySeasonFrom=$from;$summarySeasonTo=$to;
+ [$summaryPeriodType,$summaryPeriodValue,$summaryPeriods,$from,$to]=dashboard_summary_period($season,$from,$to);
  $summary=['Dry Cherry Coffee'=>['offered'=>0,'sold'=>0,'value'=>0,'avg'=>0,'pct'=>0],'Clean Coffee'=>['offered'=>0,'sold'=>0,'value'=>0,'avg'=>0,'pct'=>0]];$case=coffee_case_sql();
  $q=$db->prepare("SELECT $case type,SUM(COALESCE(kgs,0)) offered FROM public.kagera_auction_catalogue WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['f'=>$from,'t'=>$to]);foreach($q as$r)if(isset($summary[$r['type']]))$summary[$r['type']]['offered']=(float)$r['offered'];
  $q=$db->prepare("SELECT $case type,SUM(COALESCE(kgs,0)) sold,SUM(COALESCE(kgs,0)*COALESCE(price,0)) val FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1");$q->execute(['f'=>$from,'t'=>$to]);
@@ -1278,6 +1304,10 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
             <span><?=htmlspecialchars($dashboardSub)?></span>
         </div>
         <form class="season" method="get">
+            <?php if(in_array($display,['clean','kagera','direct'],true)):?>
+            <input type="hidden" name="summary_period" value="<?=htmlspecialchars($summaryPeriodType,ENT_QUOTES)?>">
+            <input type="hidden" name="summary_period_value" value="<?=htmlspecialchars($summaryPeriodValue,ENT_QUOTES)?>">
+            <?php endif;?>
             <label>Season</label>
             <select name="season" onchange="this.form.submit()"><?php foreach($seasons ?: [$season] as $s): ?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach ?></select>
             <label>Display</label>
@@ -1456,7 +1486,23 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 <?php endif; ?>
 <?php elseif($display==='direct'): ?>
 <div class="kpis direct-kpis">
- <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
+ <div class="kpi tc-season-kpi"><div class="tc-season-row">
+ <div><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></div></div>
+ <form class="tc-period-controls" method="get">
+  <input type="hidden" name="display" value="<?=htmlspecialchars($display,ENT_QUOTES)?>">
+  <input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>">
+  <label for="summaryPeriodType">Period</label>
+  <select id="summaryPeriodType" name="summary_period" onchange="this.form.elements.summary_period_value.value='all';this.form.submit()">
+   <option value="monthly" <?=$summaryPeriodType==='monthly'?'selected':''?>>Monthly</option>
+   <option value="quarterly" <?=$summaryPeriodType==='quarterly'?'selected':''?>>Quarterly</option>
+  </select>
+  <label for="summaryPeriodValue">Select period</label>
+  <select id="summaryPeriodValue" name="summary_period_value" onchange="this.form.submit()">
+   <?php foreach($summaryPeriods as $periodKey=>$period):?>
+   <option value="<?=htmlspecialchars($periodKey,ENT_QUOTES)?>" <?=$periodKey===$summaryPeriodValue?'selected':''?>><?=htmlspecialchars($period['label'])?></option>
+   <?php endforeach;?>
+  </select>
+ </form></div><div class="tc-selected-period">Showing <?=htmlspecialchars($summaryPeriods[$summaryPeriodValue]['label'])?> · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
  <?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?>
  <div class="metric-group <?=$ch==='Direct Export'?'dry':'clean'?>"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf($x['kgs'],2)?> kg</strong><small>Net weight</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Qty Share</span><strong><?=nf(pct($x['kgs'],$grandSold),2)?></strong><small>of total</small></div></div>
  <?php endforeach;?>
@@ -1477,7 +1523,23 @@ body.report-sticky-mode .dashboard>.sales-progress{position:sticky!important;top
 </tbody><tfoot><tr><td colspan="2">Grand Total</td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php elseif(in_array($display,['clean','kagera'],true)): ?>
     <div class="kpis">
- <div class="kpi"><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
+ <div class="kpi tc-season-kpi"><div class="tc-season-row">
+ <div><span class="label">Season</span><strong><?=htmlspecialchars($season)?></strong><div class="sub"><?=date('d M Y',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></div></div>
+ <form class="tc-period-controls" method="get">
+  <input type="hidden" name="display" value="<?=htmlspecialchars($display,ENT_QUOTES)?>">
+  <input type="hidden" name="season" value="<?=htmlspecialchars($season,ENT_QUOTES)?>">
+  <label for="summaryPeriodType">Period</label>
+  <select id="summaryPeriodType" name="summary_period" onchange="this.form.elements.summary_period_value.value='all';this.form.submit()">
+   <option value="monthly" <?=$summaryPeriodType==='monthly'?'selected':''?>>Monthly</option>
+   <option value="quarterly" <?=$summaryPeriodType==='quarterly'?'selected':''?>>Quarterly</option>
+  </select>
+  <label for="summaryPeriodValue">Select period</label>
+  <select id="summaryPeriodValue" name="summary_period_value" onchange="this.form.submit()">
+   <?php foreach($summaryPeriods as $periodKey=>$period):?>
+   <option value="<?=htmlspecialchars($periodKey,ENT_QUOTES)?>" <?=$periodKey===$summaryPeriodValue?'selected':''?>><?=htmlspecialchars($period['label'])?></option>
+   <?php endforeach;?>
+  </select>
+ </form></div><div class="tc-selected-period">Showing <?=htmlspecialchars($summaryPeriods[$summaryPeriodValue]['label'])?> · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></div></div>
  <div class="kpi"><span class="label">Auctions</span><strong><?=nf($auctions)?></strong><div class="sub">Held</div></div>
  <?php if($display==='clean'): ?>
  <div class="metric-group dry"><div class="metric"><span class="m-label coffee-name">Clean Coffee · Offered</span><strong><?=nf($offered)?> kg</strong><small>All lots</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($grandSold)?> kg</strong><small><?=nf($soldPct,2)?> of offered</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($avgPrice,2)?></strong><small><?=$priceUnit?></small></div></div>
