@@ -489,6 +489,18 @@ if($display==='clean'){
  $kageraCleanSold=(float)$summary['Clean Coffee']['sold'];
  $kageraCleanValue=(float)$summary['Clean Coffee']['value'];
 
+ /* Four-category Kagera sales summary: Grade identifies species, Grade2 processing. */
+ $kageraSalesTypes=['Robusta (Clean Coffee)','Arabica (Clean Coffee)','Robusta (Dry Cherry)','Arabica (Dry Cherry)'];
+ $kageraSalesSummary=array_fill_keys($kageraSalesTypes,['offered'=>0.0,'sold'=>0.0,'value'=>0.0]);
+ $kageraSalesUnclassified=['offered'=>0.0,'sold'=>0.0,'value'=>0.0];
+ $species="CASE WHEN LOWER(COALESCE(grade,'')) LIKE '%robusta%' THEN 'Robusta' WHEN LOWER(COALESCE(grade,'')) LIKE '%arabica%' THEN 'Arabica' ELSE NULL END";
+ $process="CASE WHEN LOWER(COALESCE(grade2,'')) LIKE '%dry cherry%' THEN 'Dry Cherry' WHEN LOWER(COALESCE(grade2,'')) LIKE '%clean%' THEN 'Clean Coffee' ELSE NULL END";
+ $group="CASE WHEN $species IS NOT NULL AND $process IS NOT NULL THEN ($species || ' (' || $process || ')') ELSE 'Unclassified' END";
+ $q=$db->prepare("SELECT $group coffee_type, SUM(COALESCE(kgs,0)) kg FROM public.kagera_auction_catalogue WHERE auction_date BETWEEN :f AND :t GROUP BY 1");
+ $q->execute(['f'=>$from,'t'=>$to]);foreach($q as$r){$key=$r['coffee_type'];if(isset($kageraSalesSummary[$key]))$kageraSalesSummary[$key]['offered']+=(float)$r['kg'];else $kageraSalesUnclassified['offered']+=(float)$r['kg'];}
+ $q=$db->prepare("SELECT $group coffee_type, SUM(COALESCE(kgs,0)) kg, SUM(COALESCE(kgs,0)*COALESCE(price,0)) val FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1");
+ $q->execute(['f'=>$from,'t'=>$to]);foreach($q as$r){$key=$r['coffee_type'];if(isset($kageraSalesSummary[$key])){$kageraSalesSummary[$key]['sold']+=(float)$r['kg'];$kageraSalesSummary[$key]['value']+=(float)$r['val'];}else{$kageraSalesUnclassified['sold']+=(float)$r['kg'];$kageraSalesUnclassified['value']+=(float)$r['val'];}}
+ $kageraSalesTotals=['offered'=>array_sum(array_column($kageraSalesSummary,'offered'))+$kageraSalesUnclassified['offered'],'sold'=>array_sum(array_column($kageraSalesSummary,'sold'))+$kageraSalesUnclassified['sold'],'value'=>array_sum(array_column($kageraSalesSummary,'value'))+$kageraSalesUnclassified['value']];
  $q=$db->prepare("SELECT COUNT(DISTINCT NULLIF(BTRIM(auction_no),'')) FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t");$q->execute(['f'=>$from,'t'=>$to]);$auctions=(int)$q->fetchColumn();
  $offered=$kageraDryOffered+$kageraCleanOffered;
  $grandSold=$kageraDrySold+$kageraCleanSold;
@@ -1488,6 +1500,15 @@ body:has(.rank-export-panel){height:auto!important;min-height:100vh!important;ov
  .auction-summary-kpis>.metric-group:has(.metric:nth-child(4)) .metric:last-child{grid-column:auto!important;border-top:0!important}
 }
 </style>
+<style id="kagera-dashboard-view-styles">
+.kagera-sales-summary-panel{background:#fff;border:1px solid #e7ddd8;border-radius:10px;box-shadow:0 2px 7px rgba(62,39,35,.04);padding:12px;margin:8px 0;min-width:0}
+.kagera-summary-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:9px}.kagera-summary-heading strong{display:block;color:#483027;font-size:14px}.kagera-summary-heading span{display:block;color:#847268;font-size:11px;margin-top:3px}.kagera-summary-actions{display:flex;gap:5px;flex-wrap:wrap}.kagera-summary-actions button{background:#f7f0e9;border:1px solid #daccc0;border-radius:6px;color:#52392e;padding:6px 10px;font-weight:700;cursor:pointer}.kagera-summary-actions button:hover{background:#e9ded3}.kagera-summary-scroll{overflow-x:auto}.kagera-sales-summary-panel table{width:100%;border-collapse:collapse;min-width:660px;font-size:12px}.kagera-sales-summary-panel th{background:#51382c;color:#fff;text-align:right;padding:10px 9px}.kagera-sales-summary-panel th:first-child,.kagera-sales-summary-panel td:first-child{text-align:left}.kagera-sales-summary-panel td{padding:9px;border-bottom:1px solid #ede6e0;text-align:right;font-variant-numeric:tabular-nums}.kagera-sales-summary-panel tbody tr:nth-child(even){background:#faf7f4}.kagera-sales-summary-panel tfoot td{font-weight:800;background:#f0e7df;border-top:2px solid #8b6b56}
+body:has(#kageraSalesSummaryPanel){height:auto!important;min-height:100vh!important;overflow-y:auto!important}.dashboard:has(#kageraSalesSummaryPanel){height:auto!important;min-height:100vh!important;grid-template-rows:none!important;grid-auto-rows:auto!important;overflow:visible!important;align-content:start!important}
+body:has(#kageraSalesSummaryPanel) #kageraRankingPanels[hidden],body:has(#kageraSalesSummaryPanel) #kageraTrendPanel[hidden],#kageraSalesSummaryPanel[hidden]{display:none!important}
+body:has(#kageraSalesSummaryPanel) #kageraRankingPanels{height:auto!important;min-height:0!important;grid-template-rows:auto!important}
+#kageraDashboardView{min-width:180px}.summary-period-toolbar:has(#kageraDashboardView) .tc-period-controls{flex-wrap:wrap}
+@media(max-width:720px){.kagera-sales-summary-panel{padding:9px}.kagera-summary-heading{align-items:flex-start}.summary-period-toolbar:has(#kageraDashboardView) .tc-period-controls{display:flex!important;flex-wrap:wrap!important}.summary-period-toolbar:has(#kageraDashboardView) .tc-period-controls select{flex:1 1 145px!important}}
+</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1739,6 +1760,12 @@ body:has(.rank-export-panel){height:auto!important;min-height:100vh!important;ov
    <option value="<?=htmlspecialchars($periodKey,ENT_QUOTES)?>" <?=$periodKey===$summaryPeriodValue?'selected':''?>><?=htmlspecialchars($period['label'])?></option>
    <?php endforeach;?>
   </select>
+  <?php if($display==='kagera'):?>
+  <label for="kageraDashboardView">View</label>
+  <select id="kageraDashboardView" aria-label="Kagera dashboard report" onchange="window.setKageraDashboardView(this.value)">
+   <option value="summary">Sales Summary</option><option value="rankings">Top Buyers &amp; Sellers</option><option value="trend">Performance Trend</option>
+  </select>
+  <?php endif;?>
  </form></div>
     <div class="kpis auction-summary-kpis">
  <?php if($display==='clean'): ?>
@@ -1748,8 +1775,16 @@ body:has(.rank-export-panel){height:auto!important;min-height:100vh!important;ov
  <div class="metric-group <?=$cls?>"><div class="metric"><span class="m-label coffee-name"><?=$type==='Dry Cherry Coffee'?'Dry Cherry':'Clean Coffee'?> · Offered</span><strong><?=nf($x['offered'])?> kg</strong><small>Catalogue</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($x['sold'])?> kg</strong><small><?=nf($x['pct'],2)?></small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small><?=$priceUnit?></small></div><div class="metric"><span class="m-label">Sales Value</span><strong><?=nf($x['value'],2)?></strong><small>TZS</small></div></div>
  <?php endforeach;endif;?>
  </div>
- <div class="analytics">
- <?php foreach([['Top 15 Buyers',$buyersCombined,'Buyer',array_slice($allBuyers,15)],[$rank2,$amcosCombined,$rank2First,array_slice($allSellers,15)]] as[$heading,$rows,$firstLabel,$otherRows]):?>
+ <?php if($display==='kagera'):?>
+ <section class="kagera-sales-summary-panel" id="kageraSalesSummaryPanel" aria-label="Kagera Sales Summary">
+  <div class="kagera-summary-heading"><div><strong>Sales Summary by Coffee Type</strong><span>Catalogue offered · auction results sold · quantities in metric tonnes</span></div><div class="kagera-summary-actions"><button type="button" data-kagera-export="xlsx">Excel</button><button type="button" data-kagera-export="doc">Word</button><button type="button" data-kagera-export="pdf">PDF</button></div></div>
+  <div class="kagera-summary-scroll"><table id="kageraSalesSummaryTable"><thead><tr><th>Coffee Type</th><th>Quantity Offered (MT)</th><th>Quantity Sold (MT)</th><th>Value (TZS)</th><th>% Share</th></tr></thead><tbody>
+  <?php foreach($kageraSalesSummary as $coffeeType=>$fig):?><tr><td><?=htmlspecialchars($coffeeType)?></td><td><?=nf_clean($fig['offered']/1000,3)?></td><td><?=nf_clean($fig['sold']/1000,3)?></td><td><?=nf_clean($fig['value'],2)?></td><td><?=nf_clean(pct($fig['sold'],$kageraSalesTotals['sold']),2)?>%</td></tr><?php endforeach;?>
+  <?php if(array_sum($kageraSalesUnclassified)>0):?><tr><td>Unclassified</td><td><?=nf_clean($kageraSalesUnclassified['offered']/1000,3)?></td><td><?=nf_clean($kageraSalesUnclassified['sold']/1000,3)?></td><td><?=nf_clean($kageraSalesUnclassified['value'],2)?></td><td><?=nf_clean(pct($kageraSalesUnclassified['sold'],$kageraSalesTotals['sold']),2)?>%</td></tr><?php endif;?></tbody><tfoot><tr><td>Grand Total</td><td><?=nf_clean($kageraSalesTotals['offered']/1000,3)?></td><td><?=nf_clean($kageraSalesTotals['sold']/1000,3)?></td><td><?=nf_clean($kageraSalesTotals['value'],2)?></td><td><?=$kageraSalesTotals['sold']>0?'100%':'0%'?></td></tr></tfoot></table></div>
+ </section>
+ <?php endif;?>
+ <div class="analytics" <?=$display==='kagera'?'id="kageraRankingPanels"':''?>>
+ <?php foreach([['Top 15 Buyers' ,$buyersCombined,'Buyer',array_slice($allBuyers,15)],[$rank2,$amcosCombined,$rank2First,array_slice($allSellers,15)]] as[$heading,$rows,$firstLabel,$otherRows]):?>
  <section class="panel rank-export-panel"><div class="panel-head"><strong><?=$heading?></strong><div class="rank-panel-actions"><span>Ranked by sold quantity</span><button type="button" class="rank-export-button" aria-label="Download <?=htmlspecialchars($heading,ENT_QUOTES)?> as Excel" title="Download Excel (.xlsx)">Excel</button><button type="button" class="rank-export-button rank-word-button" title="Download Word document">Word</button><button type="button" class="rank-export-button rank-pdf-button" title="Download PDF document">PDF</button></div></div><div class="table-box"><table>
  <?php if($display==='clean'):?>
  <thead><tr><th><?=$firstLabel?></th><th>Sold Qty<br>(kg)</th><th>Value<br>(USD)</th><th>Share<br>(%)</th></tr></thead><tbody>
@@ -1760,7 +1795,7 @@ body:has(.rank-export-panel){height:auto!important;min-height:100vh!important;ov
  <?php if(!$rows):?><tr><td colspan="6" class="empty">No sales data for this season</td></tr><?php endif;foreach($rows as$i=>$r):?><tr><td title="<?=htmlspecialchars($r['name'])?>"><?php if(empty($r['_other'])):?><span class="rank"><?=$i+1?></span><?php endif;?><?php if(!empty($r['_other'])):?><button type="button" class="ranking-other-toggle" aria-expanded="false" title="Show remaining ranked entries"><span class="ranking-other-chevron">▸</span> <?=htmlspecialchars($r['name'])?> <span class="ranking-other-hint">Show details</span></button><?php else:?><?=htmlspecialchars($r['name'])?><?php endif;?></td><td><?=nf($r['cherry_qty'],2)?></td><td><?=nf($r['clean_qty'],2)?></td><td><?=nf($r['total_qty'],2)?></td><td><?=nf($r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?></td></tr><?php endforeach;?>
  <?php foreach($otherRows as $j=>$r):?><tr class="ranking-other-detail" hidden><td><span class="rank"><?=16+$j?></span><?=htmlspecialchars($r['name'])?></td><td><?=nf($r['cherry_qty'],2)?></td><td><?=nf($r['clean_qty'],2)?></td><td><?=nf($r['total_qty'],2)?></td><td><?=nf($r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?></td></tr><?php endforeach;?></tbody><tfoot><tr><td>Season Grand Total</td><td><?=nf($kageraDrySold,2)?></td><td><?=nf($kageraCleanSold,2)?></td><td><?=nf($grandSold,2)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot>
  <?php endif;?></table></div></section><?php endforeach;?></div>
-<section class="trend-panel">
+<section class="trend-panel" <?=$display==='kagera'?'id="kageraTrendPanel"':''?>>
  <div class="trend-head">
   <strong>Auction Performance Trend</strong>
   <span><?=$display==='clean'?'Clean Coffee · quantity sold & weighted average price':'Dry Cherry and Clean Coffee · quantity sold & weighted average price'?></span>
@@ -1770,6 +1805,23 @@ body:has(.rank-export-panel){height:auto!important;min-height:100vh!important;ov
 </div>
 <?php endif; ?>
 
+<script id="kagera-dashboard-view-script">
+(function(){
+ const chooser=document.getElementById('kageraDashboardView'),summary=document.getElementById('kageraSalesSummaryPanel'),rank=document.getElementById('kageraRankingPanels'),trend=document.getElementById('kageraTrendPanel');if(!chooser||!summary||!rank||!trend)return;
+ window.setKageraDashboardView=function(view){if(!['summary','rankings','trend'].includes(view))view='summary';chooser.value=view;summary.hidden=view!=='summary';rank.hidden=view!=='rankings';trend.hidden=view!=='trend';try{sessionStorage.setItem('kagera_dashboard_view',view)}catch(e){}if(view==='trend')setTimeout(()=>window.dispatchEvent(new Event('resize')),60)};
+ let initial='summary';try{initial=sessionStorage.getItem('kagera_dashboard_view')||'summary'}catch(e){}window.setKageraDashboardView(initial);
+ const table=document.getElementById('kageraSalesSummaryTable');const rows=()=>Array.from(table.rows,tr=>Array.from(tr.cells,td=>td.textContent.trim()));
+ const season=<?=json_encode($season)?>,period=<?=json_encode($summaryPeriods[$summaryPeriodValue]['label'])?>,range=<?=json_encode($from.' to '.$to)?>;
+ const title='Kagera Auction - Sales Summary';const base='Kagera_Sales_Summary_'+season.replace('/','-')+'_'+<?=json_encode($summaryPeriodValue)?>;
+ const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+ summary.querySelectorAll('[data-kagera-export]').forEach(button=>button.addEventListener('click',()=>{
+ const type=button.dataset.kageraExport,data=rows();
+ if(type==='xlsx'){if(!window.XLSX){alert('Excel export library is unavailable');return}const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet([['TANZANIA COFFEE BOARD'],[title],['Season: '+season,'Period: '+period,'Dates: '+range],[],...data]);ws['!cols']=[{wch:29},{wch:25},{wch:22},{wch:24},{wch:14}];XLSX.utils.book_append_sheet(wb,ws,'Sales Summary');XLSX.writeFile(wb,base+'.xlsx');return}
+ if(type==='doc'){const html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Calibri,Arial;color:#483027}table{border-collapse:collapse;width:100%}th{background:#51382c;color:white}th,td{border:1px solid #ddd0c4;padding:7px;text-align:right}th:first-child,td:first-child{text-align:left}tr:last-child{background:#f0e7df;font-weight:bold}</style></head><body><h3>TANZANIA COFFEE BOARD</h3><h2>'+esc(title)+'</h2><p>Season: '+esc(season)+' | '+esc(period)+' | '+esc(range)+'</p><table>'+data.map((r,i)=>'<tr>'+r.map(c=>'<'+(i?'td':'th')+'>'+esc(c)+'</'+(i?'td':'th')+'>').join('')+'</tr>').join('')+'</table></body></html>';const blob=new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=base+'.doc';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);return}
+ if(type==='pdf'){if(!window.jspdf?.jsPDF){alert('PDF export library is unavailable');return}const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});doc.setTextColor(72,48,39);doc.setFontSize(12);doc.text('TANZANIA COFFEE BOARD',12,13);doc.setFontSize(15);doc.text(title,12,22);doc.setFontSize(9);doc.text('Season: '+season+' | '+period+' | '+range,12,30);if(typeof doc.autoTable!=='function'){alert('PDF table export library is unavailable');return}doc.autoTable({head:[data[0]],body:data.slice(1),startY:36,theme:'grid',styles:{fontSize:9,cellPadding:3},headStyles:{fillColor:[81,56,44]},didParseCell:function(x){if(x.section==='body'&&x.row.index===data.length-2){x.cell.styles.fontStyle='bold';x.cell.styles.fillColor=[240,231,223]}}});doc.save(base+'.pdf')}
+ }));
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
