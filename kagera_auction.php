@@ -1907,6 +1907,51 @@ function handle_kagera_report()
     }
     unset($gradeGroup);
 
+    /* Four-category sales summary: Grade identifies species, Grade2 identifies
+       preparation. Preserve unmatched records as Other for reconciliation. */
+    $coffeeTypeGroups = [];
+    $classifyCoffee = static function($grade, $grade2) {
+        $text = strtolower(preg_replace('/[_\s]+/', ' ', trim((string)$grade . ' ' . (string)$grade2)));
+        $text = preg_replace('/\brobu\s*ta\b/', 'robusta', $text);
+        $species = preg_match('/\brobusta\b/', $text) ? 'Robusta' :
+            (preg_match('/\barabica\b/', $text) ? 'Arabica' : null);
+        $prep = preg_match('/\bclean\b/', $text) ? 'Clean Coffee' :
+            (preg_match('/\bdry\s*cherry\b|\bcherry\b/', $text) ? 'Dry Cherry' : null);
+        return $species && $prep ? "$species ($prep)" : 'Other / Unclassified';
+    };
+    foreach (['Robusta (Clean Coffee)', 'Arabica (Clean Coffee)',
+              'Robusta (Dry Cherry)', 'Arabica (Dry Cherry)'] as $name) {
+        $coffeeTypeGroups[$name] = ['kilos_offered'=>0, 'kilos_sold'=>0, 'total_value'=>0];
+    }
+    $summarySources = [
+        ['table'=>'public.kagera_auction_catalogue', 'where'=>$catalogueWhere,
+         'params'=>$catalogueParams, 'kind'=>'offered'],
+        ['table'=>'public.kagera_auction_results', 'where'=>$resultWhere,
+         'params'=>$resultParams, 'kind'=>'sold']
+    ];
+    foreach ($summarySources as $source) {
+        $valueExpr = $source['kind'] === 'sold'
+            ? 'COALESCE(SUM(kgs * COALESCE(price, 0)), 0)'
+            : '0';
+        $sql = "SELECT COALESCE(grade, '') AS grade, COALESCE(grade2, '') AS grade2, "
+            . 'COALESCE(SUM(kgs), 0) AS quantity, ' . $valueExpr . ' AS total_value FROM '
+            . $source['table'] . ($source['where'] ? ' WHERE ' . implode(' AND ', $source['where']) : '')
+            . " GROUP BY COALESCE(grade, ''), COALESCE(grade2, '')";
+        $statement = $db->prepare($sql);
+        $statement->execute($source['params']);
+        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $record) {
+            $key = $classifyCoffee($record['grade'], $record['grade2']);
+            if (!isset($coffeeTypeGroups[$key])) {
+                $coffeeTypeGroups[$key] = ['kilos_offered'=>0, 'kilos_sold'=>0, 'total_value'=>0];
+            }
+            $field = $source['kind'] === 'sold' ? 'kilos_sold' : 'kilos_offered';
+            $coffeeTypeGroups[$key][$field] += (float)$record['quantity'];
+            if ($source['kind'] === 'sold') {
+                $coffeeTypeGroups[$key]['total_value'] += (float)$record['total_value'];
+            }
+        }
+    }
+
     /*
      * Auction date for Held On:
      * Always obtain it from Auction Results (auction_date) for the
@@ -1997,7 +2042,8 @@ function handle_kagera_report()
         'auction_no' => $auction,
         'held_on' => $heldOn,
         'groups' => $groups,
-        'grade_groups' => $gradeGroups
+        'grade_groups' => $gradeGroups,
+        'coffee_type_groups' => $coffeeTypeGroups
     ], 200);
 }
 
@@ -5285,95 +5331,18 @@ async function kageraShowReport()
             const body =
                 document.getElementById("kageraSalesSummaryBody");
 
-            // Use the actual Grade values: Arabica, Robusta, Arabica Certified,
-            // and any other Grade present in the selected auction.
-            const rawGradeGroups = result.data?.grade_groups || {};
-            const gradeGroups = {};
-
-            Object.keys(rawGradeGroups).forEach(function(rawGrade) {
-                const normalizedGrade = String(rawGrade || "")
-                    .trim()
-                    // Ignore underscores: "_" and whitespace are equivalent.
-                    .replace(/[\\s_]+/g, "_")
-                    .replace(/^_+|_+$/g, "")
-                    .split("_")
-                    .filter(Boolean)
-                    .reduce(function(parts, part, index, allParts) {
-                        const p = part.toLowerCase();
-                        if (p === "robu" && allParts[index + 1] &&
-                            allParts[index + 1].toLowerCase() === "ta") {
-                            parts.push("Robusta");
-                            allParts[index + 1] = "";
-                        } else if (p !== "") {
-                            parts.push(part);
-                        }
-                        return parts;
-                    }, [])
-                    .map(function(part) {
-                        const p = part.toLowerCase();
-                        if (p === "arabica") return "Arabica";
-                        if (p === "robusta" || p === "robu" || p === "robusta") return "Robusta";
-                        if (p === "clean") return "Clean";
-                        if (p === "certified") return "Certified";
-                        return p.charAt(0).toUpperCase() + p.slice(1);
-                    })
-                    .join("_");
-
-                if (!normalizedGrade) return;
-
-                if (!gradeGroups[normalizedGrade]) {
-                    gradeGroups[normalizedGrade] = {
-                        kilos_offered: 0,
-                        kilos_sold: 0,
-                        total_value: 0,
-                        percentage_sold: 0
-                    };
-                }
-
-                const source = rawGradeGroups[rawGrade] || {};
-                gradeGroups[normalizedGrade].kilos_offered +=
-                    kageraNumber(source.kilos_offered);
-                gradeGroups[normalizedGrade].kilos_sold +=
-                    kageraNumber(source.kilos_sold);
-                gradeGroups[normalizedGrade].total_value +=
-                    kageraNumber(source.total_value);
+            // Server groups Grade + Grade2; both auction datasets use identical filters.
+            const summary = result.data?.coffee_type_groups || {};
+            const names = ["Robusta (Clean Coffee)", "Arabica (Clean Coffee)",
+                "Robusta (Dry Cherry)", "Arabica (Dry Cherry)"];
+            Object.keys(summary).forEach(name => {
+                if (!names.includes(name)) names.push(name);
             });
-
-            Object.keys(gradeGroups).forEach(function(grade) {
-                const g = gradeGroups[grade];
-                g.percentage_sold = g.kilos_offered > 0
-                    ? (g.kilos_sold / g.kilos_offered) * 100
-                    : 0;
-            });
-
-            // Group by the Grade field; normalize coffee type and preparation.
-            // Preserve any unrecognized grades separately rather than losing totals.
-            const categories = [
-                "Robusta (Clean Coffee)", "Arabica (Clean Coffee)",
-                "Robusta (Dry Cherry)", "Arabica (Dry Cherry)"
-            ];
-            const summary = Object.fromEntries(categories.map(k => [k, {
-                kilos_offered:0, kilos_sold:0, total_value:0
-            }]));
-            Object.entries(gradeGroups).forEach(([grade, g]) => {
-                const name = grade.replace(/_/g, " ").toLowerCase();
-                const species = /robusta|robu ta/.test(name) ? "Robusta" :
-                                /arabica/.test(name) ? "Arabica" : null;
-                const preparation = /clean/.test(name) ? "Clean Coffee" :
-                                    /dry|cherry/.test(name) ? "Dry Cherry" : null;
-                const key = species && preparation
-                    ? `${species} (${preparation})`
-                    : `Other: ${grade.replace(/_/g, " ")}`;
-                if (!summary[key]) summary[key] = {kilos_offered:0,kilos_sold:0,total_value:0};
-                summary[key].kilos_offered += kageraNumber(g.kilos_offered);
-                summary[key].kilos_sold += kageraNumber(g.kilos_sold);
-                summary[key].total_value += kageraNumber(g.total_value);
-            });
-            const entries = Object.entries(summary);
-            const totalOffered = entries.reduce((n,[,g])=>n+g.kilos_offered,0);
-            const totalSold = entries.reduce((n,[,g])=>n+g.kilos_sold,0);
-            const totalValue = entries.reduce((n,[,g])=>n+g.total_value,0);
-            const mt = n => (n/1000).toLocaleString("en-US", {
+            const entries = names.map(name => [name, summary[name] || {}]);
+            const totalOffered = entries.reduce((n,[,g]) => n + kageraNumber(g.kilos_offered), 0);
+            const totalSold = entries.reduce((n,[,g]) => n + kageraNumber(g.kilos_sold), 0);
+            const totalValue = entries.reduce((n,[,g]) => n + kageraNumber(g.total_value), 0);
+            const mt = n => (kageraNumber(n)/1000).toLocaleString("en-US", {
                 minimumFractionDigits:3, maximumFractionDigits:3
             });
             if (body) {
@@ -5381,8 +5350,8 @@ async function kageraShowReport()
                     "<td>" + escapeKageraHtml(name) + "</td>" +
                     "<td>" + mt(g.kilos_offered) + "</td>" +
                     "<td>" + mt(g.kilos_sold) + "</td>" +
-                    "<td>" + kageraReportMoney(g.total_value) + "</td>" +
-                    "<td>" + (totalSold ? 100*g.kilos_sold/totalSold : 0).toFixed(2) + "%</td>" +
+                    "<td>" + kageraReportMoney(g.total_value || 0) + "</td>" +
+                    "<td>" + (totalSold ? 100*kageraNumber(g.kilos_sold)/totalSold : 0).toFixed(2) + "%</td>" +
                     "</tr>").join("") +
                     '<tr class="kagera-high-low-total-row">' +
                     '<td>Grand Total</td><td>' + mt(totalOffered) +
