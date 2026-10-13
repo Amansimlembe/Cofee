@@ -1475,7 +1475,20 @@ body:has(.rank-export-panel){height:auto!important;min-height:100vh!important;ov
 .ranking-other-hint{font-size:10px;font-weight:500;color:#846b59;margin-left:5px}
 .ranking-other-detail{background:#fcf9f5}
 .ranking-other-detail td:first-child{padding-left:14px!important}
-</style></head>
+</style>
+<style id="kagera-four-metrics">
+/* Four equally accessible metrics per coffee type, without changing Clean Auction cards. */
+.auction-summary-kpis>.metric-group:has(.metric:nth-child(4)){grid-template-columns:repeat(4,minmax(0,1fr))!important}
+@media(max-width:700px){
+ .auction-summary-kpis>.metric-group:has(.metric:nth-child(4)){grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .auction-summary-kpis>.metric-group:has(.metric:nth-child(4)) .metric{border-bottom:1px solid #eee7e2}
+}
+@media(max-width:350px){
+ .auction-summary-kpis>.metric-group:has(.metric:nth-child(4)){grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .auction-summary-kpis>.metric-group:has(.metric:nth-child(4)) .metric:last-child{grid-column:auto!important;border-top:0!important}
+}
+</style>
+</head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
     <div class="topbar">
@@ -1732,7 +1745,7 @@ body:has(.rank-export-panel){height:auto!important;min-height:100vh!important;ov
  <div class="metric-group dry"><div class="metric"><span class="m-label coffee-name">Clean Coffee · Offered</span><strong><?=nf($offered)?> kg</strong><small>All lots</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($grandSold)?> kg</strong><small><?=nf($soldPct,2)?> of offered</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($avgPrice,2)?></strong><small><?=$priceUnit?></small></div></div>
  <div class="metric-group clean"><div class="metric"><span class="m-label coffee-name">Sales Value</span><strong><?=nf($grandValue,2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Unsold</span><strong><?=nf(max(0,$offered-$grandSold))?> kg</strong><small><?=nf(max(0,100-$soldPct),2)?></small></div><div class="metric"><span class="m-label">Sale Rate</span><strong><?=nf($soldPct,2)?></strong><small>Season</small></div></div>
  <?php else: foreach(['Dry Cherry Coffee','Clean Coffee'] as $type):$x=$summary[$type];$cls=$type==='Dry Cherry Coffee'?'dry':'clean'; ?>
- <div class="metric-group <?=$cls?>"><div class="metric"><span class="m-label coffee-name"><?=$type==='Dry Cherry Coffee'?'Dry Cherry':'Clean Coffee'?> · Offered</span><strong><?=nf($x['offered'])?> kg</strong><small>Catalogue</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($x['sold'])?> kg</strong><small><?=nf($x['pct'],2)?></small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small><?=$priceUnit?></small></div></div>
+ <div class="metric-group <?=$cls?>"><div class="metric"><span class="m-label coffee-name"><?=$type==='Dry Cherry Coffee'?'Dry Cherry':'Clean Coffee'?> · Offered</span><strong><?=nf($x['offered'])?> kg</strong><small>Catalogue</small></div><div class="metric"><span class="m-label">Sold</span><strong><?=nf($x['sold'])?> kg</strong><small><?=nf($x['pct'],2)?></small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small><?=$priceUnit?></small></div><div class="metric"><span class="m-label">Sales Value</span><strong><?=nf($x['value'],2)?></strong><small>TZS</small></div></div>
  <?php endforeach;endif;?>
  </div>
  <div class="analytics">
