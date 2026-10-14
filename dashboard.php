@@ -1555,22 +1555,6 @@ body:has(#directSummaryPanel) .direct-channel-cards .metric small{font-size:9px!
 @media(max-width:760px){body:has(#directSummaryPanel) .direct-channel-cards{grid-template-columns:1fr!important}body:has(#directSummaryPanel) .direct-channel-cards>.metric-group{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @media(max-width:520px){body:has(#directSummaryPanel) .direct-channel-cards>.metric-group{grid-template-columns:repeat(3,minmax(0,1fr))!important}body:has(#directSummaryPanel) .direct-channel-cards .metric{padding:10px 6px!important}#directSummaryPanel .panel-head{flex-wrap:wrap;gap:10px}}
 </style>
-<style id="direct-compact-card-structural-fix">
-/* Compact cards use independent markup, avoiding inherited .metric-group layout rules. */
-body:has(#directSummaryPanel) .direct-compact-cards{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px!important;margin:9px 0 13px!important;width:100%!important;align-items:stretch!important;grid-auto-rows:auto!important}
-body:has(#directSummaryPanel) .direct-compact-cards>.direct-compact-card{display:block!important;grid-column:auto!important;min-width:0!important;width:auto!important;height:auto!important;min-height:0!important;margin:0!important;padding:11px 12px!important;background:#fff;border:1px solid #e8ded7;border-top:2px solid #80604c;border-radius:9px;box-shadow:0 1px 5px rgba(60,36,22,.045);box-sizing:border-box}
-body:has(#directSummaryPanel) .direct-compact-title{font-size:11px!important;font-weight:750!important;letter-spacing:.045em!important;text-transform:uppercase;color:#684c3e;margin:0 0 9px!important;line-height:1.15!important}
-body:has(#directSummaryPanel) .direct-compact-metrics{display:grid!important;grid-template-columns:minmax(0,1.05fr) minmax(0,1.4fr) minmax(0,.7fr)!important;gap:0!important;align-items:center!important;width:100%!important;min-width:0!important}
-body:has(#directSummaryPanel) .direct-compact-stat{min-width:0!important;display:flex!important;flex-direction:column!important;gap:4px!important;padding:0 9px!important;margin:0!important;border-right:1px solid #eee6df;line-height:1.2!important}
-body:has(#directSummaryPanel) .direct-compact-stat:first-child{padding-left:0!important}
-body:has(#directSummaryPanel) .direct-compact-stat:last-child{border-right:0;padding-right:0!important}
-body:has(#directSummaryPanel) .direct-compact-stat span{font-size:9px!important;color:#8a7b70!important;font-weight:600!important;letter-spacing:.03em!important;white-space:nowrap!important}
-body:has(#directSummaryPanel) .direct-compact-stat strong{font-size:clamp(10px,.93vw,15px)!important;font-weight:750!important;line-height:1.25!important;color:#3c2d28!important;white-space:nowrap!important;letter-spacing:-.025em!important;font-variant-numeric:tabular-nums!important}
-body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-size:.78em;color:#746156;font-weight:500}
-@media(min-width:761px) and (max-width:1200px){body:has(#directSummaryPanel) .direct-compact-cards>.direct-compact-card{padding:9px 8px!important}body:has(#directSummaryPanel) .direct-compact-stat{padding:0 5px!important}body:has(#directSummaryPanel) .direct-compact-stat strong{font-size:10px!important}}
-@media(max-width:760px){body:has(#directSummaryPanel) .direct-compact-cards{grid-template-columns:1fr!important}body:has(#directSummaryPanel) .direct-compact-stat strong{font-size:clamp(12px,3vw,16px)!important}}
-@media(max-width:370px){body:has(#directSummaryPanel) .direct-compact-cards>.direct-compact-card{padding:9px 7px!important}body:has(#directSummaryPanel) .direct-compact-stat{padding:0 4px!important}body:has(#directSummaryPanel) .direct-compact-stat strong{font-size:10px!important}}
-</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1783,16 +1767,9 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
   </select>
   <label for="directDashboardView">View</label><select id="directDashboardView" aria-label="Direct sales dashboard view" onchange="window.setDirectDashboardView(this.value)"><option value="summary">Sales Summary</option><option value="rankings">Top 15 Buyers &amp; Sellers</option><option value="trend">Sales Performance Trend</option></select>
  </form></div>
-<div class="kpis direct-kpis direct-channel-cards direct-compact-cards">
+<div class="kpis direct-kpis direct-channel-cards">
  <?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?>
- <article class="direct-compact-card" aria-label="<?=htmlspecialchars($ch,ENT_QUOTES)?> sales statistics">
-  <div class="direct-compact-title"><?=htmlspecialchars($ch)?></div>
-  <div class="direct-compact-metrics">
-   <div class="direct-compact-stat"><span>NET WEIGHT</span><strong><?=nf_clean($x['kgs']/1000,3)?><em> MT</em></strong></div>
-   <div class="direct-compact-stat"><span>VALUE (USD)</span><strong><?=nf($x['value'],2)?></strong></div>
-   <div class="direct-compact-stat"><span>QTY SHARE</span><strong><?=nf(pct($x['kgs'],$grandSold),2)?><em>%</em></strong></div>
-  </div>
- </article>
+ <div class="metric-group <?=$ch==='Direct Export'?'dry':'clean'?>"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf_clean($x['kgs']/1000,3)?> MT</strong><small>Net weight</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Qty Share</span><strong><?=nf(pct($x['kgs'],$grandSold),2)?></strong><small>of total</small></div></div>
  <?php endforeach;?>
 </div>
 <div class="direct-view-tabs" style="margin-top:14px">
