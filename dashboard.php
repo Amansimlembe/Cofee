@@ -431,11 +431,11 @@ if($display==='totalclean'){
  $tcPreviousGradeData=$tcBuildGradeData(...$tcGradeDateWindows['previous']);
  $tcGradeData=$tcBuildGradeData(...$tcGradeDateWindows['current']);
  /* Weighted grade-group analysis; totals come from the exact rows shown in the grade table. */
- $tcGradeBands=['Top Grades','FAQ / Standard','Lower Grades','Unclassified'];
+ $tcGradeBands=['Top Grades','Lower Grades','Unclassified'];
  $tcGradeBandOf=static function(string $family,string $grade):string {
    if($grade==='Lower Grades')return 'Lower Grades';
    if(str_starts_with($grade,'Unclassified'))return 'Unclassified';
-   if(($family==='Arabica' && $grade==='H/A FAQ') || ($family==='Robusta' && $grade==='FAQ'))return 'FAQ / Standard';
+   /* FAQ / Standard (Arabica H/A FAQ and Robusta FAQ) is included in Top Grades. */
    return 'Top Grades';
  };
  $tcGradeAnalysis=[];
@@ -1892,7 +1892,7 @@ foreach($tcVisibleGrades as $grade):
  $oldTop=pct($pa['bands']['Top Grades']['kg'],$pa['all']['kg']);$newTop=pct($ca['bands']['Top Grades']['kg'],$ca['all']['kg']);
  $oldLow=pct($pa['bands']['Lower Grades']['kg'],$pa['all']['kg']);$newLow=pct($ca['bands']['Lower Grades']['kg'],$ca['all']['kg']);
  ?><p><strong><?=htmlspecialchars($family)?>:</strong> Higher-grade share <?=nf($oldTop,2)?>% → <?=nf($newTop,2)?>% (<?=($newTop-$oldTop)>=0?'+':''?><?=nf($newTop-$oldTop,2)?> pp); lower-grade share <?=nf($oldLow,2)?>% → <?=nf($newLow,2)?>% (<?=($newLow-$oldLow)>=0?'+':''?><?=nf($newLow-$oldLow,2)?> pp).</p><?php endforeach; ?>
- <p class="tc-grade-method"><strong>Classification:</strong> Higher grades = Arabica AAA, AA, A, AB, B, PB, C; Robusta Over 18, Superior. FAQ / Standard = Arabica H/A FAQ and Robusta FAQ. Lower Grades = classified lower grades. Percentage-point changes compare shares of total sales weight; family shares use the respective coffee family's weight. A growth rate is N/A when the previous-season weight is zero.</p>
+ <p class="tc-grade-method"><strong>Classification:</strong> Top Grades = Arabica AAA, AA, A, AB, B, PB, C, H/A FAQ (FAQ / Standard); Robusta Over 18, Superior, FAQ (FAQ / Standard). Lower Grades = classified lower grades. Percentage-point changes compare shares of total sales weight; family shares use the respective coffee family's weight. A growth rate is N/A when the previous-season weight is zero.</p>
  </div>
 </div></section>
 <?php else: ?>
