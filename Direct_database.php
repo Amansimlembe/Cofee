@@ -19,8 +19,11 @@ function direct_ensure_table(): void {
       crop_season VARCHAR(30), sale_category VARCHAR(80) NOT NULL, invoice_number VARCHAR(150), source_invoice_number VARCHAR(150),
       invoice_date DATE, contract_number VARCHAR(150), grade_name VARCHAR(150), coffee_type VARCHAR(100), net_kg NUMERIC(18,3),
       price_usd_50kg NUMERIC(18,6), exchange_rate NUMERIC(18,6), warehouse_name VARCHAR(255), warehouse_location VARCHAR(255),
-      region VARCHAR(150), supplier_seller VARCHAR(255), buyer VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      region VARCHAR(150), supplier_seller VARCHAR(255), buyer VARCHAR(255), certification VARCHAR(255), grade_level VARCHAR(150), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )");
+    // Existing Render PostgreSQL installations need a non-destructive migration.
+    direct_db()->exec("ALTER TABLE public.direct_sales ADD COLUMN IF NOT EXISTS certification VARCHAR(255)");
+    direct_db()->exec("ALTER TABLE public.direct_sales ADD COLUMN IF NOT EXISTS grade_level VARCHAR(150)");
     direct_db()->exec("CREATE INDEX IF NOT EXISTS idx_direct_sales_category ON public.direct_sales(sale_category)");
     direct_db()->exec("CREATE INDEX IF NOT EXISTS idx_direct_sales_season ON public.direct_sales(crop_season)");
     direct_db()->exec("CREATE INDEX IF NOT EXISTS idx_direct_sales_date ON public.direct_sales(invoice_date)");
