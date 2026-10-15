@@ -435,26 +435,26 @@ if($display==='direct'){
  foreach($directRows as$r){$c=$r['channel'];$ct=$r['coffee_type'];$kg=(float)$r['kgs'];$v=(float)$r['value_usd'];$channelTotals[$c]['kgs']=($channelTotals[$c]['kgs']??0)+$kg;$channelTotals[$c]['value']=($channelTotals[$c]['value']??0)+$v;$coffeeTotals[$ct]['kgs']=($coffeeTotals[$ct]['kgs']??0)+$kg;$coffeeTotals[$ct]['value']=($coffeeTotals[$ct]['value']??0)+$v;$grandSold+=$kg;$grandValue+=$v;}
 
  /* Ranking-only filters: independent of the consolidated Sales Summary. */
- $directRankChannel=(string)($_GET['rank_channel']??'all');
- if(!in_array($directRankChannel,['all','Direct Export','Local Sale','Local Roast'],true))$directRankChannel='all';
- $directRankBuyer=(string)($_GET['rank_buyer']??'all');
- $directRankBuyers=[];
- foreach($directBuyerRows as $br){if($directRankChannel==='all'||$br['channel']===$directRankChannel)$directRankBuyers[(string)$br['buyer']]=true;}
- $directRankBuyers=array_keys($directRankBuyers);natcasesort($directRankBuyers);$directRankBuyers=array_values($directRankBuyers);
- if($directRankBuyer!=='all'&&!in_array($directRankBuyer,$directRankBuyers,true))$directRankBuyer='all';
- /* Direct-sales ranking uses exactly the same net Local Sale balance and value rules as the summary. */
- $directRankings=[];
- foreach(['buyer'=>'Top 15 Buyers','supplier_seller'=>'Top 15 Sellers'] as $partyColumn=>$heading){
+ $directRankings=[];$directRankOptions=[];$directRankGrand=[];
+ foreach(['buyer','supplier_seller'] as $partyColumn){
+   $suffix=$partyColumn==='buyer'?'buyer':'seller';
+   $selectedChannel=(string)($_GET['rank_'.$suffix.'_channel']??'all');
+   if(!in_array($selectedChannel,['all','Direct Export','Local Sale','Local Roast'],true))$selectedChannel='all';
+   $selectedParty=(string)($_GET['rank_'.$suffix.'_party']??'all');
    $partySql="COALESCE(NULLIF(BTRIM(d.$partyColumn),''),'Unspecified')";
-   $rankWhere="";$rankArgs=['f'=>$from,'t'=>$to,'lsf'=>$from,'lst'=>$to];
-   if($directRankChannel!=='all'){$rankWhere.=" AND ($channelCaseD)=:rank_channel";$rankArgs['rank_channel']=$directRankChannel;}
-   if($directRankBuyer!=='all'){$rankWhere.=" AND COALESCE(NULLIF(BTRIM(d.buyer),''),'Unspecified')=:rank_buyer";$rankArgs['rank_buyer']=$directRankBuyer;}
+   $optsArgs=['f'=>$from,'t'=>$to];$optsWhere='';
+   if($selectedChannel!=='all'){$optsWhere=" AND ($channelCaseD)=:rank_channel";$optsArgs['rank_channel']=$selectedChannel;}
+   $optsQ=$db->prepare("SELECT DISTINCT $partySql name FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channelCaseD IS NOT NULL $optsWhere ORDER BY 1");
+   $optsQ->execute($optsArgs);$names=$optsQ->fetchAll(PDO::FETCH_COLUMN);
+   if($selectedParty!=='all'&&!in_array($selectedParty,$names,true))$selectedParty='all';
+   $directRankOptions[$partyColumn]=['channel'=>$selectedChannel,'party'=>$selectedParty,'names'=>$names];
+   $rankWhere=$optsWhere;$rankArgs=['f'=>$from,'t'=>$to,'lsf'=>$from,'lst'=>$to];
+   if($selectedChannel!=='all')$rankArgs['rank_channel']=$selectedChannel;
+   if($selectedParty!=='all'){$rankWhere.=" AND $partySql=:rank_party";$rankArgs['rank_party']=$selectedParty;}
    $rq=$db->prepare("SELECT $partySql name,SUM($qtyExpr) total_qty,SUM($valueExpr) total_value FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channelCaseD IS NOT NULL $rankWhere GROUP BY 1 HAVING SUM($qtyExpr)>0 ORDER BY total_qty DESC,total_value DESC");
-   $rq->execute($rankArgs);
-   $directRankings[$partyColumn]=$rq->fetchAll();
+   $rq->execute($rankArgs);$directRankings[$partyColumn]=$rq->fetchAll();
+   $directRankGrand[$partyColumn]=['kg'=>array_sum(array_map(fn($r)=>(float)$r['total_qty'],$directRankings[$partyColumn])),'value'=>array_sum(array_map(fn($r)=>(float)$r['total_value'],$directRankings[$partyColumn]))];
  }
- $directRankGrandKg=array_sum(array_map(fn($r)=>(float)$r['total_qty'],$directRankings['buyer']));
- $directRankGrandValue=array_sum(array_map(fn($r)=>(float)$r['total_value'],$directRankings['buyer']));
  /* Monthly trends are computed from the same period-filtered invoices; shares and totals are not duplicated. */
  $directTrend=[];
  $tq=$db->prepare("SELECT TO_CHAR(d.invoice_date,'YYYY-MM') period,$channelCaseD channel,SUM($qtyExpr) kgs,SUM($valueExpr) value_usd FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channelCaseD IS NOT NULL GROUP BY 1,2 ORDER BY 1,2");
@@ -1597,7 +1597,14 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
 <style id="direct-ranking-unified-export-css">
 #directRankingPanels .direct-ranking-filters{position:relative;z-index:30;justify-content:space-between;overflow:visible;padding:7px 12px;margin-bottom:8px}
 #directRankingPanels .direct-ranking-toolbar-title{font-weight:700;font-size:13px;color:#50372b}
-#directRankingPanels .rank-panel-actions .rank-export-button{display:none!important}
+#directRankingPanels .direct-original-export{display:none!important}
+#directRankingPanels .direct-panel-export{position:relative;z-index:40}
+#directRankingPanels .direct-panel-export-menu{right:0;left:auto;min-width:125px}
+#directRankingPanels .direct-panel-export-menu.show{display:flex}
+#directRankingPanels .rank-export-panel{overflow:visible}
+#directRankingPanels .rank-export-panel .panel-head{overflow:visible;display:flex;align-items:center;justify-content:space-between;gap:12px}
+#directRankingPanels .rank-panel-actions{margin-left:auto;display:flex;justify-content:flex-end}
+#directRankingPanels .direct-ranking-filters{justify-content:flex-start}
 #directRankingPanels .direct-rank-export{position:relative;z-index:60}
 #directRankingPanels .direct-rank-export-menu{display:none;position:absolute;right:0;top:calc(100% + 7px);width:min(340px,calc(100vw - 44px));max-height:min(76vh,580px);overflow-y:auto;background:#fff;color:#493327;border:1px solid #ddcec2;border-radius:10px;padding:14px;box-shadow:0 14px 38px rgba(48,31,22,.18);flex-direction:column;gap:8px}
 #directRankingPanels .direct-rank-export-menu.show{display:flex}
@@ -1611,6 +1618,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
 @media(max-width:650px){#directRankingPanels .direct-ranking-filters{justify-content:space-between}#directRankingPanels .direct-rank-export-menu{right:0}}
 </style>
 <style id="direct-ranking-filter-styles">#directRankingPanels .direct-ranking-filters{grid-column:1/-1;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:9px;padding:10px 14px;background:#f8f5f1;border:1px solid #e7dcd2;border-radius:9px;margin-bottom:5px}#directRankingPanels .direct-ranking-filters label{font-size:11px;font-weight:700;color:#50372b}#directRankingPanels .direct-ranking-filters select{min-width:145px;max-width:280px;padding:7px 10px;border:1px solid #d7c8bb;border-radius:7px;background:white;color:#4b2e20;font-size:12px}@media(max-width:650px){#directRankingPanels .direct-ranking-filters{justify-content:stretch}#directRankingPanels .direct-ranking-filters select{flex:1;min-width:100px}}</style>
+<style id="direct-ranking-inline-filters-css">#directRankingPanels .rank-panel-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#directRankingPanels .direct-ranking-inline-filters{display:flex;align-items:center;gap:9px;flex-wrap:wrap}#directRankingPanels .direct-ranking-inline-filters label{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#50372b}#directRankingPanels .direct-ranking-inline-filters select{width:clamp(115px,13vw,190px);max-width:100%;padding:7px 8px;border:1px solid #d7c8bb;border-radius:7px;background:#fff;color:#4b2e20;font-size:11px}#directRankingPanels .rank-export-panel .panel-head{flex-wrap:wrap}#directRankingPanels .direct-panel-export{flex-shrink:0}@media(max-width:720px){#directRankingPanels .rank-panel-actions{width:100%;justify-content:flex-end}#directRankingPanels .direct-ranking-inline-filters{flex:1}#directRankingPanels .direct-ranking-inline-filters label{flex:1;min-width:135px}#directRankingPanels .direct-ranking-inline-filters select{width:100%}}</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1848,12 +1856,11 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  </tbody><tfoot><tr><th scope="row">Grand Total</th><?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$v=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?><td><?=nf_clean((float)$v['kgs']/1000,3)?></td><td><?=nf((float)$v['value'],2)?></td><td><?=nf(pct((float)$v['kgs'],$grandSold),2)?></td><?php endforeach;?><td><?=nf_clean($grandSold/1000,3)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div>
 </section>
 <div id="directRankingPanels" class="analytics" <?=$directView!=='rankings'?'hidden style="display:none!important"':''?>>
-<div class="direct-ranking-filters"><span class="direct-ranking-toolbar-title">Top 15 Buyers &amp; Sellers</span><div class="tc-export direct-rank-export"><button type="button" id="directRankExportBtn" class="tc-export-btn" aria-expanded="false" aria-haspopup="true" aria-controls="directRankExportMenu">⇩ Export <span aria-hidden="true">▾</span></button><div id="directRankExportMenu" class="direct-rank-export-menu" role="group" aria-label="Ranking filters and exports"><div class="direct-rank-menu-title">Filter rankings</div><label for="directRankChannel">Sales Channel</label><select id="directRankChannel" aria-label="Filter ranking sales channel"><option value="all">All Channels</option><?php foreach(['Direct Export','Local Sale','Local Roast'] as $rc):?><option value="<?=htmlspecialchars($rc,ENT_QUOTES,'UTF-8')?>" <?=$directRankChannel===$rc?'selected':''?>><?=htmlspecialchars($rc,ENT_QUOTES,'UTF-8')?></option><?php endforeach;?></select><label for="directRankBuyer">Buyer</label><select id="directRankBuyer" aria-label="Filter ranking buyer"><option value="all">All Buyers</option><?php foreach($directRankBuyers as $rb):?><option value="<?=htmlspecialchars($rb,ENT_QUOTES,'UTF-8')?>" <?=$directRankBuyer===$rb?'selected':''?>><?=htmlspecialchars($rb,ENT_QUOTES,'UTF-8')?></option><?php endforeach;?></select><div class="direct-rank-menu-title">Export report</div><div class="direct-rank-export-actions"><button type="button" data-rank-format="xlsx">Excel</button><button type="button" data-rank-format="doc">Word</button><button type="button" data-rank-format="pdf">PDF</button></div><label for="directRankExportTarget">Export table</label><select id="directRankExportTarget"><option value="both">Both tables</option><option value="buyer">Top 15 Buyers</option><option value="seller">Top 15 Sellers</option></select></div></div></div>
 <?php foreach(['buyer'=>'Top 15 Buyers','supplier_seller'=>'Top 15 Sellers'] as $partyKey=>$heading):$all=$directRankings[$partyKey];$top=array_slice($all,0,15);$other=array_slice($all,15);$otherQty=array_sum(array_map(fn($r)=>(float)$r['total_qty'],$other));$otherVal=array_sum(array_map(fn($r)=>(float)$r['total_value'],$other));?>
-<section class="panel rank-export-panel"><div class="panel-head"><strong><?=htmlspecialchars($heading)?></strong><div class="rank-panel-actions"><button type="button" class="rank-export-button">Excel</button><button type="button" class="rank-export-button rank-word-button">Word</button><button type="button" class="rank-export-button rank-pdf-button">PDF</button></div></div><div class="table-box"><table><thead><tr><th><?=$partyKey==='buyer'?'Buyer':'Seller'?></th><th>Sold Qty (MT)</th><th>Value (USD)</th><th>Share (%)</th></tr></thead><tbody>
-<?php foreach($top as $i=>$r):?><tr><td><span class="rank"><?=$i+1?></span><?=htmlspecialchars($r['name'])?></td><td><?=nf_clean((float)$r['total_qty']/1000,3)?></td><td><?=nf((float)$r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$directRankGrandKg),2)?></td></tr><?php endforeach;?>
-<?php if($other):?><tr><td><button type="button" class="ranking-other-toggle" aria-expanded="false"><span class="ranking-other-chevron">▸</span> Other (<?=count($other)?> <?=$partyKey==='buyer'?'buyers':'sellers'?>) <span class="ranking-other-hint">Show details</span></button></td><td><?=nf_clean($otherQty/1000,3)?></td><td><?=nf($otherVal,2)?></td><td><?=nf(pct($otherQty,$directRankGrandKg),2)?></td></tr>
-<?php foreach($other as $j=>$r):?><tr class="ranking-other-detail" hidden><td><span class="rank"><?=16+$j?></span><?=htmlspecialchars($r['name'])?></td><td><?=nf_clean((float)$r['total_qty']/1000,3)?></td><td><?=nf((float)$r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$directRankGrandKg),2)?></td></tr><?php endforeach;endif;?></tbody><tfoot><tr><td>Period Grand Total</td><td><?=nf_clean($directRankGrandKg/1000,3)?></td><td><?=nf($directRankGrandValue,2)?></td><td><?=$directRankGrandKg>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
+<section class="panel rank-export-panel"><div class="panel-head"><strong><?=htmlspecialchars($heading)?></strong><div class="rank-panel-actions"><div class="direct-ranking-inline-filters" data-rank-party="<?=$partyKey?>"><label>Channel <select class="direct-rank-channel" aria-label="<?=$partyKey==='buyer'?'Buyer':'Seller'?> ranking channel"><option value="all">All Channels</option><?php foreach(['Direct Export','Local Sale','Local Roast'] as $rc):?><option value="<?=htmlspecialchars($rc,ENT_QUOTES,'UTF-8')?>" <?=$directRankOptions[$partyKey]['channel']===$rc?'selected':''?>><?=htmlspecialchars($rc,ENT_QUOTES,'UTF-8')?></option><?php endforeach;?></select></label><label><?=$partyKey==='buyer'?'Buyer':'Seller'?> <select class="direct-rank-party" aria-label="<?=$partyKey==='buyer'?'Buyer':'Seller'?> ranking name"><option value="all">All <?=$partyKey==='buyer'?'Buyers':'Sellers'?></option><?php foreach($directRankOptions[$partyKey]['names'] as $rn):?><option value="<?=htmlspecialchars($rn,ENT_QUOTES,'UTF-8')?>" <?=$directRankOptions[$partyKey]['party']===$rn?'selected':''?>><?=htmlspecialchars($rn,ENT_QUOTES,'UTF-8')?></option><?php endforeach;?></select></label></div><div class="tc-export direct-panel-export"><button type="button" class="tc-export-btn direct-panel-export-toggle" aria-expanded="false" aria-haspopup="true">⇩ Export <span aria-hidden="true">▾</span></button><div class="tc-export-menu direct-panel-export-menu"><button type="button" data-panel-export="xlsx">Excel</button><button type="button" data-panel-export="doc">Word</button><button type="button" data-panel-export="pdf">PDF</button></div></div><div class="direct-original-export" hidden><button type="button" class="rank-export-button">Excel</button><button type="button" class="rank-export-button rank-word-button">Word</button><button type="button" class="rank-export-button rank-pdf-button">PDF</button></div></div></div><div class="table-box"><table><thead><tr><th><?=$partyKey==='buyer'?'Buyer':'Seller'?></th><th>Sold Qty (MT)</th><th>Value (USD)</th><th>Share (%)</th></tr></thead><tbody>
+<?php foreach($top as $i=>$r):?><tr><td><span class="rank"><?=$i+1?></span><?=htmlspecialchars($r['name'])?></td><td><?=nf_clean((float)$r['total_qty']/1000,3)?></td><td><?=nf((float)$r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$directRankGrand[$partyKey]['kg']),2)?></td></tr><?php endforeach;?>
+<?php if($other):?><tr><td><button type="button" class="ranking-other-toggle" aria-expanded="false"><span class="ranking-other-chevron">▸</span> Other (<?=count($other)?> <?=$partyKey==='buyer'?'buyers':'sellers'?>) <span class="ranking-other-hint">Show details</span></button></td><td><?=nf_clean($otherQty/1000,3)?></td><td><?=nf($otherVal,2)?></td><td><?=nf(pct($otherQty,$directRankGrand[$partyKey]['kg']),2)?></td></tr>
+<?php foreach($other as $j=>$r):?><tr class="ranking-other-detail" hidden><td><span class="rank"><?=16+$j?></span><?=htmlspecialchars($r['name'])?></td><td><?=nf_clean((float)$r['total_qty']/1000,3)?></td><td><?=nf((float)$r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$directRankGrand[$partyKey]['kg']),2)?></td></tr><?php endforeach;endif;?></tbody><tfoot><tr><td>Period Grand Total</td><td><?=nf_clean($directRankGrand[$partyKey]['kg']/1000,3)?></td><td><?=nf($directRankGrand[$partyKey]['value'],2)?></td><td><?=$directRankGrand[$partyKey]['kg']>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php endforeach;?></div>
 <section id="directTrendPanel" class="trend-panel" <?=$directView!=='trend'?'hidden style="display:none!important"':''?>><div class="trend-head"><strong>Direct Sales Performance Trend</strong><span>Monthly quantities by sales channel (MT) and sales value (USD)</span></div><div class="trend-wrap"><canvas id="directSalesTrendChart"></canvas></div></section>
 </div>
@@ -1953,25 +1960,26 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  window.setDirectDashboardView(<?=json_encode($directView)?>);
  const table=document.getElementById('directSummaryTable');
  const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
- const rankChannel=document.getElementById('directRankChannel'),rankBuyer=document.getElementById('directRankBuyer');
- function updateRankFilter(changed){const url=new URL(location.href);url.searchParams.set('direct_view','rankings');url.searchParams.set('rank_channel',rankChannel.value);url.searchParams.set('rank_buyer',changed==='channel'?'all':rankBuyer.value);location.assign(url.toString())}
- rankChannel?.addEventListener('change',()=>updateRankFilter('channel'));
- rankBuyer?.addEventListener('change',()=>updateRankFilter('buyer'));
- const rankExportBtn=document.getElementById('directRankExportBtn'),rankExportMenu=document.getElementById('directRankExportMenu');
- if(rankExportBtn&&rankExportMenu){
-  rankExportBtn.addEventListener('click',e=>{e.stopPropagation();const opened=rankExportMenu.classList.toggle('show');rankExportBtn.setAttribute('aria-expanded',String(opened))});
-  rankExportMenu.addEventListener('click',e=>e.stopPropagation());
-  document.addEventListener('click',e=>{if(!rankExportBtn.parentElement.contains(e.target)){rankExportMenu.classList.remove('show');rankExportBtn.setAttribute('aria-expanded','false')}});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){rankExportMenu.classList.remove('show');rankExportBtn.setAttribute('aria-expanded','false')}});
-  rankExportMenu.querySelectorAll('[data-rank-format]').forEach(btn=>btn.addEventListener('click',()=>{
-   const format=btn.dataset.rankFormat,target=document.getElementById('directRankExportTarget')?.value||'both';
-   const panels=[...rank.querySelectorAll('.rank-export-panel')];
-   const indices=target==='buyer'?[0]:target==='seller'?[1]:[0,1];
+ rank.querySelectorAll('.direct-ranking-inline-filters').forEach(group=>{
+  const suffix=group.dataset.rankParty==='buyer'?'buyer':'seller';
+  const channel=group.querySelector('.direct-rank-channel'),party=group.querySelector('.direct-rank-party');
+  const apply=changed=>{const url=new URL(location.href);url.searchParams.set('direct_view','rankings');url.searchParams.set('rank_'+suffix+'_channel',channel.value);url.searchParams.set('rank_'+suffix+'_party',changed==='channel'?'all':party.value);location.assign(url.toString())};
+  channel.addEventListener('change',()=>apply('channel'));
+  party.addEventListener('change',()=>apply('party'));
+ });
+ rank.querySelectorAll('.direct-panel-export').forEach(wrapper=>{
+  const toggle=wrapper.querySelector('.direct-panel-export-toggle'),menu=wrapper.querySelector('.direct-panel-export-menu'),panel=wrapper.closest('.rank-export-panel');
+  const close=()=>{menu.classList.remove('show');toggle.setAttribute('aria-expanded','false')};
+  toggle.addEventListener('click',e=>{e.stopPropagation();rank.querySelectorAll('.direct-panel-export-menu.show').forEach(m=>{if(m!==menu){m.classList.remove('show');m.parentElement.querySelector('.direct-panel-export-toggle')?.setAttribute('aria-expanded','false')}});const opened=menu.classList.toggle('show');toggle.setAttribute('aria-expanded',String(opened))});
+  menu.addEventListener('click',e=>e.stopPropagation());
+  menu.querySelectorAll('[data-panel-export]').forEach(button=>button.addEventListener('click',()=>{
+   const format=button.dataset.panelExport;
    const selector=format==='xlsx'?'.rank-export-button:not(.rank-word-button):not(.rank-pdf-button)':format==='doc'?'.rank-word-button':'.rank-pdf-button';
-   indices.forEach(i=>panels[i]?.querySelector(selector)?.click());
-   rankExportMenu.classList.remove('show');rankExportBtn.setAttribute('aria-expanded','false');
+   close();panel.querySelector('.direct-original-export '+selector)?.click();
   }));
- }
+  document.addEventListener('click',e=>{if(!wrapper.contains(e.target))close()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+ });
 
  const exportBtn=document.getElementById('directSummaryExportBtn'),exportMenu=document.getElementById('directSummaryExportMenu');
  exportBtn.addEventListener('click',e=>{e.stopPropagation();const open=exportMenu.classList.toggle('show');exportBtn.setAttribute('aria-expanded',String(open))});
