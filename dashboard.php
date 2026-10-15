@@ -376,9 +376,26 @@ if($display==='totalclean'){
  $qty="CASE WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('LS','LOCAL SALE') THEN $ls ELSE COALESCE(d.net_kg,0) END";
  $q=$ddb->prepare("SELECT $directType coffee_type,$channel channel,SUM($qty) kgs,SUM(($qty)*COALESCE(d.price_usd_50kg,0)/50.0) value_usd FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channel IS NOT NULL GROUP BY 1,2");$q->execute(['f'=>$from,'t'=>$to,'lf'=>$from,'lt'=>$to]);
  foreach($q as$r){if(isset($totalClean[$r['coffee_type']][$r['channel']])){$kg=(float)$r['kgs'];$v=(float)$r['value_usd'];$totalClean[$r['coffee_type']][$r['channel']]=['kgs'=>$kg,'value'=>$v,'avg'=>$kg>0?$v*50/$kg:0];}}
+ /* Compare selected season against its immediately preceding season, as in the supplied grade report. */
+ $tcCompareSeason=$season==='all'?($seasons[0]??current_season()):$season;
+ $tcStartYear=(int)substr($tcCompareSeason,0,4);
+ $tcPreviousSeason=($tcStartYear-1).'/'.$tcStartYear;
+ $tcPreviousBounds=season_bounds($tcPreviousSeason);
+ $tcCurrentBounds=season_bounds($tcCompareSeason);
+ $tcGradeDateWindows=[
+   'previous'=>$tcPreviousBounds,
+   'current'=>$tcCurrentBounds
+ ];
+ /* When a specific month or quarter is selected, compare the same calendar window one year earlier. */
+ if($season!=='all' && $tcPeriodValue!=='all'){
+   $tcGradeDateWindows['current']=[$from,$to];
+   $tcGradeDateWindows['previous']=[date('Y-m-d',strtotime($from.' -1 year')),date('Y-m-d',strtotime($to.' -1 year'))];
+ }
+ $tcGradeOrder=['Arabica'=>['AAA','AA','A','AB','B','PB','C','H/A FAQ','Lower Grades','Unclassified'], 'Robusta'=>['Over 18','Superior','FAQ','Lower Grades','Unclassified']];
+ $tcBuildGradeData=static function(string $from,string $to) use ($db,$ddb,$auctionType,$directType,$channel,$qty):array {
  /* Grade summary: source-aligned, same period, SOLD auction only, and Local Sale balance. */
  $tcGradeData=['Arabica'=>[],'Robusta'=>[]];
- $tcGradeOrder=['Arabica'=>['AAA','AA','A','AB','B','PB','C','H/A FAQ','Lower Grades','Unclassified'], 'Robusta'=>['Over 18','Superior','FAQ','Lower Grades','Unclassified']];
+
  $tcAddGrade=static function(string $family,string $grade,float $kg,float $usd) use (&$tcGradeData):void {
    if(!isset($tcGradeData[$family][$grade]))$tcGradeData[$family][$grade]=['kg'=>0.0,'usd'=>0.0];
    $tcGradeData[$family][$grade]['kg']+=$kg;$tcGradeData[$family][$grade]['usd']+=$usd;
@@ -409,6 +426,10 @@ if($display==='totalclean'){
  $gq=$ddb->prepare("SELECT $directType coffee_family,d.grade_name,d.grade_level,d.net_kg,d.price_usd_50kg,($qty) effective_kg FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channel IS NOT NULL");
  $gq->execute(['f'=>$from,'t'=>$to,'lf'=>$from,'lt'=>$to]);
  foreach($gq as $r){$fam=$r['coffee_family']==='Robusta'?'Robusta':'Arabica';$g=$tcGradeClass((string)($r['grade_level']??''),$fam);if($g==='Unclassified')$g=$tcGradeClass((string)($r['grade_name']??''),$fam);if($g==='Unclassified')$g=$tcUnclassifiedLabel('Direct Sales database',$r['grade_level']??'',$r['grade_name']??'');$kg=(float)$r['effective_kg'];$tcAddGrade($fam,$g,$kg,$kg*(float)$r['price_usd_50kg']/50);}
+ return $tcGradeData;
+ };
+ $tcPreviousGradeData=$tcBuildGradeData(...$tcGradeDateWindows['previous']);
+ $tcGradeData=$tcBuildGradeData(...$tcGradeDateWindows['current']);
  $tcChannelTotals=[];$tcGrandKg=0;$tcGrandValue=0;foreach($channels as$ch){$kg=$v=0;foreach($types as$ct){$kg+=$totalClean[$ct][$ch]['kgs'];$v+=$totalClean[$ct][$ch]['value'];}$tcChannelTotals[$ch]=['kgs'=>$kg,'value'=>$v,'avg'=>$kg>0?$v*50/$kg:0];$tcGrandKg+=$kg;$tcGrandValue+=$v;}
  /* Analytical detail for Top 10 views. Local Sale continues to use LS Balance. */
  $normParty=function($f){return "COALESCE(NULLIF(INITCAP(LOWER(REGEXP_REPLACE(BTRIM(COALESCE($f,'')),'\\s+',' ','g'))),''),'Unspecified')";};
@@ -1822,10 +1843,16 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
 <thead><tr><th rowspan="2">Type of Coffee</th><?php foreach($channels as$ch):?><th colspan="3"><?=htmlspecialchars($ch)?></th><?php endforeach;?><th colspan="3">Total</th></tr><tr><?php foreach($channels as$ch):?><th>Kg</th><th>USD</th><th>$/50kg</th><?php endforeach;?><th>Kg</th><th>USD</th><th>%</th></tr></thead><tbody>
 <?php foreach($types as$ct):$rk=$rv=0;foreach($channels as$ch){$rk+=$totalClean[$ct][$ch]['kgs'];$rv+=$totalClean[$ct][$ch]['value'];}?><tr><td><?=htmlspecialchars($ct)?></td><?php foreach($channels as$ch):$x=$totalClean[$ct][$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($rk,2)?></td><td><?=nf($rv,2)?></td><td><?=nf(pct($rk,$tcGrandKg),2)?></td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td>Grand Total</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($tcGrandKg,2)?></td><td><?=nf($tcGrandValue,2)?></td><td><?=$tcGrandKg>0?'100%':'0%'?></td></tr><tr class="share-row"><td>Channel Share</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf(pct($x['kgs'],$tcGrandKg),2)?></td><td colspan="2"></td><?php endforeach;?><td colspan="3"></td></tr></tfoot>
-</table><table id="totalCleanGradeTable" class="totalclean-grade-table" hidden><thead><tr><th rowspan="2">Grade</th><th colspan="2">Sale Season <?=htmlspecialchars($season)?></th></tr><tr><th>Weight (Tonnes)</th><th>Value (USD)</th></tr></thead><tbody>
-<?php $tcGradeGrandKg=0;$tcGradeGrandUsd=0;foreach(['Arabica','Robusta'] as $family):$familyKg=0;$familyUsd=0;foreach($tcGradeData[$family] as $gr){$familyKg+=$gr['kg'];$familyUsd+=$gr['usd'];}$tcGradeGrandKg+=$familyKg;$tcGradeGrandUsd+=$familyUsd; ?>
-<tr class="tc-grade-family"><td><?=strtoupper($family)?></td><td><?=nf_clean($familyKg/1000,3)?></td><td><?=nf_clean($familyUsd,2)?></td></tr>
-<?php $tcVisibleGrades=$tcGradeOrder[$family];foreach(array_keys($tcGradeData[$family]) as $tcOtherGrade){if(!in_array($tcOtherGrade,$tcVisibleGrades,true))$tcVisibleGrades[]=$tcOtherGrade;}foreach($tcVisibleGrades as $grade):if(!isset($tcGradeData[$family][$grade]))continue;$fig=$tcGradeData[$family][$grade];?><tr><td><?=htmlspecialchars($grade)?></td><td><?=nf_clean($fig['kg']/1000,3)?></td><td><?=nf_clean($fig['usd'],2)?></td></tr><?php endforeach;endforeach; ?></tbody><tfoot><tr><td>Grand Total</td><td><?=nf_clean($tcGradeGrandKg/1000,3)?></td><td><?=nf_clean($tcGradeGrandUsd,2)?></td></tr></tfoot></table></div></section>
+</table><table id="totalCleanGradeTable" class="totalclean-grade-table" hidden><thead><tr><th rowspan="2">Grade</th><th colspan="2"><?=htmlspecialchars($tcPreviousSeason)?></th><th colspan="2"><?=htmlspecialchars($tcCompareSeason)?></th></tr><tr><th>Weight (Tonnes)</th><th>Value (USD)</th><th>Weight (Tonnes)</th><th>Value (USD)</th></tr></thead><tbody>
+<?php $tcGradeTotals=['previous'=>['kg'=>0,'usd'=>0],'current'=>['kg'=>0,'usd'=>0]];
+foreach(['Arabica','Robusta'] as $family):
+ $tcFamilyTotals=[];
+ foreach(['previous'=>$tcPreviousGradeData,'current'=>$tcGradeData] as $key=>$dataset){$kg=0;$usd=0;foreach($dataset[$family] as $r){$kg+=$r['kg'];$usd+=$r['usd'];}$tcFamilyTotals[$key]=['kg'=>$kg,'usd'=>$usd];$tcGradeTotals[$key]['kg']+=$kg;$tcGradeTotals[$key]['usd']+=$usd;}
+?><tr class="tc-grade-family"><td><?=strtoupper($family)?></td><?php foreach(['previous','current'] as $key):?><td><?=nf_clean($tcFamilyTotals[$key]['kg']/1000,3)?></td><td><?=nf_clean($tcFamilyTotals[$key]['usd'],2)?></td><?php endforeach;?></tr>
+<?php $tcVisibleGrades=$tcGradeOrder[$family];foreach([$tcPreviousGradeData,$tcGradeData] as $dataset){foreach(array_keys($dataset[$family]) as $grade){if(!in_array($grade,$tcVisibleGrades,true))$tcVisibleGrades[]=$grade;}}
+foreach($tcVisibleGrades as $grade):
+ $prior=$tcPreviousGradeData[$family][$grade]??['kg'=>0,'usd'=>0];$current=$tcGradeData[$family][$grade]??['kg'=>0,'usd'=>0];
+?><tr><td><?=htmlspecialchars($grade)?></td><td><?=nf_clean($prior['kg']/1000,3)?></td><td><?=nf_clean($prior['usd'],2)?></td><td><?=nf_clean($current['kg']/1000,3)?></td><td><?=nf_clean($current['usd'],2)?></td></tr><?php endforeach;endforeach;?></tbody><tfoot><tr><td>Grand Total</td><td><?=nf_clean($tcGradeTotals['previous']['kg']/1000,3)?></td><td><?=nf_clean($tcGradeTotals['previous']['usd'],2)?></td><td><?=nf_clean($tcGradeTotals['current']['kg']/1000,3)?></td><td><?=nf_clean($tcGradeTotals['current']['usd'],2)?></td></tr></tfoot></table></div></section>
 <?php else: ?>
 <section class="panel tc-analysis-panel">
  <div class="panel-head tc-analysis-head">
@@ -2211,7 +2238,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  function exportExcel(){
    if(!window.XLSX){alert('Excel export library is not available.');return}
    const aoa=matrix();
-   if(table===gradeTable){const ws=XLSX.utils.aoa_to_sheet(aoa);for(let r=2;r<aoa.length;r++)for(let c=1;c<=2;c++){const a=XLSX.utils.encode_cell({r,c}),cell=ws[a];if(cell){const n=numeric(cell.v);if(typeof n==='number'){cell.v=n;cell.t='n';cell.z='#,##0.00#';}}}ws['!cols']=[{wch:24},{wch:20},{wch:22}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Sales by Grade');XLSX.writeFile(wb,filename('xlsx'));return;}
+   if(table===gradeTable){const ws=XLSX.utils.aoa_to_sheet(aoa);for(let r=2;r<aoa.length;r++)for(let c=1;c<=4;c++){const a=XLSX.utils.encode_cell({r,c}),cell=ws[a];if(cell){const n=numeric(cell.v);if(typeof n==='number'){cell.v=n;cell.t='n';cell.z='#,##0.00#';}}}ws['!cols']=[{wch:45},{wch:20},{wch:22},{wch:20},{wch:22}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Sales by Grade');XLSX.writeFile(wb,filename('xlsx'));return;}
    const ws=XLSX.utils.aoa_to_sheet(aoa);
    const range=XLSX.utils.decode_range(ws['!ref']);
    // Rows 3 onward contain data. First column is text; all remaining populated cells are numeric.
