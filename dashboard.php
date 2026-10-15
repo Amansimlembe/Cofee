@@ -390,13 +390,13 @@ if($display==='totalclean'){
    $g=preg_replace('/\s+/',' ',$g);
    if($g==='')return 'Unclassified';
    if($family==='Robusta'){
-     if(preg_match('/(?:^|\s)(?:UG|TRIAGE|TRIAGES|BLACK|BLACKS)(?:\s|$)/',$g))return 'Lower Grades';
+     if(preg_match('/(?:^|\s)(?:UG|TRIAGE|TRIAGES|BLACK|BLACKS|REJ|REJECT|REJECTS|BHP|SWP)(?:\s|$)/',$g) || str_contains($g,'LOWER GRADE'))return 'Lower Grades';
      if(preg_match('/(?:OVER|ABOVE|SCREEN|SCR|SC)\s*18\b|^18\+?$|^18\s*(?:UP|PLUS)$/',$g))return 'Over 18';
      if(str_contains($g,'SUPERIOR')||preg_match('/^SUP\b/',$g))return 'Superior';
      if(preg_match('/\bFAQ\b/',$g))return 'FAQ';
      return 'Unclassified';
    }
-   if(preg_match('/(?:^|\s)(?:AF|TT|F|E|HP|TEX|TRIAGE|TRIAGES|BLACK|BLACKS|UG|BHP)(?:\s|$)/',$g))return 'Lower Grades';
+   if(preg_match('/(?:^|\s)(?:AF|TT|F|E|HP|TEX|TRIAGE|TRIAGES|BLACK|BLACKS|UG|BHP|SWP|REJ|REJECT|REJECTS)(?:\s|$)/',$g) || str_contains($g,'LOWER GRADE'))return 'Lower Grades';
    if(preg_match('/\bFAQ\b/',$g))return 'H/A FAQ';
    if(preg_match('/(?:^|\s)(AAA|AA|AB|PB|A|B|C)(?:\s|$)/',$g,$m))return $m[1];
    return 'Unclassified';
