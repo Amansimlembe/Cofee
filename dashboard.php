@@ -1611,6 +1611,52 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
 @media(max-width:650px){#directRankingPanels .direct-ranking-filters{justify-content:space-between}#directRankingPanels .direct-rank-export-menu{right:0}}
 </style>
 <style id="direct-ranking-filter-styles">#directRankingPanels .direct-ranking-filters{grid-column:1/-1;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:9px;padding:10px 14px;background:#f8f5f1;border:1px solid #e7dcd2;border-radius:9px;margin-bottom:5px}#directRankingPanels .direct-ranking-filters label{font-size:11px;font-weight:700;color:#50372b}#directRankingPanels .direct-ranking-filters select{min-width:145px;max-width:280px;padding:7px 10px;border:1px solid #d7c8bb;border-radius:7px;background:white;color:#4b2e20;font-size:12px}@media(max-width:650px){#directRankingPanels .direct-ranking-filters{justify-content:stretch}#directRankingPanels .direct-ranking-filters select{flex:1;min-width:100px}}</style>
+<style id="direct-ranking-inline-toolbar-fix">
+#directRankingPanels .direct-ranking-filters{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:14px!important;flex-wrap:wrap!important}
+#directRankingPanels .direct-rank-toolbar-controls{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap;min-width:0;margin-left:auto}
+#directRankingPanels .direct-rank-toolbar-controls label{font-size:11px;font-weight:700;color:#50372b;white-space:nowrap}
+#directRankingPanels .direct-rank-toolbar-controls select{width:auto;min-width:135px;max-width:240px;padding:7px 9px;border:1px solid #d7c8bb;border-radius:7px;background:white;color:#4b2e20;font-size:12px}
+#directRankingPanels .direct-rank-toolbar-controls #directRankBuyer{max-width:270px}
+#directRankingPanels .direct-rank-export-menu{min-width:215px;width:235px}
+@media(max-width:720px){#directRankingPanels .direct-rank-toolbar-controls{width:100%;margin-left:0;justify-content:flex-start}#directRankingPanels .direct-rank-toolbar-controls select{flex:1;min-width:100px;max-width:100%}}
+</style>
+<style id="direct-ranking-single-row-desktop">
+/* Keep the heading, both filters and export action on ONE line on desktop. */
+@media (min-width: 900px) {
+ #directRankingPanels .direct-ranking-filters {
+  display:flex!important; flex-direction:row!important; flex-wrap:nowrap!important;
+  align-items:center!important; justify-content:space-between!important;
+  gap:10px!important; width:100%; min-width:0; box-sizing:border-box;
+ }
+ #directRankingPanels .direct-ranking-toolbar-title {
+  flex:0 0 auto; white-space:nowrap; font-size:13px;
+ }
+ #directRankingPanels .direct-rank-toolbar-controls {
+  display:flex!important; flex-direction:row!important; flex-wrap:nowrap!important;
+  align-items:center!important; justify-content:flex-end!important;
+  gap:7px!important; flex:1 1 auto; min-width:0; width:auto!important;
+  margin-left:auto!important;
+ }
+ #directRankingPanels .direct-rank-toolbar-controls label {flex:0 0 auto;white-space:nowrap;font-size:11px}
+ #directRankingPanels .direct-rank-toolbar-controls select {
+  flex:0 1 155px!important; width:155px!important; min-width:95px!important;
+  max-width:155px!important; padding:6px 7px!important; font-size:11px!important;
+ }
+ #directRankingPanels .direct-rank-toolbar-controls #directRankBuyer {
+  flex:1 1 160px!important; width:160px!important; min-width:105px!important;
+  max-width:210px!important;
+ }
+ #directRankingPanels .direct-rank-export {flex:0 0 auto;white-space:nowrap}
+ #directRankingPanels #directRankExportBtn {white-space:nowrap;padding:7px 10px;font-size:12px}
+}
+@media (min-width:900px) and (max-width:1100px) {
+ #directRankingPanels .direct-ranking-filters {gap:6px!important;padding:8px!important}
+ #directRankingPanels .direct-ranking-toolbar-title {font-size:12px}
+ #directRankingPanels .direct-rank-toolbar-controls {gap:5px!important}
+ #directRankingPanels .direct-rank-toolbar-controls select {flex-basis:115px!important;width:115px!important;max-width:115px!important}
+ #directRankingPanels .direct-rank-toolbar-controls #directRankBuyer {flex-basis:125px!important;width:125px!important;max-width:150px!important}
+}
+</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
@@ -1848,9 +1894,9 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  </tbody><tfoot><tr><th scope="row">Grand Total</th><?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$v=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?><td><?=nf_clean((float)$v['kgs']/1000,3)?></td><td><?=nf((float)$v['value'],2)?></td><td><?=nf(pct((float)$v['kgs'],$grandSold),2)?></td><?php endforeach;?><td><?=nf_clean($grandSold/1000,3)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div>
 </section>
 <div id="directRankingPanels" class="analytics" <?=$directView!=='rankings'?'hidden style="display:none!important"':''?>>
-<div class="direct-ranking-filters"><span class="direct-ranking-toolbar-title">Top 15 Buyers &amp; Sellers</span><div class="tc-export direct-rank-export"><button type="button" id="directRankExportBtn" class="tc-export-btn" aria-expanded="false" aria-haspopup="true" aria-controls="directRankExportMenu">⇩ Export <span aria-hidden="true">▾</span></button><div id="directRankExportMenu" class="direct-rank-export-menu" role="group" aria-label="Ranking filters and exports"><div class="direct-rank-menu-title">Filter rankings</div><label for="directRankChannel">Sales Channel</label><select id="directRankChannel" aria-label="Filter ranking sales channel"><option value="all">All Channels</option><?php foreach(['Direct Export','Local Sale','Local Roast'] as $rc):?><option value="<?=htmlspecialchars($rc,ENT_QUOTES,'UTF-8')?>" <?=$directRankChannel===$rc?'selected':''?>><?=htmlspecialchars($rc,ENT_QUOTES,'UTF-8')?></option><?php endforeach;?></select><label for="directRankBuyer">Buyer</label><select id="directRankBuyer" aria-label="Filter ranking buyer"><option value="all">All Buyers</option><?php foreach($directRankBuyers as $rb):?><option value="<?=htmlspecialchars($rb,ENT_QUOTES,'UTF-8')?>" <?=$directRankBuyer===$rb?'selected':''?>><?=htmlspecialchars($rb,ENT_QUOTES,'UTF-8')?></option><?php endforeach;?></select><div class="direct-rank-menu-title">Export report</div><div class="direct-rank-export-actions"><button type="button" data-rank-format="xlsx">Excel</button><button type="button" data-rank-format="doc">Word</button><button type="button" data-rank-format="pdf">PDF</button></div><label for="directRankExportTarget">Export table</label><select id="directRankExportTarget"><option value="both">Both tables</option><option value="buyer">Top 15 Buyers</option><option value="seller">Top 15 Sellers</option></select></div></div></div>
+<div class="direct-ranking-filters"><span class="direct-ranking-toolbar-title">Top 15 Buyers &amp; Sellers</span><div class="direct-rank-toolbar-controls"><label for="directRankChannel">Channel</label><select id="directRankChannel" aria-label="Filter ranking sales channel"><option value="all">All Channels</option><?php foreach(['Direct Export','Local Sale','Local Roast'] as $rc):?><option value="<?=htmlspecialchars($rc,ENT_QUOTES,'UTF-8')?>" <?=$directRankChannel===$rc?'selected':''?>><?=htmlspecialchars($rc,ENT_QUOTES,'UTF-8')?></option><?php endforeach;?></select><label for="directRankBuyer">Buyer</label><select id="directRankBuyer" aria-label="Filter ranking buyer"><option value="all">All Buyers</option><?php foreach($directRankBuyers as $rb):?><option value="<?=htmlspecialchars($rb,ENT_QUOTES,'UTF-8')?>" <?=$directRankBuyer===$rb?'selected':''?>><?=htmlspecialchars($rb,ENT_QUOTES,'UTF-8')?></option><?php endforeach;?></select><div class="tc-export direct-rank-export"><button type="button" id="directRankExportBtn" class="tc-export-btn" aria-expanded="false" aria-haspopup="true" aria-controls="directRankExportMenu">⇩ Export <span aria-hidden="true">▾</span></button><div id="directRankExportMenu" class="direct-rank-export-menu" role="group" aria-label="Ranking filters and exports"><div class="direct-rank-menu-title">Export report</div><div class="direct-rank-export-actions"><button type="button" data-rank-format="xlsx">Excel</button><button type="button" data-rank-format="doc">Word</button><button type="button" data-rank-format="pdf">PDF</button></div><label for="directRankExportTarget">Export table</label><select id="directRankExportTarget"><option value="both">Both tables</option><option value="buyer">Top 15 Buyers</option><option value="seller">Top 15 Sellers</option></select></div></div></div></div></div>
 <?php foreach(['buyer'=>'Top 15 Buyers','supplier_seller'=>'Top 15 Sellers'] as $partyKey=>$heading):$all=$directRankings[$partyKey];$top=array_slice($all,0,15);$other=array_slice($all,15);$otherQty=array_sum(array_map(fn($r)=>(float)$r['total_qty'],$other));$otherVal=array_sum(array_map(fn($r)=>(float)$r['total_value'],$other));?>
-<section class="panel rank-export-panel"><div class="panel-head"><strong><?=htmlspecialchars($heading)?></strong><div class="rank-panel-actions"><span>Ranked by sold quantity</span><button type="button" class="rank-export-button">Excel</button><button type="button" class="rank-export-button rank-word-button">Word</button><button type="button" class="rank-export-button rank-pdf-button">PDF</button></div></div><div class="table-box"><table><thead><tr><th><?=$partyKey==='buyer'?'Buyer':'Seller'?></th><th>Sold Qty (MT)</th><th>Value (USD)</th><th>Share (%)</th></tr></thead><tbody>
+<section class="panel rank-export-panel"><div class="panel-head"><strong><?=htmlspecialchars($heading)?></strong><div class="rank-panel-actions"><button type="button" class="rank-export-button">Excel</button><button type="button" class="rank-export-button rank-word-button">Word</button><button type="button" class="rank-export-button rank-pdf-button">PDF</button></div></div><div class="table-box"><table><thead><tr><th><?=$partyKey==='buyer'?'Buyer':'Seller'?></th><th>Sold Qty (MT)</th><th>Value (USD)</th><th>Share (%)</th></tr></thead><tbody>
 <?php foreach($top as $i=>$r):?><tr><td><span class="rank"><?=$i+1?></span><?=htmlspecialchars($r['name'])?></td><td><?=nf_clean((float)$r['total_qty']/1000,3)?></td><td><?=nf((float)$r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$directRankGrandKg),2)?></td></tr><?php endforeach;?>
 <?php if($other):?><tr><td><button type="button" class="ranking-other-toggle" aria-expanded="false"><span class="ranking-other-chevron">▸</span> Other (<?=count($other)?> <?=$partyKey==='buyer'?'buyers':'sellers'?>) <span class="ranking-other-hint">Show details</span></button></td><td><?=nf_clean($otherQty/1000,3)?></td><td><?=nf($otherVal,2)?></td><td><?=nf(pct($otherQty,$directRankGrandKg),2)?></td></tr>
 <?php foreach($other as $j=>$r):?><tr class="ranking-other-detail" hidden><td><span class="rank"><?=16+$j?></span><?=htmlspecialchars($r['name'])?></td><td><?=nf_clean((float)$r['total_qty']/1000,3)?></td><td><?=nf((float)$r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$directRankGrandKg),2)?></td></tr><?php endforeach;endif;?></tbody><tfoot><tr><td>Period Grand Total</td><td><?=nf_clean($directRankGrandKg/1000,3)?></td><td><?=nf($directRankGrandValue,2)?></td><td><?=$directRankGrandKg>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
