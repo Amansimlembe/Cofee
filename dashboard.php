@@ -1353,7 +1353,7 @@ tfoot td{font-weight:700!important}
   vertical-align:middle !important;
 }
 /* Percentage headers already declare the unit; values therefore display as plain numbers. */
-.tc-summary-actions{display:flex;align-items:center;gap:7px;margin-left:auto;font-size:11px;font-weight:600}.tc-summary-actions select{min-width:125px;height:30px;border:1px solid #d8cec7;border-radius:6px;background:#fff;color:#4b342c;padding:0 7px}.totalclean-grade-table{width:100%;border-collapse:collapse;font-size:11px}.totalclean-grade-table th,.totalclean-grade-table td{padding:8px 12px;border-bottom:1px solid #e9e0db;text-align:right}.totalclean-grade-table th:first-child,.totalclean-grade-table td:first-child{text-align:left}.totalclean-grade-table .tc-grade-family{background:#efe9e3;font-weight:800}.totalclean-grade-table tfoot{background:#f5f0eb;font-weight:800}.totalclean-grade-table[hidden],.totalclean-table[hidden]{display:none!important}@media(max-width:650px){.tc-summary-actions{margin-left:0}.tc-summary-actions select{min-width:105px}}
+.tc-summary-actions{display:flex;align-items:center;gap:7px;margin-left:auto;font-size:11px;font-weight:600}.tc-summary-actions select{min-width:125px;height:30px;border:1px solid #d8cec7;border-radius:6px;background:#fff;color:#4b342c;padding:0 7px}.totalclean-grade-table{width:100%;border-collapse:collapse;font-size:11px}.totalclean-grade-table th,.totalclean-grade-table td{padding:8px 12px;border-bottom:1px solid #e9e0db;text-align:right}.totalclean-grade-table th:first-child,.totalclean-grade-table td:first-child{text-align:left}.totalclean-grade-table .tc-grade-family{background:#efe9e3;font-weight:800}.totalclean-grade-table tfoot{background:#f5f0eb;font-weight:800}.totalclean-grade-table{table-layout:auto!important;min-width:0!important;width:100%!important;font-size:12px!important}.totalclean-grade-table th,.totalclean-grade-table td{padding:5px 7px!important;white-space:normal!important;line-height:1.3}.totalclean-grade-table th:first-child,.totalclean-grade-table td:first-child{width:32%;min-width:155px;overflow-wrap:anywhere}.totalclean-grade-table th:not(:first-child),.totalclean-grade-table td:not(:first-child){width:17%;white-space:nowrap!important;font-variant-numeric:tabular-nums}@media(max-width:680px){.totalclean-grade-table{font-size:10px!important}.totalclean-grade-table th,.totalclean-grade-table td{padding:4px!important}}.totalclean-grade-table[hidden],.totalclean-table[hidden]{display:none!important}@media(max-width:650px){.tc-summary-actions{margin-left:0}.tc-summary-actions select{min-width:105px}}
 </style>
 <style id="report-sticky-controls">
 /* Sticky report controls: the document scrolls underneath while controls stay available.
@@ -1852,6 +1852,7 @@ foreach(['Arabica','Robusta'] as $family):
 <?php $tcVisibleGrades=$tcGradeOrder[$family];foreach([$tcPreviousGradeData,$tcGradeData] as $dataset){foreach(array_keys($dataset[$family]) as $grade){if(!in_array($grade,$tcVisibleGrades,true))$tcVisibleGrades[]=$grade;}}
 foreach($tcVisibleGrades as $grade):
  $prior=$tcPreviousGradeData[$family][$grade]??['kg'=>0,'usd'=>0];$current=$tcGradeData[$family][$grade]??['kg'=>0,'usd'=>0];
+ if(str_starts_with($grade,'Unclassified') && abs((float)$prior['kg'])<0.000001 && abs((float)$prior['usd'])<0.000001 && abs((float)$current['kg'])<0.000001 && abs((float)$current['usd'])<0.000001)continue;
 ?><tr><td><?=htmlspecialchars($grade)?></td><td><?=nf_clean($prior['kg']/1000,3)?></td><td><?=nf_clean($prior['usd'],2)?></td><td><?=nf_clean($current['kg']/1000,3)?></td><td><?=nf_clean($current['usd'],2)?></td></tr><?php endforeach;endforeach;?></tbody><tfoot><tr><td>Grand Total</td><td><?=nf_clean($tcGradeTotals['previous']['kg']/1000,3)?></td><td><?=nf_clean($tcGradeTotals['previous']['usd'],2)?></td><td><?=nf_clean($tcGradeTotals['current']['kg']/1000,3)?></td><td><?=nf_clean($tcGradeTotals['current']['usd'],2)?></td></tr></tfoot></table></div></section>
 <?php else: ?>
 <section class="panel tc-analysis-panel">
@@ -2264,7 +2265,7 @@ foreach($tcVisibleGrades as $grade):
      styles:{fontSize:5.7,cellPadding:1.2,textColor:[40,31,27],lineColor:[91,64,51],lineWidth:.15,fillColor:false},
      headStyles:{fontStyle:'bold',textColor:[58,39,30],fillColor:[245,240,236],lineWidth:.25},
      footStyles:{fontStyle:'bold',textColor:[58,39,30],fillColor:[250,247,245],lineWidth:.25},
-     columnStyles:{0:{cellWidth:24,halign:'left'}},
+     columnStyles:{0:{cellWidth:table===gradeTable?80:24,halign:'left'}},
      didParseCell:d=>{if(d.column.index>0)d.cell.styles.halign='right';}
    });
    doc.save(filename('pdf'));
