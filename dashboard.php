@@ -74,14 +74,15 @@ function dashboard_summary_period(string $season,string $start,string $end):arra
     if(!in_array($type,['monthly','quarterly'],true))$type='monthly';
     $periods=['all'=>['from'=>$start,'to'=>$end,'label'=>$type==='monthly'?'All Months':'All Quarters']];
     $base=new DateTimeImmutable($start);
-    for($i=0;$i<($type==='monthly'?12:4);$i++){
+    $monthsSpan=((int)$base->diff(new DateTimeImmutable($end))->format('%y'))*12+(int)$base->diff(new DateTimeImmutable($end))->format('%m')+1;
+    for($i=0;$i<($season==='all'?($type==='monthly'?$monthsSpan:(int)ceil($monthsSpan/3)):($type==='monthly'?12:4));$i++){
         $offset=$type==='monthly'?$i:$i*3;
         $count=$type==='monthly'?1:3;
         $begin=$base->modify('+'.$offset.' months');
         $finish=$begin->modify('+'.$count.' months')->modify('-1 day');
         $key=($type==='monthly'?'m':'q').($i+1);
         $label=$type==='monthly'?$begin->format('F Y'):'Q'.($i+1).' ('.$begin->format('M Y').' – '.$finish->format('M Y').')';
-        $periods[$key]=['from'=>$begin->format('Y-m-d'),'to'=>$finish->format('Y-m-d'),'label'=>$label];
+        $periods[$key]=['from'=>$begin->format('Y-m-d'),'to'=>min($finish->format('Y-m-d'),$end),'label'=>$label];
     }
     $selected=(string)($_GET['summary_period_value']??'all');
     if(!isset($periods[$selected]))$selected='all';
@@ -132,7 +133,7 @@ if($display==='preauction'){
  $dr=$ddb->query("SELECT invoice_date d FROM public.direct_sales WHERE invoice_date IS NOT NULL UNION SELECT auction_date FROM public.clean_auction_results WHERE auction_date IS NOT NULL")->fetchAll();
  $seasons=[];foreach($dr as$r){$d=$r['d']??null;if(!$d)continue;$y=(int)substr($d,0,4);$m=(int)substr($d,5,2);$sy=$m>=7?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}
  $kr=$kdb->query("SELECT auction_date d FROM public.kagera_auction_results WHERE auction_date IS NOT NULL UNION SELECT auction_date FROM public.kagera_auction_catalogue WHERE auction_date IS NOT NULL")->fetchAll();foreach($kr as$r){$d=$r['d']??null;if(!$d)continue;$y=(int)substr($d,0,4);$m=(int)substr($d,5,2);$sy=$m>=6?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
- $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$seasonTo]=season_bounds($season);
+ $season=$_GET['season']??($seasons[0]??current_season());if($season!=='all'&&!season_bounds($season))$season=$seasons[0]??current_season();[$from,$seasonTo]=($season==='all'&&$seasons?[substr($seasons[count($seasons)-1],0,4).'-07-01',substr($seasons[0],5,4).'-06-30']:season_bounds($season));
  /* Pre-auction report cut-off: every report is prepared on Wednesday for Thursday's 10:30 AM auction. */
  $wednesdayDates=[];
  try{
@@ -216,7 +217,7 @@ if($display==='preauction'){
  $preChannelKg=array_sum(array_column($preChannels,'kg'));
  $preChannelVal=array_sum(array_column($preChannels,'val'));
  $q=$cdb->prepare("SELECT COALESCE(NULLIF(INITCAP(LOWER(BTRIM(buyer))),''),'Unspecified') name,SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END) kg,SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0)*COALESCE(price_per_50kg,0)/50.0 ELSE 0 END) val FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1 HAVING SUM(CASE WHEN $sold THEN COALESCE(n_kgs,0) ELSE 0 END)>0 ORDER BY kg DESC");$q->execute(['f'=>$from,'t'=>$to]);$preCleanBuyers=$q->fetchAll();
- $kf=$season;[$ky1,$ky2]=array_map('intval',explode('/',$kf));$kfrom=$ky1.'-06-01';$kseasonEnd=$ky2.'-05-31';$kto=($reportDate<$kseasonEnd?$reportDate:$kseasonEnd);$kcase="CASE WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%dry cherry%' THEN 'Dry Cherry Coffee' WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%clean%' THEN 'Clean Coffee' ELSE NULL END";
+ $kf=$season;[$ky1,$ky2]=$kf==='all'?[(int)substr($seasons[count($seasons)-1],0,4),(int)substr($seasons[0],5,4)]:array_map('intval',explode('/',$kf));$kfrom=$ky1.'-06-01';$kseasonEnd=$ky2.'-05-31';$kto=($reportDate<$kseasonEnd?$reportDate:$kseasonEnd);$kcase="CASE WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%dry cherry%' THEN 'Dry Cherry Coffee' WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%clean%' THEN 'Clean Coffee' ELSE NULL END";
  $q=$kdb->prepare("SELECT COUNT(DISTINCT NULLIF(BTRIM(auction_no),'')) auctions,COUNT(DISTINCT NULLIF(BTRIM(buyer),'')) buyers,SUM(COALESCE(kgs,0)) sold,SUM(COALESCE(kgs,0)*COALESCE(price,0)) val,SUM(CASE WHEN $kcase='Dry Cherry Coffee' THEN COALESCE(kgs,0) ELSE 0 END) drykg,SUM(CASE WHEN $kcase='Dry Cherry Coffee' THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END) dryval,SUM(CASE WHEN $kcase='Clean Coffee' THEN COALESCE(kgs,0) ELSE 0 END) cleankg,SUM(CASE WHEN $kcase='Clean Coffee' THEN COALESCE(kgs,0)*COALESCE(price,0) ELSE 0 END) cleanval FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t");$q->execute(['f'=>$kfrom,'t'=>$kto]);$preK=$q->fetch()?:[];
  $q=$kdb->prepare("SELECT SUM(COALESCE(kgs,0)) FROM public.kagera_auction_catalogue WHERE auction_date BETWEEN :f AND :t");$q->execute(['f'=>$kfrom,'t'=>$kto]);$preKOff=(float)$q->fetchColumn();
  $q=$kdb->prepare("SELECT COALESCE(NULLIF(REPLACE(BTRIM(grade),'_',' '),''),'Unspecified') type,SUM(COALESCE(kgs,0)) kg,SUM(COALESCE(kgs,0)*COALESCE(price,0)) val FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY 1 ORDER BY kg DESC");$q->execute(['f'=>$kfrom,'t'=>$kto]);$preKTypes=$q->fetchAll();
@@ -276,7 +277,7 @@ if($display==='sales'){
  $dateRows=$ddb->query("SELECT invoice_date d FROM public.direct_sales WHERE invoice_date IS NOT NULL UNION SELECT auction_date FROM public.clean_auction_results WHERE auction_date IS NOT NULL")->fetchAll();
  $seasons=[];foreach($dateRows as$r){$d=$r['d']??null;if(!$d)continue;$y=(int)substr($d,0,4);$m=(int)substr($d,5,2);$sy=$m>=7?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}
  $kDateRows=$db->query("SELECT auction_date d FROM public.kagera_auction_results WHERE auction_date IS NOT NULL UNION SELECT auction_date FROM public.kagera_auction_catalogue WHERE auction_date IS NOT NULL")->fetchAll();foreach($kDateRows as$r){$d=$r['d']??null;if(!$d)continue;$y=(int)substr($d,0,4);$m=(int)substr($d,5,2);$sy=$m>=6?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
-  $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$seasonTo]=season_bounds($season);
+  $season=$_GET['season']??($seasons[0]??current_season());if($season!=='all'&&!season_bounds($season))$season=$seasons[0]??current_season();[$from,$seasonTo]=($season==='all'&&$seasons?[substr($seasons[count($seasons)-1],0,4).'-07-01',substr($seasons[0],5,4).'-06-30']:season_bounds($season));
   /* Friday-only publication dates, bounded by the selected season and local date. */
   $salesFridayDates=[];
   $salesTZ=new DateTimeZone('Africa/Dar_es_Salaam');
@@ -289,7 +290,7 @@ if($display==='sales'){
   $requestedFriday=trim((string)($_GET['report_date']??''));
   $salesReportDate=in_array($requestedFriday,$salesFridayDates,true)?$requestedFriday:($salesFridayDates?end($salesFridayDates):$from);
   $to=$salesReportDate;
-  [$kSy1,$kSy2]=array_map('intval',explode('/',$season));$kFrom=$kSy1.'-06-01';$kSeasonEnd=$kSy2.'-05-31';$kTo=min($kSeasonEnd,$salesReportDate);
+  [$kSy1,$kSy2]=$season==='all'?[(int)substr($seasons[count($seasons)-1],0,4),(int)substr($seasons[0],5,4)]:array_map('intval',explode('/',$season));$kFrom=$kSy1.'-06-01';$kSeasonEnd=$kSy2.'-05-31';$kTo=min($kSeasonEnd,$salesReportDate);
  $endQ=$ddb->prepare("SELECT MAX(d) FROM (SELECT invoice_date d FROM public.direct_sales WHERE invoice_date BETWEEN :f1 AND :t1 UNION ALL SELECT auction_date FROM public.clean_auction_results WHERE auction_date BETWEEN :f2 AND :t2 UNION ALL SELECT auction_date FROM public.kagera_auction_results WHERE auction_date BETWEEN :f3 AND :t3)x");
  $endQ->execute(['f1'=>$from,'t1'=>$to,'f2'=>$from,'t2'=>$to,'f3'=>$kFrom,'t3'=>$kTo]);$latestSalesTransaction=$endQ->fetchColumn()?:null;$salesEnd=$salesReportDate;
  $weekStart=date('Y-m-d',strtotime('monday this week',strtotime($salesEnd))); if($weekStart<$from)$weekStart=$from;
@@ -341,20 +342,21 @@ if($display==='totalclean'){
  function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM d)::int y,EXTRACT(MONTH FROM d)::int m FROM (SELECT auction_date d FROM public.clean_auction_results WHERE auction_date IS NOT NULL UNION SELECT invoice_date d FROM public.direct_sales WHERE invoice_date IS NOT NULL)x ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
- $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $season=$_GET['season']??($seasons[0]??current_season());if($season!=='all'&&!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=($season==='all'&&$seasons?[substr($seasons[count($seasons)-1],0,4).'-07-01',substr($seasons[0],5,4).'-06-30']:season_bounds($season));
   /* Total Clean Coffee period controls: season starts in July (Q1 Jul-Sep). */
   $tcSeasonFrom=$from;$tcSeasonTo=$to;
   $tcPeriodType=(string)($_GET['tc_period']??'monthly');
   if(!in_array($tcPeriodType,['monthly','quarterly'],true))$tcPeriodType='monthly';
   $tcPeriods=['all'=>['from'=>$tcSeasonFrom,'to'=>$tcSeasonTo,'label'=>$tcPeriodType==='monthly'?'All Months':'All Quarters']];$tcStart=new DateTimeImmutable($tcSeasonFrom);
-  for($i=0;$i<($tcPeriodType==='monthly'?12:4);$i++){
+  $tcMonthsSpan=((int)$tcStart->diff(new DateTimeImmutable($tcSeasonTo))->format('%y'))*12+(int)$tcStart->diff(new DateTimeImmutable($tcSeasonTo))->format('%m')+1;
+  for($i=0;$i<($season==='all'?($tcPeriodType==='monthly'?$tcMonthsSpan:(int)ceil($tcMonthsSpan/3)):($tcPeriodType==='monthly'?12:4));$i++){
     $offset=$tcPeriodType==='monthly'?$i:$i*3;
     $months=$tcPeriodType==='monthly'?1:3;
     $begin=$tcStart->modify('+'.$offset.' months');
     $end=$begin->modify('+'.$months.' months')->modify('-1 day');
     $key=($tcPeriodType==='monthly'?'m':'q').($i+1);
     $label=$tcPeriodType==='monthly'?$begin->format('F Y'):'Q'.($i+1).' ('.$begin->format('M Y').' – '.$end->format('M Y').')';
-    $tcPeriods[$key]=['from'=>$begin->format('Y-m-d'),'to'=>$end->format('Y-m-d'),'label'=>$label];
+    $tcPeriods[$key]=['from'=>$begin->format('Y-m-d'),'to'=>min($end->format('Y-m-d'),$tcSeasonTo),'label'=>$label];
   }
   /* Show the entire selected season by default, until a specific month or quarter is chosen. */
   $tcPeriodValue=(string)($_GET['tc_period_value']??'all');
@@ -434,7 +436,7 @@ if($display==='direct'){
  function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM invoice_date)::int y,EXTRACT(MONTH FROM invoice_date)::int m FROM public.direct_sales WHERE invoice_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
- $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $season=$_GET['season']??($seasons[0]??current_season());if($season!=='all'&&!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=($season==='all'&&$seasons?[substr($seasons[count($seasons)-1],0,4).'-07-01',substr($seasons[0],5,4).'-06-30']:season_bounds($season));
  $summarySeasonFrom=$from;$summarySeasonTo=$to;
  [$summaryPeriodType,$summaryPeriodValue,$summaryPeriods,$from,$to]=dashboard_summary_period($season,$from,$to);
  $channelCase="CASE WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('DE','DIRECT EXPORT') THEN 'Direct Export' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LS','LOCAL SALE') THEN 'Local Sale' WHEN UPPER(BTRIM(COALESCE(sale_category,''))) IN ('LR','LOCAL ROAST','LOCAL ROAST SALE','SLS') THEN 'Local Roast' ELSE NULL END";
@@ -502,7 +504,7 @@ if($display==='clean'){
  function current_season(){$y=(int)date('Y');$m=(int)date('n');return $m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM auction_date)::int y,EXTRACT(MONTH FROM auction_date)::int m FROM public.clean_auction_results WHERE auction_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as $r){$y=((int)$r['m']>=7)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
- $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $season=$_GET['season']??($seasons[0]??current_season());if($season!=='all'&&!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=($season==='all'&&$seasons?[substr($seasons[count($seasons)-1],0,4).'-07-01',substr($seasons[0],5,4).'-06-30']:season_bounds($season));
  $summarySeasonFrom=$from;$summarySeasonTo=$to;
  [$summaryPeriodType,$summaryPeriodValue,$summaryPeriods,$from,$to]=dashboard_summary_period($season,$from,$to);
  $sold="UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
@@ -532,7 +534,7 @@ if($display==='clean'){
  function coffee_case_sql(){return"CASE WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%dry cherry%' THEN 'Dry Cherry Coffee' WHEN LOWER(BTRIM(COALESCE(grade2,''))) LIKE '%clean%' THEN 'Clean Coffee' ELSE NULL END";}
  $rs=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM auction_date)::int y,EXTRACT(MONTH FROM auction_date)::int m FROM(SELECT auction_date FROM public.kagera_auction_results UNION ALL SELECT auction_date FROM public.kagera_auction_catalogue)d WHERE auction_date IS NOT NULL ORDER BY y DESC,m DESC")->fetchAll();
  $seasons=[];foreach($rs as$r){$y=((int)$r['m']>=6)?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
- $season=$_GET['season']??($seasons[0]??current_season());if(!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=season_bounds($season);
+ $season=$_GET['season']??($seasons[0]??current_season());if($season!=='all'&&!season_bounds($season))$season=$seasons[0]??current_season();[$from,$to]=($season==='all'&&$seasons?[substr($seasons[count($seasons)-1],0,4).'-06-01',substr($seasons[0],5,4).'-05-31']:season_bounds($season));
  $summarySeasonFrom=$from;$summarySeasonTo=$to;
  [$summaryPeriodType,$summaryPeriodValue,$summaryPeriods,$from,$to]=dashboard_summary_period($season,$from,$to);
  $summary=['Dry Cherry Coffee'=>['offered'=>0,'sold'=>0,'value'=>0,'avg'=>0,'pct'=>0],'Clean Coffee'=>['offered'=>0,'sold'=>0,'value'=>0,'avg'=>0,'pct'=>0]];$case=coffee_case_sql();
@@ -1667,7 +1669,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
             <input type="hidden" name="summary_period_value" value="<?=htmlspecialchars($summaryPeriodValue,ENT_QUOTES)?>">
             <?php endif;?>
             <label>Season</label>
-            <select name="season" onchange="this.form.submit()"><?php foreach($seasons ?: [$season] as $s): ?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach ?></select>
+            <select name="season" onchange="this.form.submit()"><option value="all" <?=$season==='all'?'selected':''?>>All Seasons</option><?php foreach($seasons ?: [$season] as $s): ?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach ?></select>
             <label>Display</label>
             <select name="display" onchange="this.form.submit()"><option value="sales" <?=$display==='sales'?'selected':''?>>Sales Dashboard</option><option value="preauction" <?=$display==='preauction'?'selected':''?>>Pre Auction Report</option><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option><option value="direct" <?=$display==='direct'?'selected':''?>>Direct Sales Summary</option><option value="totalclean" <?=$display==='totalclean'?'selected':''?>>Total Clean Coffee Summary</option></select>
             <?php if($display==='preauction'): ?>
