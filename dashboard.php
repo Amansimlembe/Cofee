@@ -374,6 +374,35 @@ if($display==='totalclean'){
  $qty="CASE WHEN UPPER(BTRIM(COALESCE(d.sale_category,''))) IN ('LS','LOCAL SALE') THEN $ls ELSE COALESCE(d.net_kg,0) END";
  $q=$ddb->prepare("SELECT $directType coffee_type,$channel channel,SUM($qty) kgs,SUM(($qty)*COALESCE(d.price_usd_50kg,0)/50.0) value_usd FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channel IS NOT NULL GROUP BY 1,2");$q->execute(['f'=>$from,'t'=>$to,'lf'=>$from,'lt'=>$to]);
  foreach($q as$r){if(isset($totalClean[$r['coffee_type']][$r['channel']])){$kg=(float)$r['kgs'];$v=(float)$r['value_usd'];$totalClean[$r['coffee_type']][$r['channel']]=['kgs'=>$kg,'value'=>$v,'avg'=>$kg>0?$v*50/$kg:0];}}
+ /* Grade summary: source-aligned, same period, SOLD auction only, and Local Sale balance. */
+ $tcGradeData=['Arabica'=>[],'Robusta'=>[]];
+ $tcGradeOrder=['Arabica'=>['AAA','AA','A','AB','B','PB','C','H/A FAQ','Lower Grades','Unclassified'], 'Robusta'=>['Over 18','Superior','FAQ','Lower Grades','Unclassified']];
+ $tcAddGrade=static function(string $family,string $grade,float $kg,float $usd) use (&$tcGradeData):void {
+   if(!isset($tcGradeData[$family][$grade]))$tcGradeData[$family][$grade]=['kg'=>0.0,'usd'=>0.0];
+   $tcGradeData[$family][$grade]['kg']+=$kg;$tcGradeData[$family][$grade]['usd']+=$usd;
+ };
+ $tcGradeClass=static function(string $raw,string $family):string {
+   $g=strtoupper(trim(preg_replace('/[\s_\-]+/',' ',str_replace(['/','\\'], ' ', $raw))));
+   $g=preg_replace('/\s+/',' ',$g);
+   if($g==='')return 'Unclassified';
+   if($family==='Robusta'){
+     if(preg_match('/(?:^|\s)(?:UG|TRIAGE|TRIAGES|BLACK|BLACKS)(?:\s|$)/',$g))return 'Lower Grades';
+     if(preg_match('/(?:OVER|ABOVE|SCREEN|SCR|SC)\s*18\b|^18\+?$|^18\s*(?:UP|PLUS)$/',$g))return 'Over 18';
+     if(str_contains($g,'SUPERIOR')||preg_match('/^SUP\b/',$g))return 'Superior';
+     if(preg_match('/\bFAQ\b/',$g))return 'FAQ';
+     return 'Unclassified';
+   }
+   if(preg_match('/(?:^|\s)(?:AF|TT|F|E|HP|TEX|TRIAGE|TRIAGES|BLACK|BLACKS|UG|BHP)(?:\s|$)/',$g))return 'Lower Grades';
+   if(preg_match('/\bFAQ\b/',$g))return 'H/A FAQ';
+   if(preg_match('/(?:^|\s)(AAA|AA|AB|PB|A|B|C)(?:\s|$)/',$g,$m))return $m[1];
+   return 'Unclassified';
+ };
+ $gq=$db->prepare("SELECT grade,grade2,n_kgs,price_per_50kg,$auctionType coffee_family FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t AND UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')");
+ $gq->execute(['f'=>$from,'t'=>$to]);
+ foreach($gq as $r){$fam=$r['coffee_family']==='Robusta'?'Robusta':'Arabica';$raw=trim((string)($r['grade']??''));$g=$tcGradeClass($raw,$fam);if($g==='Unclassified')$g=$tcGradeClass((string)($r['grade2']??''),$fam);$kg=(float)$r['n_kgs'];$tcAddGrade($fam,$g,$kg,$kg*(float)$r['price_per_50kg']/50);}
+ $gq=$ddb->prepare("SELECT $directType coffee_family,d.grade_name,d.grade_level,d.net_kg,d.price_usd_50kg,($qty) effective_kg FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channel IS NOT NULL");
+ $gq->execute(['f'=>$from,'t'=>$to,'lf'=>$from,'lt'=>$to]);
+ foreach($gq as $r){$fam=$r['coffee_family']==='Robusta'?'Robusta':'Arabica';$g=$tcGradeClass((string)($r['grade_level']??''),$fam);if($g==='Unclassified')$g=$tcGradeClass((string)($r['grade_name']??''),$fam);$kg=(float)$r['effective_kg'];$tcAddGrade($fam,$g,$kg,$kg*(float)$r['price_usd_50kg']/50);}
  $tcChannelTotals=[];$tcGrandKg=0;$tcGrandValue=0;foreach($channels as$ch){$kg=$v=0;foreach($types as$ct){$kg+=$totalClean[$ct][$ch]['kgs'];$v+=$totalClean[$ct][$ch]['value'];}$tcChannelTotals[$ch]=['kgs'=>$kg,'value'=>$v,'avg'=>$kg>0?$v*50/$kg:0];$tcGrandKg+=$kg;$tcGrandValue+=$v;}
  /* Analytical detail for Top 10 views. Local Sale continues to use LS Balance. */
  $normParty=function($f){return "COALESCE(NULLIF(INITCAP(LOWER(REGEXP_REPLACE(BTRIM(COALESCE($f,'')),'\\s+',' ','g'))),''),'Unspecified')";};
@@ -1297,6 +1326,7 @@ tfoot td{font-weight:700!important}
   vertical-align:middle !important;
 }
 /* Percentage headers already declare the unit; values therefore display as plain numbers. */
+.tc-summary-actions{display:flex;align-items:center;gap:7px;margin-left:auto;font-size:11px;font-weight:600}.tc-summary-actions select{min-width:125px;height:30px;border:1px solid #d8cec7;border-radius:6px;background:#fff;color:#4b342c;padding:0 7px}.totalclean-grade-table{width:100%;border-collapse:collapse;font-size:11px}.totalclean-grade-table th,.totalclean-grade-table td{padding:8px 12px;border-bottom:1px solid #e9e0db;text-align:right}.totalclean-grade-table th:first-child,.totalclean-grade-table td:first-child{text-align:left}.totalclean-grade-table .tc-grade-family{background:#efe9e3;font-weight:800}.totalclean-grade-table tfoot{background:#f5f0eb;font-weight:800}.totalclean-grade-table[hidden],.totalclean-table[hidden]{display:none!important}@media(max-width:650px){.tc-summary-actions{margin-left:0}.tc-summary-actions select{min-width:105px}}
 </style>
 <style id="report-sticky-controls">
 /* Sticky report controls: the document scrolls underneath while controls stay available.
@@ -1782,11 +1812,14 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  <?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><div class="metric-group"><div class="metric"><span class="m-label coffee-name"><?=htmlspecialchars($ch)?></span><strong><?=nf_clean($x['kgs']/1000,3)?> MT</strong><small><?=nf(pct($x['kgs'],$tcGrandKg),2)?> of total</small></div><div class="metric"><span class="m-label">Value</span><strong><?=nf($x['value'],2)?></strong><small>USD</small></div><div class="metric"><span class="m-label">Avg. Price</span><strong><?=nf($x['avg'],2)?></strong><small>USD/50kg</small></div></div><?php endforeach;?>
 </div>
 <?php if($totalCleanView==='summary'): ?>
-<section class="panel totalclean-panel"><div class="panel-head totalclean-head"><div><strong>Coffee Sales Summary</strong><span>Clean coffee · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></span></div><div class="tc-export"><button type="button" id="tcExportBtn" class="tc-export-btn" title="Export Coffee Sales Summary">⇩ Export</button><div id="tcExportMenu" class="tc-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div><div class="table-box"><table id="totalCleanSalesTable" class="totalclean-table">
+<section class="panel totalclean-panel"><div class="panel-head totalclean-head"><div><strong>Coffee Sales Summary</strong><span>Clean coffee · <?=date('d M Y',strtotime($from))?> — <?=date('d M Y',strtotime($to))?></span></div><div class="tc-summary-actions"><label for="tcSummaryGrouping">Summary by</label><select id="tcSummaryGrouping" aria-label="Coffee summary grouping"><option value="coffee">Coffee Type</option><option value="grade">Grades</option></select></div><div class="tc-export"><button type="button" id="tcExportBtn" class="tc-export-btn" title="Export Coffee Sales Summary">⇩ Export</button><div id="tcExportMenu" class="tc-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div><div class="table-box"><table id="totalCleanSalesTable" class="totalclean-table">
 <thead><tr><th rowspan="2">Type of Coffee</th><?php foreach($channels as$ch):?><th colspan="3"><?=htmlspecialchars($ch)?></th><?php endforeach;?><th colspan="3">Total</th></tr><tr><?php foreach($channels as$ch):?><th>Kg</th><th>USD</th><th>$/50kg</th><?php endforeach;?><th>Kg</th><th>USD</th><th>%</th></tr></thead><tbody>
 <?php foreach($types as$ct):$rk=$rv=0;foreach($channels as$ch){$rk+=$totalClean[$ct][$ch]['kgs'];$rv+=$totalClean[$ct][$ch]['value'];}?><tr><td><?=htmlspecialchars($ct)?></td><?php foreach($channels as$ch):$x=$totalClean[$ct][$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($rk,2)?></td><td><?=nf($rv,2)?></td><td><?=nf(pct($rk,$tcGrandKg),2)?></td></tr><?php endforeach;?>
 </tbody><tfoot><tr><td>Grand Total</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf($x['kgs'],2)?></td><td><?=nf($x['value'],2)?></td><td><?=nf($x['avg'],2)?></td><?php endforeach;?><td><?=nf($tcGrandKg,2)?></td><td><?=nf($tcGrandValue,2)?></td><td><?=$tcGrandKg>0?'100%':'0%'?></td></tr><tr class="share-row"><td>Channel Share</td><?php foreach($channels as$ch):$x=$tcChannelTotals[$ch];?><td><?=nf(pct($x['kgs'],$tcGrandKg),2)?></td><td colspan="2"></td><?php endforeach;?><td colspan="3"></td></tr></tfoot>
-</table></div></section>
+</table><table id="totalCleanGradeTable" class="totalclean-grade-table" hidden><thead><tr><th rowspan="2">Grade</th><th colspan="2">Sale Season <?=htmlspecialchars($season)?></th></tr><tr><th>Weight (Tonnes)</th><th>Value (USD)</th></tr></thead><tbody>
+<?php $tcGradeGrandKg=0;$tcGradeGrandUsd=0;foreach(['Arabica','Robusta'] as $family):$familyKg=0;$familyUsd=0;foreach($tcGradeData[$family] as $gr){$familyKg+=$gr['kg'];$familyUsd+=$gr['usd'];}$tcGradeGrandKg+=$familyKg;$tcGradeGrandUsd+=$familyUsd; ?>
+<tr class="tc-grade-family"><td><?=strtoupper($family)?></td><td><?=nf_clean($familyKg/1000,3)?></td><td><?=nf_clean($familyUsd,2)?></td></tr>
+<?php foreach($tcGradeOrder[$family] as $grade):if(!isset($tcGradeData[$family][$grade]))continue;$fig=$tcGradeData[$family][$grade];?><tr><td><?=htmlspecialchars($grade)?></td><td><?=nf_clean($fig['kg']/1000,3)?></td><td><?=nf_clean($fig['usd'],2)?></td></tr><?php endforeach;endforeach; ?></tbody><tfoot><tr><td>Grand Total</td><td><?=nf_clean($tcGradeGrandKg/1000,3)?></td><td><?=nf_clean($tcGradeGrandUsd,2)?></td></tr></tfoot></table></div></section>
 <?php else: ?>
 <section class="panel tc-analysis-panel">
  <div class="panel-head tc-analysis-head">
@@ -2151,11 +2184,13 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
 
 <script>
 (function(){
- const btn=document.getElementById('tcExportBtn'),menu=document.getElementById('tcExportMenu'),table=document.getElementById('totalCleanSalesTable');
+ const btn=document.getElementById('tcExportBtn'),menu=document.getElementById('tcExportMenu'),coffeeTable=document.getElementById('totalCleanSalesTable'),gradeTable=document.getElementById('totalCleanGradeTable'),grouping=document.getElementById('tcSummaryGrouping');
+ let table=coffeeTable;
+ if(grouping&&gradeTable){grouping.addEventListener('change',()=>{const grade=grouping.value==='grade';table=grade?gradeTable:coffeeTable;gradeTable.hidden=!grade;coffeeTable.hidden=grade;});}
  if(!btn||!menu||!table)return;
  const season=<?=json_encode($season)?>;
  const safe=s=>String(s).replace(/[^A-Za-z0-9_-]+/g,'_');
- const filename=ext=>`Coffee_Sales_Summary_${safe(season)}.${ext}`;
+ const filename=ext=>`Coffee_Sales_Summary_${grouping?.value==='grade'?'By_Grades_':'By_Coffee_Type_'}${safe(season)}.${ext}`;
  btn.addEventListener('click',e=>{e.stopPropagation();menu.classList.toggle('show')});
  document.addEventListener('click',()=>menu.classList.remove('show'));
 
@@ -2170,6 +2205,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  function exportExcel(){
    if(!window.XLSX){alert('Excel export library is not available.');return}
    const aoa=matrix();
+   if(table===gradeTable){const ws=XLSX.utils.aoa_to_sheet(aoa);for(let r=2;r<aoa.length;r++)for(let c=1;c<=2;c++){const a=XLSX.utils.encode_cell({r,c}),cell=ws[a];if(cell){const n=numeric(cell.v);if(typeof n==='number'){cell.v=n;cell.t='n';cell.z='#,##0.00#';}}}ws['!cols']=[{wch:24},{wch:20},{wch:22}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Sales by Grade');XLSX.writeFile(wb,filename('xlsx'));return;}
    const ws=XLSX.utils.aoa_to_sheet(aoa);
    const range=XLSX.utils.decode_range(ws['!ref']);
    // Rows 3 onward contain data. First column is text; all remaining populated cells are numeric.
@@ -2189,9 +2225,9 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  function exportPDF(){
    if(!window.jspdf||!window.jspdf.jsPDF){alert('PDF export library is not available.');return}
    const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-   doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text('Coffee Sales Summary',14,13);
+   doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text(table===gradeTable?'Coffee Sales Summary by Grades':'Coffee Sales Summary',14,13);
    doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(`Clean coffee · Sale Season ${season}`,14,18);
-   doc.autoTable({html:'#totalCleanSalesTable',startY:22,theme:'grid',
+   doc.autoTable({html:table,startY:22,theme:'grid',
      styles:{fontSize:5.7,cellPadding:1.2,textColor:[40,31,27],lineColor:[91,64,51],lineWidth:.15,fillColor:false},
      headStyles:{fontStyle:'bold',textColor:[58,39,30],fillColor:[245,240,236],lineWidth:.25},
      footStyles:{fontStyle:'bold',textColor:[58,39,30],fillColor:[250,247,245],lineWidth:.25},
