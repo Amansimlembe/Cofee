@@ -62,6 +62,9 @@ if(($_GET['action']??'')==='save_certified_coffee'){
  catch(Throwable $e){error_log('Certified Coffee save: '.$e->getMessage());http_response_code(500);echo json_encode(['success'=>false,'message'=>'Unable to save Certified Coffee figures.']);}
  exit;
 }
+/* Direct Sales view is selected server-side so hidden reports cannot leak through CSS. */
+$directView=(string)($_GET['direct_view']??'summary');
+if(!in_array($directView,['summary','rankings','trend'],true))$directView='summary';
 $totalCleanView=$_GET['totalclean_view']??'summary';
 if(!in_array($totalCleanView,['summary','analysis'],true))$totalCleanView='summary';
 
@@ -1788,7 +1791,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
    <option value="<?=htmlspecialchars($periodKey,ENT_QUOTES)?>" <?=$periodKey===$summaryPeriodValue?'selected':''?>><?=htmlspecialchars($period['label'])?></option>
    <?php endforeach;?>
   </select>
-  <label for="directDashboardView">View</label><select id="directDashboardView" aria-label="Direct sales dashboard view" onchange="window.setDirectDashboardView(this.value)"><option value="summary">Sales Summary</option><option value="rankings">Top 15 Buyers &amp; Sellers</option><option value="trend">Sales Performance Trend</option></select>
+  <label for="directDashboardView">View</label><select id="directDashboardView" name="direct_view" aria-label="Direct sales dashboard view" onchange="this.form.submit()"><option value="summary" <?=$directView==='summary'?'selected':''?>>Sales Summary</option><option value="rankings" <?=$directView==='rankings'?'selected':''?>>Top 15 Buyers &amp; Sellers</option><option value="trend" <?=$directView==='trend'?'selected':''?>>Sales Performance Trend</option></select>
  </form></div>
 <div class="kpis direct-kpis direct-channel-cards direct-compact-cards">
  <?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$x=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?>
@@ -1803,7 +1806,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  <?php endforeach;?>
 </div>
 <div class="direct-view-tabs" style="margin-top:14px">
-<section id="directSummaryPanel" class="panel">
+<section id="directSummaryPanel" class="panel" <?=$directView!=='summary'?'hidden style="display:none!important"':''?>>
  <div class="panel-head direct-summary-head"><div><strong>Direct Sales Summary</strong><span class="direct-summary-sub">Coffee types by sales channel · quantity in MT</span></div><div class="direct-summary-tools"><label for="directChannelFilter">Channel</label><select id="directChannelFilter" aria-label="Filter direct sales channel"><option value="all">All Channels</option><option value="Direct Export">Direct Export</option><option value="Local Sale">Local Sale</option><option value="Local Roast">Local Roast</option></select><label for="directBuyerFilter">Buyer</label><select id="directBuyerFilter" aria-label="Filter direct sales buyer"><option value="all">All Buyers</option></select><div class="tc-export"><button type="button" id="directSummaryExportBtn" class="tc-export-btn" aria-expanded="false" aria-haspopup="true">⇩ Export</button><div id="directSummaryExportMenu" class="tc-export-menu"><button type="button" data-direct-export="pdf">PDF</button><button type="button" data-direct-export="xlsx">Excel</button><button type="button" data-direct-export="doc">Word</button></div></div></div></div>
  <div class="table-box direct-matrix-scroll"><table id="directSummaryTable"><thead><tr><th rowspan="2" scope="col">Coffee Type</th><th colspan="3" scope="colgroup">Direct Export</th><th colspan="3" scope="colgroup">Local Sale</th><th colspan="3" scope="colgroup">Local Roast</th><th colspan="3" scope="colgroup">Grand Total</th></tr><tr><?php foreach(['Direct Export','Local Sale','Local Roast','Grand Total'] as $channel):?><th>Qty (MT)</th><th>Value (USD)</th><th>Share (%)</th><?php endforeach;?></tr></thead><tbody>
  <?php
@@ -1814,14 +1817,14 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  <td class="direct-matrix-total"><?=nf_clean($rowKg/1000,3)?></td><td class="direct-matrix-total"><?=nf($rowValue,2)?></td><td class="direct-matrix-total"><?=nf(pct($rowKg,$grandSold),2)?></td></tr><?php endforeach;?>
  </tbody><tfoot><tr><th scope="row">Grand Total</th><?php foreach(['Direct Export','Local Sale','Local Roast'] as $ch):$v=$channelTotals[$ch]??['kgs'=>0,'value'=>0];?><td><?=nf_clean((float)$v['kgs']/1000,3)?></td><td><?=nf((float)$v['value'],2)?></td><td><?=nf(pct((float)$v['kgs'],$grandSold),2)?></td><?php endforeach;?><td><?=nf_clean($grandSold/1000,3)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div>
 </section>
-<div id="directRankingPanels" class="analytics" hidden>
+<div id="directRankingPanels" class="analytics" <?=$directView!=='rankings'?'hidden style="display:none!important"':''?>>
 <?php foreach(['buyer'=>'Top 15 Buyers','supplier_seller'=>'Top 15 Sellers'] as $partyKey=>$heading):$all=$directRankings[$partyKey];$top=array_slice($all,0,15);$other=array_slice($all,15);$otherQty=array_sum(array_map(fn($r)=>(float)$r['total_qty'],$other));$otherVal=array_sum(array_map(fn($r)=>(float)$r['total_value'],$other));?>
 <section class="panel rank-export-panel"><div class="panel-head"><strong><?=htmlspecialchars($heading)?></strong><div class="rank-panel-actions"><span>Ranked by sold quantity</span><button type="button" class="rank-export-button">Excel</button><button type="button" class="rank-export-button rank-word-button">Word</button><button type="button" class="rank-export-button rank-pdf-button">PDF</button></div></div><div class="table-box"><table><thead><tr><th><?=$partyKey==='buyer'?'Buyer':'Seller'?></th><th>Sold Qty (MT)</th><th>Value (USD)</th><th>Share (%)</th></tr></thead><tbody>
 <?php foreach($top as $i=>$r):?><tr><td><span class="rank"><?=$i+1?></span><?=htmlspecialchars($r['name'])?></td><td><?=nf_clean((float)$r['total_qty']/1000,3)?></td><td><?=nf((float)$r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?></td></tr><?php endforeach;?>
 <?php if($other):?><tr><td><button type="button" class="ranking-other-toggle" aria-expanded="false"><span class="ranking-other-chevron">▸</span> Other (<?=count($other)?> <?=$partyKey==='buyer'?'buyers':'sellers'?>) <span class="ranking-other-hint">Show details</span></button></td><td><?=nf_clean($otherQty/1000,3)?></td><td><?=nf($otherVal,2)?></td><td><?=nf(pct($otherQty,$grandSold),2)?></td></tr>
 <?php foreach($other as $j=>$r):?><tr class="ranking-other-detail" hidden><td><span class="rank"><?=16+$j?></span><?=htmlspecialchars($r['name'])?></td><td><?=nf_clean((float)$r['total_qty']/1000,3)?></td><td><?=nf((float)$r['total_value'],2)?></td><td><?=nf(pct((float)$r['total_qty'],$grandSold),2)?></td></tr><?php endforeach;endif;?></tbody><tfoot><tr><td>Period Grand Total</td><td><?=nf_clean($grandSold/1000,3)?></td><td><?=nf($grandValue,2)?></td><td><?=$grandSold>0?'100%':'0%'?></td></tr></tfoot></table></div></section>
 <?php endforeach;?></div>
-<section id="directTrendPanel" class="trend-panel" hidden><div class="trend-head"><strong>Direct Sales Performance Trend</strong><span>Monthly quantities by sales channel (MT) and sales value (USD)</span></div><div class="trend-wrap"><canvas id="directSalesTrendChart"></canvas></div></section>
+<section id="directTrendPanel" class="trend-panel" <?=$directView!=='trend'?'hidden style="display:none!important"':''?>><div class="trend-head"><strong>Direct Sales Performance Trend</strong><span>Monthly quantities by sales channel (MT) and sales value (USD)</span></div><div class="trend-wrap"><canvas id="directSalesTrendChart"></canvas></div></section>
 </div>
 <?php elseif(in_array($display,['clean','kagera'],true)): ?>
     <div class="summary-period-toolbar"><div class="summary-period-caption"><span class="summary-period-heading">Season</span><strong class="summary-season-value"><?=htmlspecialchars($season)?></strong><span class="summary-period-dates"><?=date('d M',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></span></div><div class="summary-toolbar-stat">
@@ -1892,7 +1895,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
 <script id="kagera-dashboard-view-script">
 (function(){
  const chooser=document.getElementById('kageraDashboardView'),summary=document.getElementById('kageraSalesSummaryPanel'),rank=document.getElementById('kageraRankingPanels'),trend=document.getElementById('kageraTrendPanel');if(!chooser||!summary||!rank||!trend)return;
- window.setKageraDashboardView=function(view){if(!['summary','rankings','trend'].includes(view))view='summary';chooser.value=view;summary.hidden=view!=='summary';rank.hidden=view!=='rankings';trend.hidden=view!=='trend';try{sessionStorage.setItem('kagera_dashboard_view',view)}catch(e){}if(view==='trend')setTimeout(()=>window.dispatchEvent(new Event('resize')),60)};
+ window.setKageraDashboardView=function(view){if(!['summary','rankings','trend'].includes(view))view='summary';chooser.value=view;[[summary,'summary'],[rank,'rankings'],[trend,'trend']].forEach(([panel,key])=>{const active=view===key;panel.hidden=!active;panel.style.setProperty('display',active?'':'none',active?'':'important');if(active)panel.style.removeProperty('display')});try{sessionStorage.setItem('kagera_dashboard_view',view)}catch(e){}if(view==='trend')setTimeout(()=>window.dispatchEvent(new Event('resize')),60)};
  let initial='summary';try{initial=sessionStorage.getItem('kagera_dashboard_view')||'summary'}catch(e){}window.setKageraDashboardView(initial);
  const table=document.getElementById('kageraSalesSummaryTable');const rows=()=>Array.from(table.rows,tr=>Array.from(tr.cells,td=>td.textContent.trim()));
  const season=<?=json_encode($season)?>,period=<?=json_encode($summaryPeriods[$summaryPeriodValue]['label'])?>,range=<?=json_encode($from.' to '.$to)?>;
@@ -1916,7 +1919,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  const picker=document.getElementById('directDashboardView'),summary=document.getElementById('directSummaryPanel'),rank=document.getElementById('directRankingPanels'),trend=document.getElementById('directTrendPanel');if(!picker||!summary||!rank||!trend)return;
  let chart;
  window.setDirectDashboardView=function(view){if(!['summary','rankings','trend'].includes(view))view='summary';picker.value=view;summary.hidden=view!=='summary';rank.hidden=view!=='rankings';trend.hidden=view!=='trend';try{sessionStorage.setItem('direct_dashboard_view',view)}catch(e){}if(view==='trend'){if(!chart&&window.Chart){const data=<?=json_encode($display==='direct'?$directTrend:[],JSON_NUMERIC_CHECK|JSON_UNESCAPED_UNICODE)?>;const ctx=document.getElementById('directSalesTrendChart');chart=new Chart(ctx,{data:{labels:data.map(x=>x.period),datasets:[{type:'bar',label:'Direct Export (MT)',data:data.map(x=>x['Direct Export']),yAxisID:'y'},{type:'bar',label:'Local Sale (MT)',data:data.map(x=>x['Local Sale']),yAxisID:'y'},{type:'bar',label:'Local Roast (MT)',data:data.map(x=>x['Local Roast']),yAxisID:'y'},{type:'line',label:'Sales Value (USD)',data:data.map(x=>x.value),yAxisID:'value',tension:.3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},scales:{y:{beginAtZero:true,title:{display:true,text:'Quantity (MT)'}},value:{position:'right',beginAtZero:true,title:{display:true,text:'Value (USD)'},grid:{drawOnChartArea:false}}}}})}setTimeout(()=>chart?.resize(),70)}};
- let initial='summary';try{initial=sessionStorage.getItem('direct_dashboard_view')||'summary'}catch(e){}window.setDirectDashboardView(initial);
+ window.setDirectDashboardView(<?=json_encode($directView)?>);
  const table=document.getElementById('directSummaryTable');
  const channelFilter=document.getElementById('directChannelFilter'),buyerFilter=document.getElementById('directBuyerFilter');
  const buyerData=<?=json_encode($display==='direct'?$directBuyerRows:[],JSON_NUMERIC_CHECK|JSON_UNESCAPED_UNICODE|JSON_INVALID_UTF8_SUBSTITUTE)?>;
