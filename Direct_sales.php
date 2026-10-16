@@ -135,8 +135,19 @@ function direct_upload(): void {
     ]);
 }
 function direct_upload_key(array $r): string {
-    // Category + invoice + date + contract + grade + coffee type + seller + buyer + warehouse.
-    $parts=[];foreach([1,2,4,5,6,7,11,14,15] as $i)$parts[]=strtoupper(trim((string)($r[$i]??'')));
+    // Exact duplicate identity: Sale Category, Invoice Number, Invoice Date,
+    // Contract Number, Grade Name, Supplier/Seller, Buyer, Net Kg and Price.
+    // The indices correspond to the 18-column Direct Sales record layout.
+    $textFields=[1,2,4,5,6,14,15];
+    $parts=[];
+    foreach($textFields as $i){
+        $parts[]=strtoupper(preg_replace('/\s+/u',' ',trim((string)($r[$i]??''))));
+    }
+    foreach([8,9] as $i){
+        $value=direct_num($r[$i]??null);
+        // Normalize numeric representations (e.g. 1,000 and 1000.000).
+        $parts[]=$value===null?'':rtrim(rtrim(sprintf('%.6F',$value),'0'),'.');
+    }
     return implode("\x1F",$parts);
 }
 
