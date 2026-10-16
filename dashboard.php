@@ -476,6 +476,27 @@ if($display==='farmgate'){
  if(!is_file($farmFile) && is_file(__DIR__.'/farm_gate_database(5).php'))$farmFile=__DIR__.'/farm_gate_database(5).php';
  if(!is_file($farmFile))throw new RuntimeException('Farmgate database module is missing: farm_gate_database.php');
  require_once $farmFile;
+ /* Compatibility with older deployed farm_gate_database.php versions. */
+ if(!function_exists('farm_db')){
+  function farm_db(): PDO {
+   static $connection=null;
+   if($connection instanceof PDO)return $connection;
+   $url=getenv('DATABASE_URL');
+   $parts=$url?parse_url($url):false;
+   if(!$parts||empty($parts['host'])||empty($parts['user'])||empty($parts['path']))throw new RuntimeException('Farmgate database configuration is unavailable.');
+   $dsn=sprintf('pgsql:host=%s;port=%d;dbname=%s',$parts['host'],(int)($parts['port']??5432),ltrim($parts['path'],'/'));
+   return $connection=new PDO($dsn,urldecode($parts['user']),urldecode($parts['pass']??''),[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_EMULATE_PREPARES=>false]);
+  }
+ }
+ if(!function_exists('ensure_farm_gate_table')){
+  function ensure_farm_gate_table(): void {
+   $pdo=farm_db();
+   $pdo->exec('CREATE TABLE IF NOT EXISTS public.farm_gate_contracts (id BIGSERIAL PRIMARY KEY,contract_date DATE NOT NULL,seller_name VARCHAR(300) NOT NULL,seller_district VARCHAR(200),seller_region VARCHAR(200),buyer_name VARCHAR(300) NOT NULL,buyer_region VARCHAR(200),coffee_type VARCHAR(200),processing_method VARCHAR(100),kilos_to_be_sold NUMERIC(18,2) NOT NULL,price_per_kilo_tzs NUMERIC(18,2) NOT NULL,warehouse VARCHAR(300),row_hash VARCHAR(64),created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP)');
+   $required=['seller_region'=>'VARCHAR(200)','seller_district'=>'VARCHAR(200)','contract_date'=>'DATE','kilos_to_be_sold'=>'NUMERIC(18,2)','price_per_kilo_tzs'=>'NUMERIC(18,2)'];
+   $check=$pdo->prepare("SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='farm_gate_contracts' AND column_name=:name");
+   foreach($required as$name=>$type){$check->execute(['name'=>$name]);if(!$check->fetchColumn())$pdo->exec('ALTER TABLE public.farm_gate_contracts ADD COLUMN "'.$name.'" '.$type);}
+  }
+ }
  ensure_farm_gate_table();$db=farm_db();
  function season_bounds($s){if(!preg_match('/^(\d{4})\/(\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
  function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
