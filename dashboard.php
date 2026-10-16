@@ -1962,7 +1962,7 @@ foreach($tcVisibleGrades as $grade):
 </style>
 <div class="fg-wrap">
  <div class="fg-metrics"><div class="fg-metric"><span>CONTRACTED WEIGHT</span><strong><?=nf_clean($farmTotals['kg']/1000,3)?> MT</strong></div><div class="fg-metric"><span>CONTRACT VALUE (TZS)</span><strong><?=nf($farmTotals['value'],2)?></strong></div><div class="fg-metric"><span>REGISTERED CONTRACTS</span><strong><?=nf($farmTotals['contracts'])?></strong></div></div>
- <section class="panel"><div class="fg-head"><div><h2>Farmgate Contracts by Seller Region and District</h2><p>Season <?=htmlspecialchars($season)?> · Contracted quantity (not confirmed sales) · Weight in metric tonnes (MT)</p></div><button class="fg-export" type="button" onclick="farmgateExportCSV()">⇩ Export CSV</button></div>
+ <section class="panel"><div class="fg-head"><div><h2>Farmgate Contracts by Seller Region and District</h2><p>Season <?=htmlspecialchars($season)?> · Contracted quantity (not confirmed sales) · Weight in metric tonnes (MT)</p></div><div class="tc-export"><button type="button" id="fgExportBtn" class="tc-export-btn" aria-expanded="false" aria-haspopup="true">⇩ Export ▾</button><div id="fgExportMenu" class="tc-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div>
  <div class="fg-table-box"><table class="fg-table" id="farmgateSummaryTable"><thead><tr><th>Seller Region</th><th>District</th><th class="num">Weight (Tonnes)</th><th class="num">Value (TZS)</th></tr></thead><tbody>
  <?php foreach($farmRegions as $region=>$group): ?>
  <?php foreach($group['rows'] as $i=>$r): ?>
@@ -1978,7 +1978,54 @@ foreach($tcVisibleGrades as $grade):
  <tr class="fg-total"><td colspan="2">Grand Total</td><td class="num"><?=nf_clean($farmTotals['kg']/1000,3)?></td><td class="num"><?=nf($farmTotals['value'],2)?></td></tr>
  </tbody></table></div></section>
 </div>
-<script>function farmgateExportCSV(){const table=document.getElementById('farmgateSummaryTable');const data=[];let activeRegion='';for(const tr of table.rows){const cells=[...tr.cells];if(!cells.length)continue;let vals=cells.map(c=>c.textContent.trim());if(tr.parentElement.tagName==='TBODY'&&!tr.classList.contains('fg-total')&&cells[0].classList.contains('fg-region-name'))activeRegion=vals[0];else if(tr.parentElement.tagName==='TBODY'&&!tr.classList.contains('fg-total')&&cells.length===3)vals.unshift(activeRegion);else if(cells[0].colSpan===2)vals.splice(1,0,'');data.push(vals.map(v=>'"'+v.replace(/"/g,'""')+'"').join(','));}const blob=new Blob(['\ufeff'+data.join('\r\n')],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Farmgate_Contracts_<?=preg_replace('/[^0-9A-Za-z-]/','-', $season)?>.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}</script>
+<script>
+(function(){
+ const btn=document.getElementById('fgExportBtn'),menu=document.getElementById('fgExportMenu'),table=document.getElementById('farmgateSummaryTable');
+ if(!btn||!menu||!table)return;
+ const season=<?=json_encode($season,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>;
+ const base='Farmgate_Contracts_Summary_'+String(season).replace(/[^A-Za-z0-9_-]/g,'_');
+ const heading='Farmgate Contracts by Seller Region and District';
+ btn.addEventListener('click',e=>{e.stopPropagation();const open=menu.classList.toggle('show');btn.setAttribute('aria-expanded',String(open))});
+ document.addEventListener('click',e=>{if(!e.target.closest('#fgExportBtn')&&!e.target.closest('#fgExportMenu')){menu.classList.remove('show');btn.setAttribute('aria-expanded','false')}});
+ const escapeHtml=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ // Expand merged region cells to produce exactly four columns for every exported row.
+ function rows(){
+   const out=[['Seller Region','District','Weight (Tonnes)','Value (TZS)']];let region='';
+   for(const tr of table.tBodies[0].rows){
+     if(tr.querySelector('td[colspan="4"]'))continue;
+     if(tr.classList.contains('fg-total')){const cells=[...tr.cells];out.push(['Grand Total','',cells[cells.length-2].textContent.trim(),cells[cells.length-1].textContent.trim()]);continue;}
+     const cells=[...tr.cells];if(cells[0]?.classList.contains('fg-region-name')){region=cells[0].textContent.trim();out.push([region,...cells.slice(1).map(c=>c.textContent.trim())]);}
+     else out.push([region,...cells.map(c=>c.textContent.trim())]);
+   }
+   return out;
+ }
+ function excel(){
+   if(!window.XLSX)return alert('Excel export library is not available.');
+   const data=rows(),ws=XLSX.utils.aoa_to_sheet([['TANZANIA COFFEE BOARD'],[heading],['Sale Season: '+season],[],...data]);
+   for(let r=5;r<5+data.length;r++)for(let c=2;c<4;c++){
+     const address=XLSX.utils.encode_cell({r,c}),cell=ws[address];if(!cell)continue;
+     const n=Number(String(cell.v).replace(/,/g,''));if(Number.isFinite(n)){cell.v=n;cell.t='n';cell.z='#,##0.###';}
+   }
+   ws['!cols']=[{wch:24},{wch:26},{wch:24},{wch:27}];
+   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Farmgate Summary');XLSX.writeFile(wb,base+'.xlsx',{cellStyles:true});
+ }
+ function pdf(){
+   if(!window.jspdf?.jsPDF)return alert('PDF export library is not available.');
+   const doc=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+   if(typeof doc.autoTable!=='function')return alert('PDF table export library is not available.');
+   doc.setTextColor(72,48,39);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('TANZANIA COFFEE BOARD',12,14);
+   doc.setFontSize(11);doc.text(heading,12,22);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Sale Season: '+season+'  |  Contracted quantity (MT), value (TZS)',12,29);
+   const data=rows();doc.autoTable({head:[data[0]],body:data.slice(1),startY:35,theme:'grid',margin:{left:10,right:10},styles:{fontSize:8,cellPadding:2.8,textColor:[55,41,32],lineColor:[219,205,190],lineWidth:.12},headStyles:{fillColor:[81,54,41],textColor:255,fontStyle:'bold'},columnStyles:{2:{halign:'right'},3:{halign:'right'}},didParseCell:x=>{if(x.section==='body'&&x.row.index===data.length-2){x.cell.styles.fillColor=[242,234,225];x.cell.styles.fontStyle='bold';}}});
+   doc.save(base+'.pdf');
+ }
+ function word(){
+   const data=rows(),tr=data.map((r,i)=>'<tr>'+r.map((v,j)=>'<'+(i?'td':'th')+' style="border:1px solid #c9b9a8;padding:7px;'+(i===0?'background:#513629;color:white;font-weight:bold;':'')+(i===data.length-1?'background:#eee5db;font-weight:bold;':'')+(j>1?'text-align:right;':'')+'">'+escapeHtml(v)+'</'+(i?'td':'th')+'>').join('')+'</tr>').join('');
+   const html='<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:Arial;color:#493225"><h3>TANZANIA COFFEE BOARD</h3><h2>'+escapeHtml(heading)+'</h2><p>Sale Season: '+escapeHtml(season)+' | Contracted quantity (MT), value (TZS)</p><table style="border-collapse:collapse;width:100%;font-size:10pt">'+tr+'</table></body></html>';
+   const blob=new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=base+'.doc';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+ }
+ menu.addEventListener('click',e=>{const format=e.target.closest('[data-format]')?.dataset.format;if(!format)return;e.stopPropagation();menu.classList.remove('show');btn.setAttribute('aria-expanded','false');if(format==='xlsx')excel();else if(format==='pdf')pdf();else if(format==='doc')word();});
+})();
+</script>
 <?php elseif($display==='direct'): ?>
 <div class="summary-period-toolbar"><div class="summary-period-caption"><span class="summary-period-heading">Season</span><strong class="summary-season-value"><?=htmlspecialchars($season)?></strong><span class="summary-period-dates"><?=date('d M',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></span></div><div class="summary-toolbar-stat">
 <?php if(in_array($display,['clean','kagera'],true)): ?>
