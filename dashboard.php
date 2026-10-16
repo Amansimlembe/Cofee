@@ -1988,39 +1988,90 @@ foreach($tcVisibleGrades as $grade):
  btn.addEventListener('click',e=>{e.stopPropagation();const open=menu.classList.toggle('show');btn.setAttribute('aria-expanded',String(open))});
  document.addEventListener('click',e=>{if(!e.target.closest('#fgExportBtn')&&!e.target.closest('#fgExportMenu')){menu.classList.remove('show');btn.setAttribute('aria-expanded','false')}});
  const escapeHtml=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- // Expand merged region cells to produce exactly four columns for every exported row.
- function rows(){
-   const out=[['Seller Region','District','Weight (Tonnes)','Value (TZS)']];let region='';
+ // Preserve the reference document's vertically merged seller regions and grid borders.
+ function exportData(){
+   const data=[['Seller Region','District','Weight (Tonnes)','Value (TZS)']];
+   const merges=[];let activeRegion='',start=-1;
    for(const tr of table.tBodies[0].rows){
      if(tr.querySelector('td[colspan="4"]'))continue;
-     if(tr.classList.contains('fg-total')){const cells=[...tr.cells];out.push(['Grand Total','',cells[cells.length-2].textContent.trim(),cells[cells.length-1].textContent.trim()]);continue;}
-     const cells=[...tr.cells];if(cells[0]?.classList.contains('fg-region-name')){region=cells[0].textContent.trim();out.push([region,...cells.slice(1).map(c=>c.textContent.trim())]);}
-     else out.push([region,...cells.map(c=>c.textContent.trim())]);
+     if(tr.classList.contains('fg-total')){
+       if(start>=0 && data.length-1>start)merges.push({start,end:data.length-1});
+       const c=[...tr.cells];data.push(['Grand Total','',c[c.length-2].textContent.trim(),c[c.length-1].textContent.trim()]);break;
+     }
+     const c=[...tr.cells];
+     if(c[0]?.classList.contains('fg-region-name')){
+       if(start>=0 && data.length-1>start)merges.push({start,end:data.length-1});
+       activeRegion=c[0].textContent.trim();start=data.length;
+       data.push([activeRegion,...c.slice(1).map(x=>x.textContent.trim())]);
+     }else data.push([activeRegion,...c.map(x=>x.textContent.trim())]);
    }
-   return out;
+   return {data,merges};
  }
  function excel(){
    if(!window.XLSX)return alert('Excel export library is not available.');
-   const data=rows(),ws=XLSX.utils.aoa_to_sheet([['TANZANIA COFFEE BOARD'],[heading],['Sale Season: '+season],[],...data]);
-   for(let r=5;r<5+data.length;r++)for(let c=2;c<4;c++){
-     const address=XLSX.utils.encode_cell({r,c}),cell=ws[address];if(!cell)continue;
-     const n=Number(String(cell.v).replace(/,/g,''));if(Number.isFinite(n)){cell.v=n;cell.t='n';cell.z='#,##0.###';}
+   const {data,merges}=exportData();
+   const titleRows=[['TANZANIA COFFEE BOARD'],[heading],['Sale Season: '+season],[]];
+   const ws=XLSX.utils.aoa_to_sheet([...titleRows,...data]);
+   const offset=titleRows.length;
+   ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:3}},{s:{r:1,c:0},e:{r:1,c:3}},{s:{r:2,c:0},e:{r:2,c:3}},
+     ...merges.map(m=>({s:{r:offset+m.start,c:0},e:{r:offset+m.end,c:0}})),
+     {s:{r:offset+data.length-1,c:0},e:{r:offset+data.length-1,c:1}}];
+   for(const m of merges)for(let i=m.start+1;i<=m.end;i++){
+     const addr=XLSX.utils.encode_cell({r:offset+i,c:0});delete ws[addr];
    }
-   ws['!cols']=[{wch:24},{wch:26},{wch:24},{wch:27}];
-   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Farmgate Summary');XLSX.writeFile(wb,base+'.xlsx',{cellStyles:true});
+   for(let r=1;r<data.length;r++)for(let c=2;c<4;c++){
+     const addr=XLSX.utils.encode_cell({r:offset+r,c}),cell=ws[addr];if(!cell)continue;
+     const n=Number(String(cell.v).replace(/,/g,''));if(Number.isFinite(n)){cell.v=n;cell.t='n';cell.z=c===2?'#,##0.###':'#,##0.00';}
+   }
+   // Styling is applied when the installed SheetJS build supports cell styles.
+   const edge={style:'thin',color:{rgb:'555555'}};
+   for(let r=offset;r<offset+data.length;r++)for(let c=0;c<4;c++){
+     const addr=XLSX.utils.encode_cell({r,c});if(!ws[addr])ws[addr]={t:'s',v:''};
+     const total=r===offset+data.length-1,header=r===offset;
+     ws[addr].s={border:{top:edge,bottom:edge,left:edge,right:edge},
+       fill:header?{fgColor:{rgb:'E9E9E9'}}:total?{fgColor:{rgb:'EFEFEF'}}:{fgColor:{rgb:'FFFFFF'}},
+       font:{name:'Calibri',sz:11,bold:header||total,color:{rgb:'222222'}},
+       alignment:{vertical:'center',horizontal:c>1?'right':'left',wrapText:true}};
+   }
+   ws['!cols']=[{wch:23},{wch:25},{wch:23},{wch:27}];
+   ws['!rows']=Array.from({length:offset+data.length},(_,i)=>({hpt:i===offset?28:22}));
+   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Farmgate Summary');
+   XLSX.writeFile(wb,base+'.xlsx',{cellStyles:true});
  }
  function pdf(){
    if(!window.jspdf?.jsPDF)return alert('PDF export library is not available.');
    const doc=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
    if(typeof doc.autoTable!=='function')return alert('PDF table export library is not available.');
-   doc.setTextColor(72,48,39);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('TANZANIA COFFEE BOARD',12,14);
-   doc.setFontSize(11);doc.text(heading,12,22);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Sale Season: '+season+'  |  Contracted quantity (MT), value (TZS)',12,29);
-   const data=rows();doc.autoTable({head:[data[0]],body:data.slice(1),startY:35,theme:'grid',margin:{left:10,right:10},styles:{fontSize:8,cellPadding:2.8,textColor:[55,41,32],lineColor:[219,205,190],lineWidth:.12},headStyles:{fillColor:[81,54,41],textColor:255,fontStyle:'bold'},columnStyles:{2:{halign:'right'},3:{halign:'right'}},didParseCell:x=>{if(x.section==='body'&&x.row.index===data.length-2){x.cell.styles.fillColor=[242,234,225];x.cell.styles.fontStyle='bold';}}});
+   const {data,merges}=exportData();
+   const starts=new Map(merges.map(m=>[m.start,m.end-m.start+1]));
+   const continuation=new Set(merges.flatMap(m=>Array.from({length:m.end-m.start},(_,i)=>m.start+i+1)));
+   const body=data.slice(1).map((r,i)=>{
+     const idx=i+1;
+     if(idx===data.length-1)return [{content:'Grand Total',colSpan:2,styles:{fontStyle:'bold'}},r[2],r[3]];
+     const first=continuation.has(idx)?null:{content:r[0],rowSpan:starts.get(idx)||1,styles:{valign:'middle',fontStyle:'bold'}};
+     return [...(first?[first]:[]),r[1],r[2],r[3]];
+   });
+   doc.setTextColor(35,35,35);doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('TANZANIA COFFEE BOARD',12,14);
+   doc.setFontSize(11);doc.text(heading,12,22);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Sale Season: '+season+' | Weight (Tonnes), Value (TZS)',12,29);
+   doc.autoTable({head:[data[0]],body,startY:35,theme:'grid',margin:{left:10,right:10},
+     styles:{fontSize:8,cellPadding:2.6,textColor:[30,30,30],lineColor:[65,65,65],lineWidth:.15,fillColor:[255,255,255]},
+     headStyles:{fillColor:[232,232,232],textColor:[25,25,25],fontStyle:'bold'},
+     columnStyles:{0:{cellWidth:36},1:{cellWidth:44},2:{cellWidth:42,halign:'right'},3:{halign:'right'}},
+     didParseCell:x=>{if(x.section==='body'&&x.row.index===body.length-1){x.cell.styles.fontStyle='bold';x.cell.styles.fillColor=[240,240,240];}}});
    doc.save(base+'.pdf');
  }
  function word(){
-   const data=rows(),tr=data.map((r,i)=>'<tr>'+r.map((v,j)=>'<'+(i?'td':'th')+' style="border:1px solid #c9b9a8;padding:7px;'+(i===0?'background:#513629;color:white;font-weight:bold;':'')+(i===data.length-1?'background:#eee5db;font-weight:bold;':'')+(j>1?'text-align:right;':'')+'">'+escapeHtml(v)+'</'+(i?'td':'th')+'>').join('')+'</tr>').join('');
-   const html='<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:Arial;color:#493225"><h3>TANZANIA COFFEE BOARD</h3><h2>'+escapeHtml(heading)+'</h2><p>Sale Season: '+escapeHtml(season)+' | Contracted quantity (MT), value (TZS)</p><table style="border-collapse:collapse;width:100%;font-size:10pt">'+tr+'</table></body></html>';
+   const {data,merges}=exportData();
+   const starts=new Map(merges.map(m=>[m.start,m.end-m.start+1]));
+   const continuation=new Set(merges.flatMap(m=>Array.from({length:m.end-m.start},(_,i)=>m.start+i+1)));
+   const td=(v,attrs='',extra='')=>'<td '+attrs+' style="border:1px solid #444;padding:5px 7px;vertical-align:middle;'+extra+'">'+escapeHtml(v)+'</td>';
+   const header='<tr>'+data[0].map((v,j)=>'<th style="border:1px solid #444;padding:6px;background:#e8e8e8;color:#222;text-align:'+(j>1?'right':'left')+'">'+escapeHtml(v)+'</th>').join('')+'</tr>';
+   let body='';for(let i=1;i<data.length;i++){
+     const r=data[i];if(i===data.length-1){body+='<tr>'+td('Grand Total','colspan="2"','font-weight:bold;background:#efefef;')+td(r[2],'','font-weight:bold;text-align:right;background:#efefef;')+td(r[3],'','font-weight:bold;text-align:right;background:#efefef;')+'</tr>';continue;}
+     body+='<tr>'+(continuation.has(i)?'':td(r[0],starts.has(i)?'rowspan="'+starts.get(i)+'"':'','font-weight:bold;'))+
+       td(r[1])+td(r[2],'','text-align:right;')+td(r[3],'','text-align:right;')+'</tr>';
+   }
+   const html='<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#222}table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:10pt}tr{page-break-inside:avoid}th,td{border:1px solid #444}</style></head><body><h3>TANZANIA COFFEE BOARD</h3><h3>'+escapeHtml(heading)+'</h3><p>Sale Season: '+escapeHtml(season)+'</p><table border="1" cellspacing="0" cellpadding="0">'+header+body+'</table></body></html>';
    const blob=new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=base+'.doc';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
  }
  menu.addEventListener('click',e=>{const format=e.target.closest('[data-format]')?.dataset.format;if(!format)return;e.stopPropagation();menu.classList.remove('show');btn.setAttribute('aria-expanded','false');if(format==='xlsx')excel();else if(format==='pdf')pdf();else if(format==='doc')word();});
