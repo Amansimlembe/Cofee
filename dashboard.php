@@ -3,7 +3,7 @@ session_start();
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) { header('Location: login.php'); exit; }
 
 $display=strtolower(trim($_GET['display']??'kagera'));
-if(!in_array($display,['sales','preauction','kagera','clean','direct','totalclean'],true))$display='kagera';
+if(!in_array($display,['sales','preauction','kagera','clean','direct','totalclean','farmgate'],true))$display='kagera';
 /* Manual terminal market prices: persistent, report-date-specific and authenticated. */
 if(!isset($_SESSION['terminal_price_csrf']))$_SESSION['terminal_price_csrf']=bin2hex(random_bytes(24));
 function terminal_price_db(): PDO {
@@ -470,6 +470,25 @@ if($display==='totalclean'){
  $tcAnalytics=['buyer_channel'=>$tcAgg($tcDetail,['channel','buyer']),'supplier_channel'=>$tcAgg($tcDetail,['channel','supplier']),'buyer_region'=>$tcAgg($tcDetail,['region','buyer']),'supplier_region'=>$tcAgg($tcDetail,['region','supplier']),'buyer_type'=>$tcAgg($tcDetail,['coffee_type','buyer']),'supplier_type'=>$tcAgg($tcDetail,['coffee_type','supplier'])];
 
  $dashboardTitle='Total Clean Coffee Summary';$dashboardSub='Auction, Direct Export, Local Sale balance and Local Roast';
+}else
+if($display==='farmgate'){
+ $farmFile=__DIR__.'/farm_gate_database.php';
+ if(!is_file($farmFile) && is_file(__DIR__.'/farm_gate_database(5).php'))$farmFile=__DIR__.'/farm_gate_database(5).php';
+ if(!is_file($farmFile))throw new RuntimeException('Farmgate database module is missing: farm_gate_database.php');
+ require_once $farmFile;
+ ensure_farm_gate_table();$db=farm_db();
+ function season_bounds($s){if(!preg_match('/^(\d{4})\/(\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
+ function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
+ $dates=$db->query('SELECT DISTINCT EXTRACT(YEAR FROM contract_date)::int y,EXTRACT(MONTH FROM contract_date)::int m FROM public.farm_gate_contracts ORDER BY y DESC,m DESC')->fetchAll();
+ $seasons=[];foreach($dates as$r){$y=(int)$r['m']>=7?(int)$r['y']:(int)$r['y']-1;$seasons[$y.'/'.($y+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
+ $season=(string)($_GET['season']??($seasons[0]??current_season()));if($season!=='all'&&!season_bounds($season))$season=$seasons[0]??current_season();
+ [$from,$to]=$season==='all'?['1900-01-01','2999-12-31']:season_bounds($season);
+ $fgRegion="COALESCE(NULLIF(INITCAP(LOWER(BTRIM(seller_region))),''),'Unspecified')";
+ $fgDistrict="COALESCE(NULLIF(INITCAP(LOWER(BTRIM(seller_district))),''),'Unspecified')";
+ $q=$db->prepare("SELECT $fgRegion region,$fgDistrict district,COUNT(*) contracts,COALESCE(SUM(kilos_to_be_sold),0) kg,COALESCE(SUM(kilos_to_be_sold*price_per_kilo_tzs),0) value FROM public.farm_gate_contracts WHERE contract_date BETWEEN :f AND :t GROUP BY 1,2 ORDER BY region,district");
+ $q->execute(['f'=>$from,'t'=>$to]);$farmRows=$q->fetchAll();$farmTotals=['kg'=>0.0,'value'=>0.0,'contracts'=>0];$farmRegions=[];
+ foreach($farmRows as$r){$region=$r['region'];if(!isset($farmRegions[$region]))$farmRegions[$region]=['rows'=>[],'kg'=>0.0,'value'=>0.0,'contracts'=>0];$farmRegions[$region]['rows'][]=$r;foreach(['kg','value','contracts'] as$k){$farmRegions[$region][$k]+=(float)$r[$k];$farmTotals[$k]+=(float)$r[$k];}}
+ $dashboardTitle='Farmgate Contracts Summary';$dashboardSub='Contracted coffee quantities and values by seller region and district';
 }else
 if($display==='direct'){
  require_once __DIR__.'/Direct_database.php';
@@ -1714,7 +1733,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
             <label>Season</label>
             <select name="season" onchange="this.form.submit()"><option value="all" <?=$season==='all'?'selected':''?>>All Seasons</option><?php foreach($seasons ?: [$season] as $s): ?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach ?></select>
             <label>Display</label>
-            <select name="display" onchange="this.form.submit()"><option value="sales" <?=$display==='sales'?'selected':''?>>Sales Dashboard</option><option value="preauction" <?=$display==='preauction'?'selected':''?>>Pre Auction Report</option><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option><option value="direct" <?=$display==='direct'?'selected':''?>>Direct Sales Summary</option><option value="totalclean" <?=$display==='totalclean'?'selected':''?>>Total Clean Coffee Summary</option></select>
+            <select name="display" onchange="this.form.submit()"><option value="sales" <?=$display==='sales'?'selected':''?>>Sales Dashboard</option><option value="preauction" <?=$display==='preauction'?'selected':''?>>Pre Auction Report</option><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option><option value="direct" <?=$display==='direct'?'selected':''?>>Direct Sales Summary</option><option value="totalclean" <?=$display==='totalclean'?'selected':''?>>Total Clean Coffee Summary</option><option value="farmgate" <?=$display==='farmgate'?'selected':''?>>Farmgate Contracts Summary</option></select>
             <?php if($display==='preauction'): ?>
             <label>Report Date</label>
             <select name="report_date" onchange="this.form.submit()" title="Wednesday cut-off for the Pre Auction Report used at Thursday's 10:30 AM auction">
@@ -1916,6 +1935,23 @@ foreach($tcVisibleGrades as $grade):
  <div id="tcAnalysisTable" class="table-box"></div>
 </section>
 <?php endif; ?>
+<?php elseif($display==='farmgate'): ?>
+<style>
+.fg-wrap{margin-top:18px}.fg-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:18px}.fg-metric{background:#fff;border:1px solid #e5d9cc;border-radius:12px;padding:18px}.fg-metric span{display:block;font-size:12px;color:#766457;font-weight:700}.fg-metric strong{display:block;margin-top:7px;font-size:23px;color:#473022}.fg-table-box{overflow:auto;max-height:65vh;border:1px solid #e4d8cb;border-radius:12px;background:white}.fg-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}.fg-table th{position:sticky;top:0;background:#513629;color:white;padding:13px 15px;text-align:left;z-index:2}.fg-table td{padding:11px 15px;border-bottom:1px solid #eee7df}.fg-table td.num,.fg-table th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.fg-table tbody tr:hover{background:#faf5ef}.fg-table .fg-region td{background:#f1e8dd;font-weight:750;color:#3e2b21}.fg-table .fg-total td{background:#513629;color:#fff;font-weight:800}.fg-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}.fg-head h2{font-size:17px;margin:0;color:#493225}.fg-head p{margin:5px 0 0;font-size:12px;color:#806c5e}.fg-export{border:1px solid #cdbba8;background:#fff;border-radius:8px;padding:9px 14px;color:#493225;font-weight:700;cursor:pointer}@media(max-width:650px){.fg-metrics{grid-template-columns:1fr}.fg-metric{padding:12px}}
+</style>
+<div class="fg-wrap">
+ <div class="fg-metrics"><div class="fg-metric"><span>CONTRACTED WEIGHT</span><strong><?=nf_clean($farmTotals['kg']/1000,3)?> MT</strong></div><div class="fg-metric"><span>CONTRACT VALUE (TZS)</span><strong><?=nf($farmTotals['value'],2)?></strong></div><div class="fg-metric"><span>REGISTERED CONTRACTS</span><strong><?=nf($farmTotals['contracts'])?></strong></div></div>
+ <section class="panel"><div class="fg-head"><div><h2>Farmgate Contracts by Seller Region and District</h2><p>Season <?=htmlspecialchars($season)?> · Contracted quantity (not confirmed sales) · Weight in metric tonnes (MT)</p></div><button class="fg-export" type="button" onclick="farmgateExportCSV()">⇩ Export CSV</button></div>
+ <div class="fg-table-box"><table class="fg-table" id="farmgateSummaryTable"><thead><tr><th>REGION</th><th>DISTRICT</th><th class="num">WEIGHT (MT)</th><th class="num">VALUE (TZS)</th></tr></thead><tbody>
+ <?php foreach($farmRegions as $region=>$group): ?>
+ <?php foreach($group['rows'] as $i=>$r): ?><tr><td><?=$i===0?htmlspecialchars($region):''?></td><td><?=htmlspecialchars($r['district'])?></td><td class="num"><?=nf_clean((float)$r['kg']/1000,3)?></td><td class="num"><?=nf((float)$r['value'],2)?></td></tr><?php endforeach; ?>
+ <tr class="fg-region"><td colspan="2"><?=htmlspecialchars($region)?> — Subtotal</td><td class="num"><?=nf_clean($group['kg']/1000,3)?></td><td class="num"><?=nf($group['value'],2)?></td></tr>
+ <?php endforeach; ?>
+ <?php if(!$farmRows):?><tr><td colspan="4" style="text-align:center;padding:28px">No farmgate contracts found for the selected season.</td></tr><?php endif;?>
+ <tr class="fg-total"><td colspan="2">GRAND TOTAL</td><td class="num"><?=nf_clean($farmTotals['kg']/1000,3)?></td><td class="num"><?=nf($farmTotals['value'],2)?></td></tr>
+ </tbody></table></div></section>
+</div>
+<script>function farmgateExportCSV(){const rows=[...document.querySelectorAll('#farmgateSummaryTable tr')].map(tr=>[...tr.querySelectorAll('th,td')].flatMap(c=>{const v=c.textContent.trim();return c.colSpan===2?[v,'']:[v]}).map(v=>'"'+v.replace(/"/g,'""')+'"').join(','));const blob=new Blob(['\ufeff'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Farmgate_Contracts_<?=preg_replace('/[^0-9A-Za-z-]/','-', $season)?>.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}</script>
 <?php elseif($display==='direct'): ?>
 <div class="summary-period-toolbar"><div class="summary-period-caption"><span class="summary-period-heading">Season</span><strong class="summary-season-value"><?=htmlspecialchars($season)?></strong><span class="summary-period-dates"><?=date('d M',strtotime($summarySeasonFrom))?> — <?=date('d M Y',strtotime($summarySeasonTo))?></span></div><div class="summary-toolbar-stat">
 <?php if(in_array($display,['clean','kagera'],true)): ?>
