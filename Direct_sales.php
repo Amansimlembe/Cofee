@@ -75,26 +75,71 @@ function direct_sale_season_bounds(string $season): ?array {
 }
 
 function direct_upload(): void {
-    if(empty($_FILES['direct_excel']['tmp_name'])) direct_json(false,'Select the Direct Sales Excel file.',[],400);
+    if (($_FILES['direct_excel']['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK) direct_json(false,'Select a valid Direct Sales workbook.',[],400);
     $ext=strtolower(pathinfo($_FILES['direct_excel']['name']??'',PATHINFO_EXTENSION));
-    if($ext!=='xlsx') direct_json(false,'Please upload the Direct Sales workbook as .xlsx.',[],400);
-    $rows=direct_rows_from_xlsx($_FILES['direct_excel']['tmp_name']); if(!$rows) direct_json(false,'Workbook is empty.',[],400);
+    if(!in_array($ext,['xlsx'],true)) direct_json(false,'Upload a .xlsx Direct Sales workbook.',[],400);
+    $rows=direct_rows_from_xlsx($_FILES['direct_excel']['tmp_name']);
     $expected=['Crop Season','Sale Category','Invoice Number','Source Invoice Number','Invoice date','Contract Number','Grade Name','Cofee Type','Net Kg','Price (usd/50kgs)','Exchange Rate','Warehouse Name','Warehouse Location','Region','Supplier/Seller','Buyer','Certification','Grade Level'];
-    $cols=range('A','R'); $head=[];
-    foreach($cols as $c) $head[]=trim((string)($rows[0][$c]??''));
-
-    $normHeader=static function($v): string {
-        return strtolower(preg_replace('/\\s+/u',' ',trim((string)$v)));
-    };
-    foreach($expected as $i=>$name){
-        if($normHeader($head[$i]??'')!==$normHeader($name)){
-            direct_json(false,'Upload stopped. Column '.($i+1).' must be "'.$name.'". Found "'.($head[$i]??'').'".',['expected_columns'=>$expected,'found_columns'=>$head],400);
-        }
+    $cols=range('A','R');
+    $norm=static fn($v)=>strtolower(preg_replace('/[^a-z0-9]+/','',trim((string)$v)));
+    $headerIndex=null;
+    foreach(array_slice($rows,0,15,true) as $idx=>$row){if($norm($row['A']??'')===$norm($expected[0]) && $norm($row['B']??'')===$norm($expected[1])){$headerIndex=$idx;break;}}
+    if($headerIndex===null) direct_json(false,'Could not locate the Direct Sales column headers.',[],400);
+    $headers=$rows[$headerIndex];
+    foreach($cols as $i=>$c){
+        $actual=$norm($headers[$c]??'');$want=$norm($expected[$i]);
+        if($i===7 && $actual==='coffeetype')$actual=$want;
+        if($actual!==$want)direct_json(false,'Column '.($i+1).' must be "'.$expected[$i].'"; found "'.($headers[$c]??'').'". No records were saved.',[],422);
     }
-    $db=direct_db(); $sql="INSERT INTO public.direct_sales(crop_season,sale_category,invoice_number,source_invoice_number,invoice_date,contract_number,grade_name,coffee_type,net_kg,price_usd_50kg,exchange_rate,warehouse_name,warehouse_location,region,supplier_seller,buyer,certification,grade_level) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"; $st=$db->prepare($sql); $count=0;
-    $db->beginTransaction(); try { foreach(array_slice($rows,1) as $r){ $v=array_map(fn($c)=>trim((string)($r[$c]??'')),$cols); if(!array_filter($v,fn($x)=>$x!==''))continue; if($v[1]==='')continue; $invoiceDate=direct_date($v[4]); $saleSeason=direct_sale_season($invoiceDate); $st->execute([$saleSeason,direct_category($v[1]),$v[2]?:null,$v[3]?:null,$invoiceDate,$v[5]?:null,$v[6]?:null,$v[7]?:null,direct_num($v[8]),direct_num($v[9]),direct_num($v[10]),$v[11]?:null,$v[12]?:null,$v[13]?:null,$v[14]?:null,$v[15]?:null,$v[16]?:null,$v[17]?:null]); $count++; } $db->commit(); } catch(Throwable $e){$db->rollBack();throw $e;}
-    direct_json(true,$count.' Direct Sales rows uploaded successfully.',['inserted'=>$count]);
+    foreach($headers as $c=>$v)if(!in_array($c,$cols,true)&&trim((string)$v)!=='')direct_json(false,'Unexpected extra column '.$c.'. No records were saved.',[],422);
+    $records=[];$errors=[];$fileDuplicates=0;
+    foreach($rows as $index=>$row){if($index<=$headerIndex)continue;
+        $v=array_map(static fn($c)=>trim((string)($row[$c]??'')),$cols);
+        if(!array_filter($v,static fn($x)=>$x!==''))continue;
+        $date=direct_date($v[4]);$category=direct_category($v[1]);$kg=direct_num($v[8]);$price=direct_num($v[9]);
+        $bad=[];
+        if(!in_array($category,['Direct Export','Local Sale','Local Roast'],true))$bad[]='Sale Category';
+        if($v[2]==='')$bad[]='Invoice Number';
+        if(!$date)$bad[]='Invoice Date';
+        if($kg===null||$kg<=0)$bad[]='Net Kg (>0)';
+        if($price===null||$price<0)$bad[]='Price (USD/50kgs)';
+        if($bad){$errors[]='Excel row '.($index+1).': '.implode(', ',$bad);continue;}
+        $record=[direct_sale_season($date),$category,$v[2],$v[3]?:null,$date,$v[5]?:null,$v[6]?:null,$v[7]?:null,$kg,$price,direct_num($v[10]),$v[11]?:null,$v[12]?:null,$v[13]?:null,$v[14]?:null,$v[15]?:null,$v[16]?:null,$v[17]?:null];
+        // Invoice may have multiple grades/lots. Preserve distinct lines using their descriptive identity.
+        $key=direct_upload_key($record);
+        if(isset($records[$key]))$fileDuplicates++;
+        $records[$key]=$record;
+    }
+    if($errors)direct_json(false,'Upload stopped: invalid required data. No records saved.',['errors'=>array_slice($errors,0,100),'error_count'=>count($errors)],422);
+    if(!$records)direct_json(false,'No valid records found.',[],422);
+    $db=direct_db();$existing=[];
+    $q=$db->query('SELECT id,crop_season,sale_category,invoice_number,source_invoice_number,invoice_date,contract_number,grade_name,coffee_type,net_kg,price_usd_50kg,exchange_rate,warehouse_name,warehouse_location,region,supplier_seller,buyer,certification,grade_level FROM public.direct_sales');
+    while($r=$q->fetch()){
+        $record=[];foreach(['crop_season','sale_category','invoice_number','source_invoice_number','invoice_date','contract_number','grade_name','coffee_type','net_kg','price_usd_50kg','exchange_rate','warehouse_name','warehouse_location','region','supplier_seller','buyer','certification','grade_level'] as $field)$record[]=$r[$field];
+        $existing[direct_upload_key($record)][]=(int)$r['id'];
+    }
+    $matches=array_intersect(array_keys($records),array_keys($existing));
+    if($matches && (string)($_POST['confirm_replace']??'')!=='1')direct_json(true,'Matching Direct Sales records already exist. Confirm to replace them.',[
+        'requires_confirmation'=>true,'existing_count'=>count($matches),'new_record_count'=>count($records)-count($matches),'file_duplicates'=>$fileDuplicates
+    ]);
+    $fields=['crop_season','sale_category','invoice_number','source_invoice_number','invoice_date','contract_number','grade_name','coffee_type','net_kg','price_usd_50kg','exchange_rate','warehouse_name','warehouse_location','region','supplier_seller','buyer','certification','grade_level'];
+    $insert=$db->prepare('INSERT INTO public.direct_sales('.implode(',',$fields).') VALUES('.implode(',',array_fill(0,count($fields),'?')).')');
+    $delete=$db->prepare('DELETE FROM public.direct_sales WHERE id=?');
+    $db->beginTransaction();try{
+        foreach($matches as $key)foreach($existing[$key] as $id)$delete->execute([$id]);
+        foreach($records as $record)$insert->execute($record);
+        $db->commit();
+    }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+    direct_json(true,'Upload completed: '.(count($records)-count($matches)).' new, '.count($matches).' replaced.',[
+        'inserted'=>count($records)-count($matches),'replaced'=>count($matches),'file_duplicates'=>$fileDuplicates
+    ]);
 }
+function direct_upload_key(array $r): string {
+    // Category + invoice + date + contract + grade + coffee type + seller + buyer + warehouse.
+    $parts=[];foreach([1,2,4,5,6,7,11,14,15] as $i)$parts[]=strtoupper(trim((string)($r[$i]??'')));
+    return implode("\x1F",$parts);
+}
+
 if($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['direct_excel'])){ try{direct_upload();}catch(Throwable $e){direct_json(false,$e->getMessage(),[],500);} }
 if(isset($_GET['action'])){
  try{
@@ -570,11 +615,22 @@ $('season').addEventListener('change',refreshCurrent);
 $('display').addEventListener('change',refreshCurrent);
 $('uploadForm').addEventListener('submit',async e=>{
  e.preventDefault();
+ const form=e.target,button=form.querySelector('button[type="submit"],button.primary');
+ if(button)button.disabled=true;
  try{
-  let fd=new FormData(e.target);$('status').textContent='Uploading…';
+  let fd=new FormData(form);$('status').textContent='Validating and uploading Direct Sales…';
   let d=await api('Direct_sales.php',{method:'POST',body:fd});
-  $('status').textContent=d.message;await loadFilters();await refreshCurrent();e.target.reset();
+  if(d.requires_confirmation){
+   const approved=confirm(`${d.existing_count} matching database record(s) will be replaced and ${d.new_record_count} new record(s) added. Continue?`);
+   if(!approved){$('status').textContent='Upload cancelled; database unchanged.';return;}
+   fd.set('confirm_replace','1');
+   d=await api('Direct_sales.php',{method:'POST',body:fd});
+  }
+  await loadFilters();await refreshCurrent();
+  $('status').textContent=d.message+(d.file_duplicates?` (${d.file_duplicates} repeated file row(s) consolidated.)`:'');
+  form.reset();
  }catch(x){$('status').textContent=x.message}
+ finally{if(button)button.disabled=false;}
 });
 
 function toggleExportMenu(e){
