@@ -1870,17 +1870,19 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  <div class="sales-ppt-header"><div class="gov-title">THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div></div>
  <div class="sales-ppt-title"><span>SALES DASHBOARD</span></div>
  <div class="sales-ppt-body">
-  <table class="sales-meta market-reference-prices">
+  <table class="sales-meta">
    <tr><th>Sale Season (FY)</th><td><b><?=htmlspecialchars($season)?></b></td><th>End Date</th><td><b><?=date('d/m/Y',strtotime($salesEnd))?></b></td></tr>
-   <tr class="market-reference-heading"><th colspan="4">Market Reference Prices</th></tr>
-   <tr class="market-reference-columns"><th>Coffee Type</th><th>Price</th><th>Coffee Type</th><th>Price</th></tr>
-   <tr class="market-reference-section"><th colspan="4">Terminal Market Prices (USD/kg)</th></tr>
-   <tr><td>Arabica (NY)</td><td class="sales-num"><b class="terminal-price" data-coffee="arabica" title="Double-click to edit Arabica terminal price" tabindex="0" role="button" aria-label="Edit Arabica terminal price"><?= $terminalPrices['arabica']===null?'—':nf_clean($terminalPrices['arabica'],4) ?></b></td><td>Robusta (London)</td><td class="sales-num"><b class="terminal-price" data-coffee="robusta" title="Double-click to edit Robusta terminal price" tabindex="0" role="button" aria-label="Edit Robusta terminal price"><?= $terminalPrices['robusta']===null?'—':nf_clean($terminalPrices['robusta'],4) ?></b></td></tr>
-   <tr class="market-reference-section"><th colspan="4">Farmgate Prices (TZS/kg)</th></tr>
-   <tr><td>H/Arabica (Dry Cherry)</td><td class="sales-num">4,500</td><td>Robusta (Dry Cherry)</td><td class="sales-num">3,800</td></tr>
+  </table>
+  <table class="sales-meta market-reference-prices">
+   <colgroup><col style="width:22%"><col style="width:25%"><col style="width:14%"><col style="width:25%"><col style="width:14%"></colgroup>
+   <thead><tr class="market-reference-heading"><th colspan="5">Market Reference Prices</th></tr>
+   <tr class="market-reference-columns"><th>Market</th><th>Coffee Type</th><th>Price</th><th>Coffee Type</th><th>Price</th></tr></thead>
+   <tbody>
+   <tr><th scope="row">Terminal (USD/kg)</th><td>Arabica (NY)</td><td class="sales-num"><b class="terminal-price" data-coffee="arabica" title="Double-click to edit Arabica terminal price" tabindex="0" role="button" aria-label="Edit Arabica terminal price"><?= $terminalPrices['arabica']===null?'—':nf_clean($terminalPrices['arabica'],4) ?></b></td><td>Robusta (London)</td><td class="sales-num"><b class="terminal-price" data-coffee="robusta" title="Double-click to edit Robusta terminal price" tabindex="0" role="button" aria-label="Edit Robusta terminal price"><?= $terminalPrices['robusta']===null?'—':nf_clean($terminalPrices['robusta'],4) ?></b></td></tr>
+   <tr><th scope="rowgroup" rowspan="2" class="market-reference-merged">Farmgate (TZS/kg)</th><td>H/Arabica (Dry Cherry)</td><td class="sales-num">4,500</td><td>Robusta (Dry Cherry)</td><td class="sales-num">3,800</td></tr>
    <tr><td>Arabica CPU</td><td class="sales-num">12,000</td><td>Arabica HP</td><td class="sales-num">10,500</td></tr>
-   <tr class="market-reference-section"><th colspan="4">Clean Auction Prices (USD/kg)</th></tr>
-   <tr><td>Arabica</td><td class="sales-num">7.40</td><td>Robusta</td><td class="sales-num">3.50</td></tr>
+   <tr><th scope="row">Clean Auction (USD/kg)</th><td>Arabica</td><td class="sales-num">7.40</td><td>Robusta</td><td class="sales-num">3.50</td></tr>
+   </tbody>
   </table>
   <table class="sales-table">
    <tr class="sales-band"><td colspan="5">Farmgate Market</td></tr>
@@ -2879,6 +2881,9 @@ menu.addEventListener('click',async e=>{
 #salesDashboardDocument .market-reference-prices tr.market-reference-section th{background:#e8d9c6;color:#49311f;text-align:left;font-weight:700;}
 #salesDashboardDocument .market-reference-prices tr.market-reference-columns th{background:#f3eadf;color:#49311f;text-align:left;}
 #salesDashboardDocument .market-reference-prices td.sales-num{text-align:right;font-variant-numeric:tabular-nums;}
+#salesDashboardDocument .market-reference-prices tbody th{background:#f2e9de;color:#49311f;text-align:left;font-weight:700;}
+#salesDashboardDocument .market-reference-prices .market-reference-merged{vertical-align:middle;}
+#salesDashboardDocument .market-reference-prices th,#salesDashboardDocument .market-reference-prices td{overflow-wrap:break-word;}
 </style>
 <style id="terminal-price-edit-style">
 #salesDashboardDocument .terminal-price{cursor:pointer;border-bottom:1px dashed #89532e;padding:0 3px;outline-offset:3px}
