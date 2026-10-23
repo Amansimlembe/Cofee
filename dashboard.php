@@ -1889,7 +1889,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
    <tr><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
    <?php foreach(['Dry Cherry','Clean Coffee'] as$ct):$r=$salesFarm[$ct];?><tr><td class="sales-label"><?=htmlspecialchars($ct)?></td><td class="sales-num"><?=nf($r['weekkg']/1000,3)?></td><td class="sales-num"><?=nf($r['weekval'],2)?></td><td class="sales-num"><?=nf($r['seasonkg']/1000,3)?></td><td class="sales-num"><?=nf($r['seasonval'],2)?></td></tr><?php endforeach;?>
    <tr><td class="sales-label">2&nbsp; Certified Coffee</td><?php foreach(['week_mt','week_value_tzs','season_mt','season_value_tzs'] as $field):$val=$certifiedCoffee[$field];?><td class="sales-num certified-edit" data-field="<?=$field?>" data-value="<?=htmlspecialchars((string)$val,ENT_QUOTES)?>" title="Double-click to edit Certified Coffee" tabindex="0" role="button" aria-label="Edit Certified Coffee <?=htmlspecialchars(str_replace('_',' ',$field))?>"><?=$val?nf_clean($val,str_ends_with($field,'mt')?3:2):'—'?></td><?php endforeach;?></tr>
-   <tr><td class="sales-label">3&nbsp; Parchment</td><?php foreach(['weekkg','weekval','seasonkg','seasonval'] as $field): $v=$salesParchment[$field]; ?><td class="sales-num"><?=$v?nf(str_ends_with($field,'kg')?$v/1000:$v,str_ends_with($field,'kg')?3:2):'—'?></td><?php endforeach; ?></tr>
+   <tr><td class="sales-label">3&nbsp; Parchments (CPU & HP)</td><?php foreach(['weekkg','weekval','seasonkg','seasonval'] as $field): $v=$salesParchment[$field]; ?><td class="sales-num"><?=$v?nf(str_ends_with($field,'kg')?$v/1000:$v,str_ends_with($field,'kg')?3:2):'—'?></td><?php endforeach; ?></tr>
    <?php $farmWeekKg=array_sum(array_column($salesFarm,'weekkg'))+$salesParchment['weekkg']+$certifiedCoffee['week_mt']*1000;$farmWeekVal=array_sum(array_column($salesFarm,'weekval'))+$salesParchment['weekval']+$certifiedCoffee['week_value_tzs'];$farmSeasonKg=array_sum(array_column($salesFarm,'seasonkg'))+$salesParchment['seasonkg']+$certifiedCoffee['season_mt']*1000;$farmSeasonVal=array_sum(array_column($salesFarm,'seasonval'))+$salesParchment['seasonval']+$certifiedCoffee['season_value_tzs']; ?>
    <tr class="sales-grand" id="farmgateGrandTotal"><td>Grand Total</td><td class="sales-num"><?=nf_clean($farmWeekKg/1000,3)?></td><td class="sales-num"><?=nf_clean($farmWeekVal,2)?></td><td class="sales-num"><?=nf_clean($farmSeasonKg/1000,3)?></td><td class="sales-num"><?=nf_clean($farmSeasonVal,2)?></td></tr>
    <tr class="sales-band"><td colspan="5">Clean Coffee Market</td></tr>
@@ -2885,6 +2885,10 @@ menu.addEventListener('click',async e=>{
 #salesDashboardDocument .market-reference-prices tbody th{background:#f2e9de;color:#49311f;text-align:left;font-weight:700;}
 #salesDashboardDocument .market-reference-prices .market-reference-merged{vertical-align:middle;}
 #salesDashboardDocument .market-reference-prices th,#salesDashboardDocument .market-reference-prices td{overflow-wrap:break-word;}
+/* Market reference body: regular weight for all labels and prices. */
+#salesDashboardDocument .market-reference-prices tbody th,
+#salesDashboardDocument .market-reference-prices tbody td,
+#salesDashboardDocument .market-reference-prices tbody .terminal-price{font-weight:400!important;}
 /* Poster content alignment: symmetric 5.5% gutters inside the background artwork. */
 #salesDashboardDocument .sales-ppt-body{left:5.5%!important;width:89%!important;max-width:none!important;}
 #salesDashboardDocument .sales-ppt-body > table{width:100%!important;max-width:100%!important;margin-left:0!important;margin-right:0!important;}
