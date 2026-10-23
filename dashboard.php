@@ -2769,7 +2769,7 @@ function checkSalesBackground(){
  image.src=match[1];
  if(image.complete && image.naturalWidth>0){requestAnimationFrame(()=>{fit();backgroundDone(true);});}
 }
-function fit(){if(!body)return;const width=paper.getBoundingClientRect().width||1023;const height=width*1447/1023;const areaHeight=height*.424;body.style.transform='none';const natural=body.scrollHeight||1;const factor=Math.min(width/1023,areaHeight/natural);body.style.transform='scale('+Math.max(.01,factor)+')';}
+function fit(){if(!body)return;const width=paper.getBoundingClientRect().width||1023;const height=width*1447/1023;const areaHeight=height*.424;body.style.transform='none';const natural=body.scrollHeight||1;const scaleX=(width-20)/(body.offsetWidth||width);const scaleY=Math.min(scaleX,areaHeight/natural);body.style.transform='scale('+Math.max(.01,scaleX)+','+Math.max(.01,scaleY)+')';}
 window.salesDashboardFit=fit;window.addEventListener('resize',fit,{passive:true});window.addEventListener('message',function(event){if(event.source!==window.parent)return;if(event.data&&event.data.type==='tcb:layout-resize')requestAnimationFrame(fit);});if(window.ResizeObserver){const ro=new ResizeObserver(()=>requestAnimationFrame(fit));ro.observe(paper);if(paper.parentElement)ro.observe(paper.parentElement);}document.fonts?.ready.then(fit);requestAnimationFrame(fit);checkSalesBackground();
 const button=document.getElementById('salesExportButton'),menu=document.getElementById('salesExportOptions'),progress=document.getElementById('salesProgress'),status=document.getElementById('salesProgressText'),bar=document.getElementById('salesProgressFill'),percent=document.getElementById('salesProgressPercent');
 if(!button||!menu)return;
@@ -2808,8 +2808,9 @@ async function snapshot(){
     b.style.setProperty('top','21.6%','important');
     b.style.setProperty('transform','none','important');
     const natural=b.scrollHeight||1;
-    const scale=Math.min(1,1447*.424/natural);
-    b.style.setProperty('transform','scale('+scale+')','important');
+    const scaleX=993/(b.offsetWidth||993);
+    const scaleY=Math.min(scaleX,1447*.424/natural);
+    b.style.setProperty('transform','scale('+scaleX+','+scaleY+')','important');
    }
   }
  });
@@ -2884,8 +2885,8 @@ menu.addEventListener('click',async e=>{
 #salesDashboardDocument .market-reference-prices tbody th{background:#f2e9de;color:#49311f;text-align:left;font-weight:700;}
 #salesDashboardDocument .market-reference-prices .market-reference-merged{vertical-align:middle;}
 #salesDashboardDocument .market-reference-prices th,#salesDashboardDocument .market-reference-prices td{overflow-wrap:break-word;}
-/* Sales dashboard: align the market reference band with Clean Coffee Market and use the page width evenly. */
-#salesDashboardDocument .sales-ppt-body{left:10px!important;width:calc(100% - 20px)!important;max-width:none!important;}
+/* Poster content alignment: symmetric 5.5% gutters inside the background artwork. */
+#salesDashboardDocument .sales-ppt-body{left:5.5%!important;width:89%!important;max-width:none!important;}
 #salesDashboardDocument .sales-ppt-body > table{width:100%!important;max-width:100%!important;margin-left:0!important;margin-right:0!important;}
 #salesDashboardDocument .market-reference-prices{table-layout:fixed!important;}
 #salesDashboardDocument .market-reference-prices tr.market-reference-heading td{background:rgba(238,139,60,.90)!important;color:#191512!important;text-align:left!important;font-weight:800!important;}
