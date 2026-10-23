@@ -1875,7 +1875,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
   </table>
   <table class="sales-meta market-reference-prices">
    <colgroup><col style="width:22%"><col style="width:25%"><col style="width:14%"><col style="width:25%"><col style="width:14%"></colgroup>
-   <thead><tr class="market-reference-heading"><th colspan="5">Market Reference Prices</th></tr>
+   <thead><tr class="market-reference-heading sales-band"><td colspan="5">Market Reference Prices</td></tr>
    <tr class="market-reference-columns"><th>Market</th><th>Coffee Type</th><th>Price</th><th>Coffee Type</th><th>Price</th></tr></thead>
    <tbody>
    <tr><th scope="row">Terminal (USD/kg)</th><td>Arabica (NY)</td><td class="sales-num"><b class="terminal-price" data-coffee="arabica" title="Double-click to edit Arabica terminal price" tabindex="0" role="button" aria-label="Edit Arabica terminal price"><?= $terminalPrices['arabica']===null?'—':nf_clean($terminalPrices['arabica'],4) ?></b></td><td>Robusta (London)</td><td class="sales-num"><b class="terminal-price" data-coffee="robusta" title="Double-click to edit Robusta terminal price" tabindex="0" role="button" aria-label="Edit Robusta terminal price"><?= $terminalPrices['robusta']===null?'—':nf_clean($terminalPrices['robusta'],4) ?></b></td></tr>
@@ -2884,6 +2884,21 @@ menu.addEventListener('click',async e=>{
 #salesDashboardDocument .market-reference-prices tbody th{background:#f2e9de;color:#49311f;text-align:left;font-weight:700;}
 #salesDashboardDocument .market-reference-prices .market-reference-merged{vertical-align:middle;}
 #salesDashboardDocument .market-reference-prices th,#salesDashboardDocument .market-reference-prices td{overflow-wrap:break-word;}
+/* Sales dashboard: align the market reference band with Clean Coffee Market and use the page width evenly. */
+#salesDashboardDocument .sales-ppt-body{left:10px!important;width:calc(100% - 20px)!important;max-width:none!important;}
+#salesDashboardDocument .sales-ppt-body > table{width:100%!important;max-width:100%!important;margin-left:0!important;margin-right:0!important;}
+#salesDashboardDocument .market-reference-prices{table-layout:fixed!important;}
+#salesDashboardDocument .market-reference-prices tr.market-reference-heading td{background:rgba(238,139,60,.90)!important;color:#191512!important;text-align:left!important;font-weight:800!important;}
+#salesDashboardDocument .market-reference-prices tr.market-reference-columns th,
+#salesDashboardDocument .market-reference-prices tbody td,
+#salesDashboardDocument .market-reference-prices tbody td.sales-num{text-align:center!important;vertical-align:middle!important;font-variant-numeric:tabular-nums;}
+#salesDashboardDocument .market-reference-prices tbody th{vertical-align:middle!important;text-align:left!important;}
+#salesDashboardDocument .sales-table{table-layout:fixed!important;}
+#salesDashboardDocument .sales-table th:nth-child(1){width:27%!important;}
+#salesDashboardDocument .sales-table th:nth-child(2){width:17%!important;}
+#salesDashboardDocument .sales-table th:nth-child(3){width:19%!important;}
+#salesDashboardDocument .sales-table th:nth-child(4){width:17%!important;}
+#salesDashboardDocument .sales-table th:nth-child(5){width:20%!important;}
 </style>
 <style id="terminal-price-edit-style">
 #salesDashboardDocument .terminal-price{cursor:pointer;border-bottom:1px dashed #89532e;padding:0 3px;outline-offset:3px}
