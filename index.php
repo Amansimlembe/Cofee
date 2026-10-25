@@ -1707,6 +1707,18 @@ html,body{max-width:100%;overflow-x:hidden}
 @keyframes frameShimmer{to{background-position-x:-200%}}@media(prefers-reduced-motion:reduce){.frame-skeleton{animation:none}}
 </style>
 
+<style id="seamless-navigation-style">
+/* Seamless horizontal push navigation: both panels remain painted throughout. */
+.content{position:relative;isolation:isolate;overflow:hidden}
+.content>.section{display:none;position:relative;width:100%;min-width:0}
+.content>.section.active{display:block}
+.content.is-switching>.section{transition:transform .44s cubic-bezier(.22,1,.36,1);will-change:transform}
+.content.is-switching>.section.active,.content.is-switching>.section.slide-out,.content.is-switching>.section.slide-in{display:block}
+.content.is-switching>.section.slide-out,.content.is-switching>.section.slide-in{position:absolute;top:var(--slide-top,0px);left:0;right:0}
+.content.is-switching>.section.slide-out{z-index:1}
+.content.is-switching>.section.slide-in{z-index:2}
+@media(prefers-reduced-motion:reduce){.content.is-switching>.section{transition:none!important}}
+</style>
     <!-- CONTENT -->
 
     <div class="content">
@@ -1967,6 +1979,47 @@ document.addEventListener("click",function(event){
     }
 });
 
+
+/* Keep the outgoing page visible until the incoming page pushes it away. */
+let sectionSlideCleanup=null;
+let restoringInitialModule=false;
+function transitionToSection(id){
+ const container=document.querySelector('.content');
+ const next=document.getElementById(id);
+ if(!container||!next)return;
+ if(sectionSlideCleanup){sectionSlideCleanup();sectionSlideCleanup=null;}
+ const previous=container.querySelector('.section.active');
+ if(previous===next)return;
+ const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+ if(!previous||reduce||restoringInitialModule){container.querySelectorAll('.section').forEach(x=>x.classList.remove('active','slide-in','slide-out'));next.classList.add('active');return;}
+ const top=previous.offsetTop;
+ const height=Math.max(previous.offsetHeight,next.offsetHeight,360);
+ container.style.setProperty('--slide-top',top+'px');
+ container.style.minHeight=(top+height)+'px';
+ container.classList.add('is-switching');
+ previous.classList.add('slide-out');
+ next.classList.add('slide-in');
+ next.style.transform='translate3d(100%,0,0)';
+ previous.style.transform='translate3d(0,0,0)';
+ // Force the starting positions to paint before triggering the transition.
+ void next.offsetWidth;
+ const finish=()=>{
+   previous.classList.remove('active','slide-out');
+   next.classList.remove('slide-in');next.classList.add('active');
+   previous.style.transform='';next.style.transform='';
+   container.classList.remove('is-switching');container.style.minHeight='';
+   container.style.removeProperty('--slide-top');
+   sectionSlideCleanup=null;
+ };
+ let timer;
+ sectionSlideCleanup=()=>{clearTimeout(timer);finish();};
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{
+   previous.style.transform='translate3d(-100%,0,0)';
+   next.style.transform='translate3d(0,0,0)';
+ }));
+ timer=setTimeout(()=>{if(sectionSlideCleanup)sectionSlideCleanup();},510);
+}
+
 /* =========================================================
    CLEAN AUCTION NAVIGATION
 ========================================================= */
@@ -1979,15 +2032,7 @@ function openCleanAuction(clickedElement) {
     });
 
 
-    document.querySelectorAll(".section").forEach(function(section) {
-        section.classList.remove("active");
-    });
-
-    const CleanSection = document.getElementById("clean-auction");
-
-    if (CleanSection) {
-        CleanSection.classList.add("active");
-    }
+    transitionToSection("clean-auction");
 
     const frame = document.getElementById("cleanAuctionFrame");
 
@@ -2037,9 +2082,7 @@ function openFarmGate(clickedElement) {
         const tip=item.querySelector(".collapsed-tooltip");
         if(tip) tip.style.display="";
     });
-    document.querySelectorAll(".section").forEach(function(section){ section.classList.remove("active"); });
-    const section=document.getElementById("farm-gate");
-    if(section) section.classList.add("active");
+    transitionToSection("farm-gate");
     const frame=document.getElementById("farmGateFrame");
     if(frame && frame.getAttribute("src")==="about:blank") frame.src="farm_gate_contract.php";
     document.querySelectorAll(".menu-link, .submenu a").forEach(function(link){link.classList.remove("active");});
@@ -2060,15 +2103,7 @@ function openKageraAuction(clickedElement) {
     });
 
 
-    document.querySelectorAll(".section").forEach(function(section) {
-        section.classList.remove("active");
-    });
-
-    const kageraSection = document.getElementById("kagera-auction");
-
-    if (kageraSection) {
-        kageraSection.classList.add("active");
-    }
+    transitionToSection("kagera-auction");
 
     const frame = document.getElementById("kageraAuctionFrame");
 
@@ -2113,13 +2148,7 @@ function openKageraAuction(clickedElement) {
    DIRECT SALES NAVIGATION
 ========================================================= */
 function openDirectSales(category, clickedElement) {
-    document.querySelectorAll(".section").forEach(function(section) {
-        section.classList.remove("active");
-    });
-    const section = document.getElementById("direct-sales");
-    if (section) section.classList.add("active");
-
-    const frame = document.getElementById("directSalesFrame");
+    transitionToSection("direct-sales");const frame = document.getElementById("directSalesFrame");
     if (frame) {
         const target = "Direct_sales.php?category=" + encodeURIComponent(category);
         if (frame.getAttribute("src") !== target) frame.src = target;
@@ -2139,9 +2168,7 @@ function openDirectSales(category, clickedElement) {
    COFFEE LICENCES NAVIGATION
 ========================================================= */
 function openLicenses(clickedElement) {
-    document.querySelectorAll(".section").forEach(function(section){ section.classList.remove("active"); });
-    const section=document.getElementById("coffee-licenses");
-    if(section) section.classList.add("active");
+    transitionToSection("coffee-licenses");
     const frame=document.getElementById("licensesFrame");
     if(frame && frame.getAttribute("src")==="about:blank") frame.src="licenses.php";
     document.querySelectorAll(".menu-link, .submenu a").forEach(function(link){link.classList.remove("active");});
@@ -2160,35 +2187,8 @@ function showSection(
 ) {
 
 
-    /*
-    Hide all sections
-    */
-
-    const sections =
-        document.querySelectorAll(".section");
-
-
-    sections.forEach(function(section) {
-
-        section.classList.remove("active");
-
-    });
-
-
-    /*
-    Display selected section
-    */
-
-    const selectedSection =
-        document.getElementById(sectionId);
-
-
-    if (selectedSection) {
-
-        selectedSection.classList.add("active");
-
-    }
-
+    transitionToSection(sectionId);
+    const selectedSection=document.getElementById(sectionId);
 
     /*
     Remove active state
@@ -2303,6 +2303,8 @@ function showSection(
    if(!id||id==='dashboard')return;
    const el=entries.find(x=>identify(x)===id && !x.closest('.collapsed-tooltip'));
    if(!el)return;
+   // Restore without sliding from the default dashboard on a full reload.
+   restoringInitialModule=true;
    // Invoke existing module handlers: they update frame, sidebar selection and heading.
    const handler=el.getAttribute('onclick')||'';
    if(id.startsWith('direct:'))openDirectSales(id.slice(7),el);
@@ -2310,6 +2312,7 @@ function showSection(
    else if(id==='openKageraAuction')openKageraAuction(el);
    else if(id==='openFarmGate')openFarmGate(el);
    else if(id==='openLicenses')openLicenses(el);
+   restoringInitialModule=false;
    // Highlight the parent sidebar group for expanded menus.
    const parent=el.closest('.menu-item');
    if(parent && el.closest('.submenu'))parent.classList.add('open');
