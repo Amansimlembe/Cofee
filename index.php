@@ -1334,6 +1334,18 @@ html,body{max-width:100%;overflow-x:hidden}
 #dashboard{overflow:hidden!important}
 #dashboardFrame{display:block;width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important}
 @media(max-width:900px){.main,.sidebar.collapsed ~ .main{max-width:calc(100% - var(--shell-sidebar))}}
+
+/* Modern embedded-report loading: local, non-blocking, no viewport overlay. */
+.section:has(> iframe){position:relative}
+.frame-placeholder{position:absolute;inset:0;z-index:2;background:#f8f6f3;display:flex;align-items:flex-start;justify-content:center;padding:36px 18px;pointer-events:none;transition:opacity .22s ease}
+.frame-placeholder[hidden]{display:none!important}
+.frame-placeholder-card{width:min(660px,100%);background:white;border:1px solid #e9e2dc;border-radius:16px;padding:24px;box-shadow:0 8px 24px rgba(62,39,35,.05)}
+.frame-placeholder-head{display:flex;gap:12px;align-items:center;margin-bottom:22px;color:#4e342e;font-weight:700}
+.frame-placeholder-dot{height:28px;width:28px;border:3px solid #e5d6c9;border-top-color:#795548;border-radius:50%;animation:frameSpin .8s linear infinite}
+.frame-skeleton{height:16px;border-radius:6px;background:linear-gradient(100deg,#eee8e2 25%,#f8f5f2 45%,#eee8e2 65%);background-size:200% 100%;animation:frameShimmer 1.5s ease-in-out infinite;margin-bottom:15px}
+.frame-skeleton.short{width:45%}.frame-skeleton.medium{width:75%}.frame-skeleton.tall{height:140px;margin-top:24px}
+@keyframes frameSpin{to{transform:rotate(360deg)}}@keyframes frameShimmer{to{background-position-x:-200%}}
+@media(prefers-reduced-motion:reduce){.frame-placeholder-dot,.frame-skeleton{animation:none}}
 </style>
 
 </head>
@@ -1708,6 +1720,7 @@ html,body{max-width:100%;overflow-x:hidden}
             id="dashboard"
             class="section kagera-page-section active">
 
+            <div class="frame-placeholder" id="dashboardPlaceholder" role="status" aria-label="Loading Sales Dashboard"><div class="frame-placeholder-card"><div class="frame-placeholder-head"><span class="frame-placeholder-dot"></span> Preparing Sales Dashboard</div><div class="frame-skeleton short"></div><div class="frame-skeleton medium"></div><div class="frame-skeleton"></div><div class="frame-skeleton tall"></div></div></div>
             <iframe
                 id="dashboardFrame"
                 src="dashboard.php"
@@ -2237,6 +2250,16 @@ function showSection(
 
 }
 
+
+/* Load each embedded module once, retain its DOM/state when switching tabs. */
+(function(){
+ const frame=document.getElementById('dashboardFrame');
+ const placeholder=document.getElementById('dashboardPlaceholder');
+ if(frame&&placeholder){
+  frame.addEventListener('load',()=>{placeholder.hidden=true;},{once:true});
+  // If frame loads from cache before listener registration, the load event still fires after document parsing.
+ }
+})();
 </script>
 </body>
 </html>

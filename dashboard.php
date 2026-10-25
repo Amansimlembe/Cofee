@@ -36,7 +36,7 @@ if(($_GET['action']??'')==='save_terminal_price'){
  exit;
 }
 /* Official TCB market reference prices. Cache the complete validated publication. */
-function tcb_market_prices(bool $forceRefresh=false): array {
+function tcb_market_prices(): array {
   // Screenshot-verified TCB publication of 23 Oct 2026. Used only when no valid
   // newer publication can be fetched; never describe these figures as live.
   $baseline=['ny'=>6.9,'london'=>3.3,'hard_cherry'=>4500,'cpu'=>12000,
@@ -50,8 +50,11 @@ function tcb_market_prices(bool $forceRefresh=false): array {
        && count(array_intersect_key($decoded['prices'],$baseline))===8
        && !empty($decoded['published']))$old=$decoded;
   }
-  if(!$forceRefresh)return $old ? array_merge($old,['status'=>'cached']) : $fallback;
-   if($old && time()-(int)($old['fetched_at']??0)<21600)return $old;
+  if($old && time()-(int)($old['fetched_at']??0)<21600)return $old;
+   // Throttle failed remote fetches too; never delay every visitor on an outage.
+   $retryFile=sys_get_temp_dir().'/tcb_market_price_retry_v2.txt';
+   if(is_file($retryFile) && time()-(int)@file_get_contents($retryFile)<900)return array_merge($old?:$fallback,['status'=>$old?'cached':'reference']);
+   @file_put_contents($retryFile,(string)time(),LOCK_EX);
   $previous=$old ?: $fallback;
   if(!function_exists('curl_init') || !class_exists('DOMDocument')){
     error_log('TCB market prices: PHP cURL or DOM extension missing');
@@ -59,7 +62,7 @@ function tcb_market_prices(bool $forceRefresh=false): array {
   }
   $ch=curl_init('https://www.coffee.go.tz/pages/average-market-price');
   curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,
-    CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>20,CURLOPT_SSL_VERIFYPEER=>true,
+    CURLOPT_CONNECTTIMEOUT=>2,CURLOPT_TIMEOUT=>4,CURLOPT_SSL_VERIFYPEER=>true,
     CURLOPT_USERAGENT=>'Mozilla/5.0 (compatible; TCB-SalesDashboard/1.0)',CURLOPT_MAXREDIRS=>3]);
   $html=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
   $err=curl_error($ch);curl_close($ch);
@@ -129,23 +132,6 @@ function tcb_market_prices(bool $forceRefresh=false): array {
   $data=['prices'=>$prices,'published'=>$published,'status'=>'live','fetched_at'=>time()];
   @file_put_contents($cache,json_encode($data),LOCK_EX);
   return $data;
-}
-
-/* Optional background refresh: never block report rendering on the public website. */
-if(($_GET['action']??'')==='refresh_market_cache'){
- header('Content-Type: application/json; charset=utf-8');
- header('Cache-Control: no-store');
- try {
-  $lockPath=sys_get_temp_dir().'/tcb_market_refresh.lock';
-  $lock=@fopen($lockPath,'c');
-  if($lock && !flock($lock,LOCK_EX|LOCK_NB)){
-   echo json_encode(['success'=>true,'status'=>'already_running']);exit;
-  }
-  $result=tcb_market_prices(true);
-  if($lock){flock($lock,LOCK_UN);fclose($lock);}
-  echo json_encode(['success'=>true,'status'=>$result['status']??'reference']);
- }catch(Throwable $e){error_log('Background market refresh: '.$e->getMessage());http_response_code(500);echo json_encode(['success'=>false]);}
- exit;
 }
 
 /* Friday-specific market snapshots. Manual overrides are never overwritten by website refreshes. */
@@ -427,9 +413,9 @@ if($display==='sales'){
  $db=kagera_db(); $cdb=clean_db(); $ddb=direct_db(); $fdb=farm_db();
  function season_bounds($s){if(!preg_match('/^(\\d{4})\\/(\\d{4})$/',$s,$m)||(int)$m[2]!=(int)$m[1]+1)return null;return[$m[1].'-07-01',$m[2].'-06-30'];}
  function current_season(){$y=(int)date('Y');$m=(int)date('n');return$m>=7?$y.'/'.($y+1):($y-1).'/'.$y;}
- $dateRows=$ddb->query("SELECT DISTINCT EXTRACT(YEAR FROM d)::int y, EXTRACT(MONTH FROM d)::int m FROM (SELECT invoice_date d FROM public.direct_sales WHERE invoice_date IS NOT NULL UNION ALL SELECT auction_date FROM public.clean_auction_results WHERE auction_date IS NOT NULL) dates")->fetchAll();
- $seasons=[];foreach($dateRows as$r){$y=(int)$r['y'];$m=(int)$r['m'];$sy=$m>=7?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}
- $kDateRows=$db->query("SELECT DISTINCT EXTRACT(YEAR FROM d)::int y, EXTRACT(MONTH FROM d)::int m FROM (SELECT auction_date d FROM public.kagera_auction_results WHERE auction_date IS NOT NULL UNION ALL SELECT auction_date FROM public.kagera_auction_catalogue WHERE auction_date IS NOT NULL) dates")->fetchAll();foreach($kDateRows as$r){$y=(int)$r['y'];$m=(int)$r['m'];$sy=$m>=6?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
+ $dateRows=$ddb->query("SELECT invoice_date d FROM public.direct_sales WHERE invoice_date IS NOT NULL UNION SELECT auction_date FROM public.clean_auction_results WHERE auction_date IS NOT NULL")->fetchAll();
+ $seasons=[];foreach($dateRows as$r){$d=$r['d']??null;if(!$d)continue;$y=(int)substr($d,0,4);$m=(int)substr($d,5,2);$sy=$m>=7?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}
+ $kDateRows=$db->query("SELECT auction_date d FROM public.kagera_auction_results WHERE auction_date IS NOT NULL UNION SELECT auction_date FROM public.kagera_auction_catalogue WHERE auction_date IS NOT NULL")->fetchAll();foreach($kDateRows as$r){$d=$r['d']??null;if(!$d)continue;$y=(int)substr($d,0,4);$m=(int)substr($d,5,2);$sy=$m>=6?$y:$y-1;$seasons[$sy.'/'.($sy+1)]=1;}$seasons=array_keys($seasons);rsort($seasons);
   $season=$_GET['season']??($seasons[0]??current_season());if($season!=='all'&&!season_bounds($season))$season=$seasons[0]??current_season();[$from,$seasonTo]=($season==='all'&&$seasons?[substr($seasons[count($seasons)-1],0,4).'-07-01',substr($seasons[0],5,4).'-06-30']:season_bounds($season));
   /* Friday-only publication dates, bounded by the selected season and local date. */
   $salesFridayDates=[];
@@ -2283,24 +2269,6 @@ foreach($tcVisibleGrades as $grade):
   font-weight:800!important;
 }
 </style>
-<?php if($display==='sales'): ?>
-<script>
-/* Refresh public market reference cache in the background, without delaying dashboard. */
-(function(){
-  const key='tcb-market-refresh-at-v3';
-  let last=0;
-  try{last=Number(localStorage.getItem(key)||0);}catch(e){}
-  if(Date.now()-last<21600000)return;
-  const refresh=()=>{
-    try{localStorage.setItem(key,String(Date.now()));}catch(e){}
-    fetch('dashboard.php?action=refresh_market_cache',{credentials:'same-origin',cache:'no-store'})
-      .catch(()=>{});
-  };
-  if('requestIdleCallback' in window)requestIdleCallback(refresh,{timeout:3000});
-  else window.addEventListener('load',refresh,{once:true});
-})();
-</script>
-<?php endif; ?>
 </body></html>';
    const blob=new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=base+'.doc';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
  }
@@ -3297,12 +3265,12 @@ window.salesDashboardApplyLanguage=setLanguage;
 <style>
 /* Shared report task indicator; independent of printable report content. */
 #reportTaskOverlay[hidden]{display:none!important}
-#reportTaskOverlay{position:fixed;inset:0;z-index:2147483000;background:rgba(28,20,15,.55);backdrop-filter:blur(3px);display:grid;place-items:center;padding:18px;box-sizing:border-box}
-.report-task-card{width:min(420px,100%);background:#fff;border-radius:17px;padding:25px;box-shadow:0 22px 75px rgba(0,0,0,.28);font-family:Arial,sans-serif;color:#3e2723;box-sizing:border-box}
-.report-task-icon{width:46px;height:46px;border-radius:14px;background:#f2e7dc;color:#65452f;display:grid;place-items:center;font-size:23px;margin-bottom:13px}
-.report-task-heading{font-size:18px;font-weight:800;margin:0 0 7px}
-.report-task-description{font-size:13px;color:#685b51;line-height:1.5;min-height:20px;margin-bottom:18px}
-.report-task-meter{height:9px;background:#eae4df;border-radius:20px;overflow:hidden}
+#reportTaskOverlay{position:fixed;right:18px;bottom:18px;top:auto;left:auto;z-index:2147483000;background:transparent;display:block;pointer-events:none;padding:0;box-sizing:border-box;max-width:calc(100vw - 36px)}
+.report-task-card{width:min(330px,calc(100vw - 36px));background:#fff;border:1px solid #e7ded7;border-radius:14px;padding:14px 16px;box-shadow:0 9px 30px rgba(0,0,0,.15);font-family:Arial,sans-serif;color:#3e2723;box-sizing:border-box}
+.report-task-icon{width:30px;height:30px;border-radius:9px;background:#f2e7dc;color:#65452f;display:grid;place-items:center;font-size:16px;margin-bottom:6px}
+.report-task-heading{font-size:14px;font-weight:800;margin:0 0 4px}
+.report-task-description{font-size:13px;color:#685b51;line-height:1.4;min-height:16px;margin-bottom:9px}
+.report-task-meter{height:5px;background:#eae4df;border-radius:20px;overflow:hidden}
 #reportTaskBar{height:100%;width:0;background:linear-gradient(90deg,#795548,#ba8b52);border-radius:20px;transition:width .25s ease}
 .report-task-bottom{display:flex;justify-content:space-between;margin-top:10px;font-size:12px;font-weight:700;color:#795548}
 @media(prefers-reduced-motion:reduce){#reportTaskBar{transition:none}}
@@ -3326,8 +3294,8 @@ window.reportTask=(function(){
 })();
 (function(){
  const form=document.querySelector('body.report-sticky-mode form.season');
- if(form)form.addEventListener('submit',()=>{window.reportTask.start('Loading report','Applying filters and retrieving report data…');window.reportTask.update(18,'Loading selected season and report date…');});
- document.querySelectorAll('body.report-sticky-mode form.season select').forEach(select=>select.addEventListener('change',()=>{if(select.form){window.reportTask.start('Loading report','Updating the selected report…');window.reportTask.update(18,'Retrieving report data…');}}));
+ if(form)form.addEventListener('submit',()=>{window.reportTask.start('Loading report','Applying filters and retrieving report data…');window.reportTask.update(5,'Loading selected season and report date…');});
+ document.querySelectorAll('body.report-sticky-mode form.season select').forEach(select=>select.addEventListener('change',()=>{if(select.form){window.reportTask.start('Loading report','Updating the selected report…');window.reportTask.update(5,'Retrieving report data…');}}));
 })();
 </script>
 
