@@ -2984,7 +2984,7 @@ async function excelWithImage(canvas){
 async function wordWithImage(canvas){
  await library('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',()=>!!window.JSZip);
  update(75,'Creating editable Word dashboard…');
- const zip=new JSZip(), xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+ const zip=new JSZip(), xml='<'+'?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
  const esc=v=>xmlEscape(String(v??'').replace(/\s+/g,' ').trim());
  const p=(value,bold=false,size=18)=>'<w:p><w:pPr><w:spacing w:before="80" w:after="80"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="'+size+'"/>'+(bold?'<w:b/><w:color w:val="543C2B"/>':'')+'</w:rPr><w:t xml:space="preserve">'+esc(value)+'</w:t></w:r></w:p>';
  const tc=(value,header=false,span=1)=>'<w:tc><w:tcPr>'+(span>1?'<w:gridSpan w:val="'+span+'"/>':'')+'<w:shd w:fill="'+(header?'543C2B':'FFFFFF')+'"/><w:tcBorders><w:bottom w:val="single" w:sz="5" w:color="D1C1B1"/><w:right w:val="single" w:sz="5" w:color="D1C1B1"/></w:tcBorders><w:tcMar><w:top w:w="85" w:type="dxa"/><w:bottom w:w="85" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="16"/>'+(header?'<w:b/><w:color w:val="FFFFFF"/>':'')+'</w:rPr><w:t xml:space="preserve">'+esc(value)+'</w:t></w:r></w:p></w:tc>';
