@@ -35,6 +35,33 @@ if(($_GET['action']??'')==='save_terminal_price'){
  catch(Throwable $e){error_log('Terminal price save: '.$e->getMessage());http_response_code(500);echo json_encode(['success'=>false,'message'=>'Unable to save the price. Please try again.']);}
  exit;
 }
+/* Official TCB market reference prices. Cache the complete validated publication. */
+function tcb_market_prices(): array {
+ $empty=['prices'=>[],'published'=>null,'status'=>'unavailable'];
+ $cache=sys_get_temp_dir().'/tcb_average_market_prices_v1.json';
+ $old=null;
+ if(is_file($cache)){$decoded=json_decode((string)@file_get_contents($cache),true);if(is_array($decoded)&&isset($decoded['prices'])&&count($decoded['prices'])===8)$old=$decoded;}
+ if($old && time()-(int)($old['fetched_at']??0)<21600)return $old;
+ if(!function_exists('curl_init')||!class_exists('DOMDocument'))return $old?array_merge($old,['status'=>'cached']):$empty;
+ $ch=curl_init('https://www.coffee.go.tz/pages/average-market-price');
+ curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>12,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_USERAGENT=>'TCB Sales Dashboard/1.0',CURLOPT_MAXREDIRS=>2]);
+ $html=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);
+ if(!is_string($html)||$http!==200||strlen($html)>1500000)return $old?array_merge($old,['status'=>'cached']):$empty;
+ $dom=new DOMDocument();$prev=libxml_use_internal_errors(true);$loaded=$dom->loadHTML('<?xml encoding="utf-8"?>'.$html);libxml_clear_errors();libxml_use_internal_errors($prev);
+ if(!$loaded)return $old?array_merge($old,['status'=>'cached']):$empty;
+ $xp=new DOMXPath($dom);$pairs=[];
+ foreach($xp->query('//tr') as $tr){$cells=[];foreach($tr->childNodes as $node)if($node instanceof DOMElement && in_array(strtolower($node->tagName),['td','th'],true)){$v=trim(preg_replace('/\s+/u',' ',$node->textContent));if($v!=='')$cells[]=$v;}
+  if(count($cells)>=2){$price=end($cells);if(preg_match('/^\s*([\d,]+(?:\.\d+)?)\s*$/',$price,$m)){$label=implode(' ',array_slice($cells,0,-1));$pairs[]=[$label,(float)str_replace(',','',$m[1])];}}
+ }
+ $patterns=['ny'=>'/^(?:NYC|NY|New York)$/i','london'=>'/^London$/i','hard_cherry'=>'/^H\s*\/\s*Arabica\s*\((?:Maganda|Dry Cherry)\)$/i','cpu'=>'/^Arabica\s*\(?CPU\)?$/i','hp'=>'/^Arabica\s*HP$/i','robusta_cherry'=>'/^Robusta\s*\((?:Maganda|Dry Cherry)\)$/i','auction_arabica'=>'/^Arabica\s*[-–]\s*Clean Coffee$/i','auction_robusta'=>'/^Robusta\s*[-–]\s*Clean Coffee$/i'];
+ $prices=[];foreach($patterns as $key=>$regex){foreach($pairs as [$label,$value])if(preg_match($regex,$label)){$prices[$key]=$value;break;}}
+ if(count($prices)!==8)return $old?array_merge($old,['status'=>'cached']):$empty;
+ $text=trim(preg_replace('/\s+/u',' ',$dom->textContent));$published=null;
+ if(preg_match('/\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*,?\s+(20\d{2})\b/i',$text,$m)){$dt=DateTimeImmutable::createFromFormat('!j M Y',$m[1].' '.ucfirst(strtolower($m[2])).' '.$m[3]);if($dt)$published=$dt->format('Y-m-d');}
+ if(!$published)return $old?array_merge($old,['status'=>'cached']):$empty;
+ $data=['prices'=>$prices,'published'=>$published,'status'=>'live','fetched_at'=>time()];@file_put_contents($cache,json_encode($data),LOCK_EX);return $data;
+}
+
 /* Certified Coffee: manual farmgate figures, independent for each Friday report. */
 function certified_coffee_table(PDO $pdo):void{
  $pdo->exec("CREATE TABLE IF NOT EXISTS public.dashboard_certified_coffee (season VARCHAR(9) NOT NULL, report_date DATE NOT NULL, week_mt NUMERIC(18,3) NOT NULL DEFAULT 0 CHECK(week_mt>=0), week_value_tzs NUMERIC(22,2) NOT NULL DEFAULT 0 CHECK(week_value_tzs>=0), season_mt NUMERIC(18,3) NOT NULL DEFAULT 0 CHECK(season_mt>=0), season_value_tzs NUMERIC(22,2) NOT NULL DEFAULT 0 CHECK(season_value_tzs>=0), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(season,report_date))");
@@ -327,9 +354,9 @@ if($display==='sales'){
     $salesGrandWeekKg+=$salesClean[$ch][$ct]['weekkg'];$salesGrandWeekVal+=$salesClean[$ch][$ct]['weekval'];
   }
  $estimatedProduction=85000.0;$productionPct=$estimatedProduction>0?($salesGrandKg/1000)/$estimatedProduction*100:0;
-  $terminalPrices=['arabica'=>null,'robusta'=>null];
-  try{$tpdo=terminal_price_db();terminal_price_table($tpdo);$tq=$tpdo->prepare('SELECT coffee_type,price_usd_kg FROM public.dashboard_terminal_prices WHERE season=:s AND report_date=:d');$tq->execute(['s'=>$season,'d'=>$salesReportDate]);foreach($tq as$tr)$terminalPrices[$tr['coffee_type']]=(float)$tr['price_usd_kg'];}catch(Throwable $e){error_log('Terminal price read: '.$e->getMessage());}
- $certifiedCoffee=['week_mt'=>0.0,'week_value_tzs'=>0.0,'season_mt'=>0.0,'season_value_tzs'=>0.0];
+   $tcbMarket=tcb_market_prices();
+   $tcbPrices=$tcbMarket['prices'];
+$certifiedCoffee=['week_mt'=>0.0,'week_value_tzs'=>0.0,'season_mt'=>0.0,'season_value_tzs'=>0.0];
  try{$certDb=terminal_price_db();certified_coffee_table($certDb);$cq=$certDb->prepare('SELECT week_mt,week_value_tzs,season_mt,season_value_tzs FROM public.dashboard_certified_coffee WHERE season=:s AND report_date=:d');$cq->execute(['s'=>$season,'d'=>$salesReportDate]);$saved=$cq->fetch();if($saved)foreach($certifiedCoffee as$k=>$unused)$certifiedCoffee[$k]=(float)$saved[$k];}catch(Throwable $e){error_log('Certified Coffee read: '.$e->getMessage());}
  $dashboardTitle='Sales Dashboard';$dashboardSub='Tanzania Coffee Board · Sales Season (FY)';
 }else
@@ -1878,12 +1905,14 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
    <thead><tr class="market-reference-heading sales-band"><td colspan="5">Market Reference Prices</td></tr>
    <tr class="market-reference-columns"><th>Market</th><th>Coffee Type</th><th>Price</th><th>Coffee Type</th><th>Price</th></tr></thead>
    <tbody>
-   <tr><th scope="row">Terminal (USD/kg)</th><td>Arabica (NY)</td><td class="sales-num"><b class="terminal-price" data-coffee="arabica" title="Double-click to edit Arabica terminal price" tabindex="0" role="button" aria-label="Edit Arabica terminal price"><?= $terminalPrices['arabica']===null?'—':nf_clean($terminalPrices['arabica'],4) ?></b></td><td>Robusta (London)</td><td class="sales-num"><b class="terminal-price" data-coffee="robusta" title="Double-click to edit Robusta terminal price" tabindex="0" role="button" aria-label="Edit Robusta terminal price"><?= $terminalPrices['robusta']===null?'—':nf_clean($terminalPrices['robusta'],4) ?></b></td></tr>
-   <tr><th scope="rowgroup" rowspan="2" class="market-reference-merged">Farmgate (TZS/kg)</th><td>H/Arabica (Dry Cherry)</td><td class="sales-num">4,500</td><td>Robusta (Dry Cherry)</td><td class="sales-num">3,800</td></tr>
-   <tr><td>Arabica CPU</td><td class="sales-num">12,000</td><td>Arabica HP</td><td class="sales-num">10,500</td></tr>
-   <tr><th scope="row">Clean Auction (USD/kg)</th><td>Arabica</td><td class="sales-num">7.40</td><td>Robusta</td><td class="sales-num">3.50</td></tr>
+   <?php $marketPrice=static function(string $key,int $dec=2)use($tcbPrices):string{return isset($tcbPrices[$key])?number_format((float)$tcbPrices[$key],$dec,'.',','):'—';}; ?>
+   <tr><th scope="row">Terminal (USD/kg)</th><td>Arabica (NY)</td><td class="sales-num"><?= $marketPrice('ny',2) ?></td><td>Robusta (London)</td><td class="sales-num"><?= $marketPrice('london',2) ?></td></tr>
+   <tr><th scope="rowgroup" rowspan="2" class="market-reference-merged">Farmgate (TZS/kg)</th><td>H/Arabica (Dry Cherry)</td><td class="sales-num"><?= $marketPrice('hard_cherry',0) ?></td><td>Robusta (Dry Cherry)</td><td class="sales-num"><?= $marketPrice('robusta_cherry',0) ?></td></tr>
+   <tr><td>Arabica CPU</td><td class="sales-num"><?= $marketPrice('cpu',0) ?></td><td>Arabica HP</td><td class="sales-num"><?= $marketPrice('hp',0) ?></td></tr>
+   <tr><th scope="row">Clean Auction (USD/kg)</th><td>Arabica</td><td class="sales-num"><?= $marketPrice('auction_arabica',2) ?></td><td>Robusta</td><td class="sales-num"><?= $marketPrice('auction_robusta',2) ?></td></tr>
    </tbody>
   </table>
+  <div style="font-size:10px;text-align:right;margin:2px 0 6px;color:#645345">Source: Tanzania Coffee Board — Average Market Prices<?=!empty($tcbMarket['published'])?' · Published '.htmlspecialchars(date('d M Y',strtotime($tcbMarket['published']))):' · Source unavailable'?><?=($tcbMarket['status']??'')==='cached'?' (last verified cache)':''?>. Latest published prices, not necessarily prices for the selected reporting Friday.</div>
   <table class="sales-table">
    <tr class="sales-band"><td colspan="5">Farmgate Market</td></tr>
    <tr><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
@@ -2916,34 +2945,6 @@ menu.addEventListener('click',async e=>{
 .terminal-price-card .actions{display:flex;justify-content:flex-end;gap:9px;margin-top:16px}.terminal-price-card button{padding:10px 16px;border-radius:8px;border:1px solid #c4b5a4;background:#fff;cursor:pointer}
 .terminal-price-card button[type=submit]{background:#704327;color:#fff;border-color:#704327}.terminal-price-card .error{color:#b42318;min-height:18px;margin-top:9px}
 </style>
-<div id="terminalPriceDialog" class="terminal-price-dialog" hidden data-html2canvas-ignore="true" aria-hidden="true">
- <form id="terminalPriceForm" class="terminal-price-card" role="dialog" aria-modal="true" aria-labelledby="terminalPriceHeading">
-  <h3 id="terminalPriceHeading">Edit terminal market price</h3><p>Enter the price in USD per kilogram for the selected Friday report.</p>
-  <label for="terminalPriceInput">Price (USD/kg)</label><input id="terminalPriceInput" type="number" min="0" max="99999999" step="0.0001" inputmode="decimal" required>
-  <div id="terminalPriceError" class="error" role="alert"></div>
-  <div class="actions"><button type="button" id="terminalPriceCancel">Cancel</button><button type="submit" id="terminalPriceSave">Save price</button></div>
- </form>
-</div>
-<script id="terminal-price-edit-js">
-(()=>{
- const dialog=document.getElementById('terminalPriceDialog'),form=document.getElementById('terminalPriceForm');if(!dialog||!form)return;
- const input=document.getElementById('terminalPriceInput'),heading=document.getElementById('terminalPriceHeading'),error=document.getElementById('terminalPriceError'),save=document.getElementById('terminalPriceSave');
- const fields=[...document.querySelectorAll('#salesDashboardDocument .terminal-price')];let active=null,previousFocus=null;
- const close=()=>{if(save.disabled)return;dialog.hidden=true;dialog.setAttribute('aria-hidden','true');previousFocus?.focus();active=null;};
- const open=el=>{active=el;previousFocus=document.activeElement;heading.textContent='Edit '+(el.dataset.coffee==='arabica'?'Arabica':'Robusta')+' terminal price';input.value=el.textContent.trim()==='—'?'':el.textContent.trim().replace(/,/g,'');error.textContent='';dialog.hidden=false;dialog.setAttribute('aria-hidden','false');input.focus();input.select();};
- fields.forEach(el=>{el.addEventListener('dblclick',()=>open(el));el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open(el);}});});
- document.getElementById('terminalPriceCancel').addEventListener('click',close);
- dialog.addEventListener('click',e=>{if(e.target===dialog)close();});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.hidden)close();});
- form.addEventListener('submit',async e=>{e.preventDefault();if(!active||save.disabled)return;const value=input.value.trim();if(!/^\d{1,8}(?:\.\d{1,4})?$/.test(value)){error.textContent='Enter a valid price with up to 4 decimal places.';return;}
-  save.disabled=true;save.textContent='Saving…';error.textContent='';
-  try{const body=new URLSearchParams({csrf:<?=json_encode($_SESSION['terminal_price_csrf'])?>,season:<?=json_encode($season)?>,report_date:<?=json_encode($salesReportDate)?>,coffee_type:active.dataset.coffee,price:value});
-   const response=await fetch('dashboard.php?action=save_terminal_price',{method:'POST',body,credentials:'same-origin',headers:{'Accept':'application/json'}});const result=await response.json();if(!response.ok||!result.success)throw new Error(result.message||'Saving failed');
-   active.textContent=Number(result.price).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:4});
-   dialog.hidden=true;dialog.setAttribute('aria-hidden','true');previousFocus?.focus();active=null;window.salesDashboardFit?.();
-  }catch(err){error.textContent=err.message||'Unable to save price';}finally{save.disabled=false;save.textContent='Save price';}
- });
-})();
-</script>
 <style>
 #salesDashboardDocument .certified-edit{cursor:pointer;text-decoration:underline dotted #98663b;text-underline-offset:3px}
 #salesDashboardDocument .certified-edit:hover,#salesDashboardDocument .certified-edit:focus{background:#fff3db;outline:1px solid #b78858}
