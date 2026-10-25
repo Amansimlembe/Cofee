@@ -2,8 +2,8 @@
 session_start();
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) { header('Location: login.php'); exit; }
 
-$display=strtolower(trim($_GET['display']??'kagera'));
-if(!in_array($display,['sales','preauction','kagera','clean','direct','totalclean','farmgate'],true))$display='kagera';
+$display=strtolower(trim($_GET['display']??'sales'));
+if(!in_array($display,['sales','preauction','kagera','clean','direct','totalclean','farmgate'],true))$display='sales';
 /* Manual terminal market prices: persistent, report-date-specific and authenticated. */
 if(!isset($_SESSION['terminal_price_csrf']))$_SESSION['terminal_price_csrf']=bin2hex(random_bytes(24));
 function terminal_price_db(): PDO {
@@ -3097,6 +3097,7 @@ menu.addEventListener('click',async e=>{
 #salesDashboardGuide .guide-indicators{width:100%;table-layout:fixed;border-collapse:collapse;font-size:1em;break-inside:avoid;column-span:all;margin-top:12px;margin-bottom:4px;line-height:1.4}
 #salesDashboardGuide .guide-indicators td,#salesDashboardGuide .guide-indicators th{border:1px solid #d9c8b5;padding:6px 8px;text-align:left;white-space:normal;overflow-wrap:break-word;word-break:normal;vertical-align:top}#salesDashboardGuide .guide-indicators th:first-child,#salesDashboardGuide .guide-indicators td:first-child{width:28%;font-weight:600}#salesDashboardGuide .guide-indicators th:nth-child(2),#salesDashboardGuide .guide-indicators td:nth-child(2){width:72%}
 #salesDashboardGuide .guide-indicators th{background:#e9d9c5}
+#salesDashboardGuide .guide-indicators td,#salesDashboardGuide .guide-indicators th{font-size:inherit!important;line-height:inherit}
 #salesDashboardGuide .guide-footer{position:absolute;bottom:0;left:0;right:0;background:#68462e;color:white;padding:1% 5%;text-align:center;font-size:11px;letter-spacing:.5px}
 @media(max-width:650px){#salesDashboardGuide .guide-body{column-gap:12px;font-size:clamp(6px,1.5vw,10px)}#salesDashboardGuide h2{font-size:clamp(11px,2.3vw,17px)}}
 @media print{#salesDashboardGuide:not([hidden]){page-break-before:always;break-before:page;box-shadow:none!important}}
