@@ -714,6 +714,13 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
  .highlow-poster{width:800px!important;max-width:none!important;transform-origin:top left}
 }
 
+
+/* Poster contact and social marks: vector icons stay sharp in PNG/PDF. */
+.highlow-poster .poster-footer{gap:5px!important;font-size:13px!important;align-items:center!important}
+.highlow-poster .poster-contact,.highlow-poster .poster-social{display:inline-flex;align-items:center;gap:3px;white-space:nowrap;min-width:0}
+.highlow-poster .poster-icon{width:21px;height:21px;flex:none;color:#fff;stroke:#fff;filter:drop-shadow(0 1px 2px #2a130d)}
+.highlow-poster .poster-social{gap:4px}
+.highlow-poster .poster-social .poster-icon{width:23px;height:23px;border-radius:50%;padding:3px;background:#fff;color:#673619;stroke:#673619;filter:none}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -731,6 +738,7 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
       <button type="button" onclick="exportHighLow('pdf')">PDF</button>
       <button type="button" onclick="exportHighLow('excel')">Excel</button>
       <button type="button" onclick="exportHighLow('word')">Word</button>
+      <button type="button" id="exportPosterPng" onclick="exportHighLow('png')" style="display:none">PNG Image</button>
       <div style="border-top:1px solid #ddd;margin:5px 0"></div>
       <button type="button" onclick="exportHighLow('all_pdf')">All Auctions · PDF</button>
       <button type="button" onclick="exportHighLow('all_excel')">All Auctions · Excel</button>
@@ -783,6 +791,7 @@ async function api(url,opt){let r=await fetch(url,opt);let j=await r.json();if(!
 
 function toggleExportMenu(event){
  if(event)event.stopPropagation();
+ $('exportPosterPng').style.display=($('display').value==='report'&&$('highLowLayout').value==='poster')?'block':'none';
  $('exportMenu').classList.toggle('open');
  $('settingsMenu').classList.remove('open');
 }
@@ -813,8 +822,10 @@ async function exportPoster(type){
  stage.style.cssText='position:fixed;left:-12000px;top:0;width:800px;z-index:-1';clone.style.width='800px';clone.style.maxWidth='800px';stage.appendChild(clone);document.body.appendChild(stage);
  try{
   const canvas=await html2canvas(clone,{scale:2.3,useCORS:true,backgroundColor:'#ede4d6',logging:false});
-  const img=canvas.toDataURL('image/png');const filename=highLowExportName(type==='pdf'?'pdf':type==='word'?'doc':'xls').replace('High_Low','High_Low_Poster');
-  if(type==='pdf'){
+  const img=canvas.toDataURL('image/png');const filename=highLowExportName(type==='png'?'png':type==='pdf'?'pdf':type==='word'?'doc':'xls').replace('High_Low','High_Low_Poster');
+  if(type==='png'){
+   await new Promise((resolve,reject)=>canvas.toBlob(blob=>{if(!blob){reject(Error('PNG creation failed.'));return;}downloadBlob(blob,filename);resolve();},'image/png'));
+  }else if(type==='pdf'){
    if(!window.jspdf?.jsPDF)throw Error('PDF library unavailable.');
    const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true});const w=190,h=canvas.height*w/canvas.width;
    pdf.addImage(img,'PNG',10,10,w,Math.min(h,277));pdf.save(filename);
@@ -823,13 +834,14 @@ async function exportPoster(type){
    downloadBlob(new Blob(['\ufeff',html],{type:type==='word'?'application/msword':'application/vnd.ms-excel'}),filename);
   }
   message('High & Low poster '+type.toUpperCase()+' prepared.');
- }finally{stage.remove()}
+ }catch(e){message(e.message||'Poster export failed.',false)}finally{stage.remove()}
 }
 function exportHighLow(type){
  $('exportMenu').classList.remove('open');
  const mode=$('display').value;
  if(type.startsWith('all_')){ cleanExportAll(type.slice(4)); return; }
- if(mode==='report'&&$('highLowLayout').value==='poster'){if(type==='pdf')return exportPoster('pdf');if(type==='word')return exportPoster('word');if(type==='excel')return exportPoster('excel');}
+ if(mode==='report'&&$('highLowLayout').value==='poster'){if(type==='pdf')return exportPoster('pdf');if(type==='word')return exportPoster('word');if(type==='excel')return exportPoster('excel');if(type==='png')return exportPoster('png');}
+ if(type==='png'){message('PNG export is available when High & Low Poster is selected.',false);return;}
  if(mode==='summary'){
    try{
      if(type==='excel') return exportSaleSummaryExcel();
@@ -1127,7 +1139,7 @@ function cleanHighLowPosterHTML(r,auctionNo){
  const tile=(label,value,suffix='')=>`<div class="poster-tile"><span class="poster-label">${label}</span><span class="poster-value">${value==null?'—':num(value,2)}${suffix}</span></div>`;
  const prices=(g)=>`<div class="poster-triple">${tile('Highest Price',g.high_price,' USD')}${tile('Average Price',g.avg_price,' USD')}${tile('Lowest Price',g.low_price,' USD')}</div>`;
  return `<div class="highlow-poster" role="img" aria-label="Tanzania Coffee Exchange auction high and low poster">
-  <div class="poster-gov"><div class="poster-emblem" aria-hidden="true">🇹🇿</div><div>THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div><div class="poster-brand">☕<br>COFFEE</div></div>
+  <div class="poster-gov"><div class="poster-emblem" aria-hidden="true"></div><div>THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div><div class="poster-brand" aria-hidden="true"></div></div>
   <div class="poster-strip">TANZANIA COFFEE EXCHANGE</div>
   <div class="poster-main"><div class="poster-big">AUCTION RESULTS</div><div class="poster-sale">SALE NO. TCB/M${esc(auctionNo)}</div><div class="poster-date">Held On ${esc(held)}</div><div class="poster-units">Price USD/50KGS</div></div>
   <div class="poster-triple">${tile('Kgs Offered',r.offered_kgs)}${tile('Kgs Sold',r.sold_kgs)}${tile('Total Value (USD)',r.total_value,' USD')}</div>
@@ -1135,7 +1147,7 @@ function cleanHighLowPosterHTML(r,auctionNo){
   <div class="poster-grade">C - Grade</div>${prices(cg)}
   <div class="poster-grade">LOWER GRADES (AF, F, E, TT, UG)</div>${prices(low)}
   <div class="poster-percent">Percentage Sold&nbsp; ${num(r.percentage_sold,2)}%</div>
-  <div class="poster-footer"><span>🌐 www.coffee.go.tz</span><span>✉ info@coffee.go.tz</span><span>☎ +255 27 2752324</span><span>coffeeboardtz</span></div>
+  <div class="poster-footer"><span class="poster-contact"><svg class="poster-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 5-5 13 0 18M12 3c5 5 5 13 0 18M12 3v18"/></svg>www.coffee.go.tz</span><span class="poster-contact"><svg class="poster-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="m3 7 9 7 9-7"/></svg>info@coffee.go.tz</span><span class="poster-contact"><svg class="poster-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5c-2 0-3 2-2.6 4.1 1.5 6.5 6.6 11.6 13.1 13.1 2.1.4 4.1-.6 4.1-2.6v-2.1l-5-2-2.2 2.1a15 15 0 0 1-6.5-6.5l2.1-2.2-2-5z"/></svg>+255 27 2752324</span><span class="poster-social"><svg class="poster-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8h3l.5-4H15V7c0-1.1.3-2 2-2h2V1.5A25 25 0 0 0 16 1c-3.2 0-5 1.9-5 5v3H8v4h3v8z" fill="currentColor" stroke="none"/></svg><svg class="poster-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg><svg class="poster-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3 20 21M20 3 4 21M4 3h4l12 18h-4z"/></svg><span>coffeeboardtz</span></span></div>
  </div>`;
 }
 async function refreshAll(){syncExportVisibility();try{await loadRows();await loadReport()}catch(e){message(e.message,false)}}
