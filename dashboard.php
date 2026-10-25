@@ -2041,39 +2041,33 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  <div class="guide-heading"><div class="guide-org">THE UNITED REPUBLIC OF TANZANIA · TANZANIA COFFEE BOARD</div><h2>GUIDE TO UNDERSTANDING THE COFFEE SALES DASHBOARD</h2><div class="guide-report-meta">Sales Season <?=htmlspecialchars($season)?> · Reporting Friday <?=date('d M Y',strtotime($salesReportDate))?></div></div>
  <div class="guide-body"><p class="guide-intro">The Tanzania Coffee Board Sales Dashboard summarizes the quantity, average reference prices and value of coffee sold through different marketing channels, showing weekly and seasonal sales performance.</p>
 <h3>1. Reporting Period</h3>
-<p class="guide-entry">Sales Season (FY – Financial Year): Runs from 1 July to 30 June of the following year.</p>
-<p class="guide-entry">End Date (Reporting Date): The selected Friday on which the sales report ends.</p>
-<p class="guide-entry">This Week: Sales recorded from Monday to Friday of the reporting week.</p>
-<p class="guide-entry">Season Total: Cumulative sales recorded from 1 July to the selected reporting Friday.</p>
+<p class="guide-entry"><strong>Sales Season (FY – Financial Year):</strong> Runs from 1 July to 30 June of the following year.</p>
+<p class="guide-entry"><strong>End Date (Reporting Date):</strong> The selected Friday on which the sales report ends.</p>
+<p class="guide-entry"><strong>This Week:</strong> Sales recorded from Monday to Friday of the reporting week.</p>
+<p class="guide-entry"><strong>Season Total:</strong> Cumulative sales recorded from 1 July to the selected reporting Friday.</p>
 <h3>2. Market Reference Prices</h3>
 <p>These are reference prices for the selected reporting Friday date:</p>
-<p class="guide-entry">Terminal (USD/kg): World coffee reference prices for Arabica (New York market) and Robusta (London market).</p>
-<p class="guide-entry">Farmgate (TZS/kg): Reference prices per kilogram for Hard Arabica Dry Cherry, Robusta Dry Cherry, Arabica CPU, and Arabica HP.</p>
-<p class="guide-entry">Clean Auction (USD/kg): Reference prices per kilogram for graded Arabica and Robusta coffee sold through the clean coffee auction.</p>
+<p class="guide-entry"><strong>Terminal (USD/kg):</strong> World coffee reference prices for Arabica (New York market) and Robusta (London market).</p>
+<p class="guide-entry"><strong>Farmgate (TZS/kg):</strong> Reference prices per kilogram for Hard Arabica Dry Cherry, Robusta Dry Cherry, Arabica CPU, and Arabica HP.</p>
+<p class="guide-entry"><strong>Clean Auction (USD/kg):</strong> Reference prices per kilogram for graded Arabica and Robusta coffee sold through the clean coffee auction.</p>
 <h3>3. Farmgate Market</h3>
 <p>This covers coffee traded at the primary marketing stage through three categories:</p>
-<p class="guide-entry">Kagera Auction: Coffee sold through the Kagera Coffee Auction, including Dry Coffee Cherries (naturally dried coffee) and Clean Coffee (home-hulled, ungraded coffee).</p>
-<p class="guide-entry">Certified Coffee: Coffee produced and marketed under recognized certification standards.</p>
-<p class="guide-entry">Parchment Coffee: Pulped and dried coffee retaining its parchment layer, sold through registered Farmgate Contracts (Mikataba ya Kahawa Ghafi).</p>
+<p class="guide-entry"><strong>Kagera Auction:</strong> Coffee sold through the Kagera Coffee Auction, including Dry Coffee Cherries (naturally dried coffee) and Clean Coffee (home-hulled, ungraded coffee).</p>
+<p class="guide-entry"><strong>Certified Coffee:</strong> Coffee produced and marketed under recognized certification standards.</p>
+<p class="guide-entry"><strong>Parchment Coffee:</strong> Pulped and dried coffee retaining its parchment layer, sold through registered Farmgate Contracts (Mikataba ya Kahawa Ghafi).</p>
 <h3>4. Clean Coffee Market</h3>
 <p>These covers processed and graded coffee traded through four marketing channels:</p>
-<p class="guide-entry">Clean Auction: Graded clean coffee sold through a competitive auction system to licensed green coffee exporters and local coffee roasters. The purchased coffee is subsequently exported or roasted locally.</p>
-<p class="guide-entry">Direct Export: Coffee sold directly to international buyers as a final sales channel.</p>
-<p class="guide-entry">Local Roast: Coffee sold to local roasting businesses as a final sales channel.</p>
-<p class="guide-entry">Local Sale: An intermediate sales channel for graded clean coffee traded between local buyers before reaching final markets, such as Direct Export or Local Roast. The dashboard reports the remaining Local Sale balance after deducting quantities subsequently sold through Direct Export or Local Roast.</p>
+<p class="guide-entry"><strong>Clean Auction:</strong> Graded clean coffee sold through a competitive auction system to licensed green coffee exporters and local coffee roasters. The purchased coffee is subsequently exported or roasted locally.</p>
+<p class="guide-entry"><strong>Direct Export:</strong> Coffee sold directly to international buyers as a final sales channel.</p>
+<p class="guide-entry"><strong>Local Roast:</strong> Coffee sold to local roasting businesses as a final sales channel.</p>
+<p class="guide-entry"><strong>Local Sale:</strong> An intermediate sales channel for graded clean coffee traded between local buyers before reaching final markets, such as Direct Export or Local Roast. The dashboard reports the remaining Local Sale balance after deducting quantities subsequently sold through Direct Export or Local Roast.</p>
 <h3>4. Types of Coffee</h3>
 <h4>Arabica</h4>
-<p class="guide-entry">Mild Arabica (M-Arabica): Arabica coffee processed using the wet method, where harvested ripe cherries are pulped before drying.</p>
-<p class="guide-entry">Hard Arabica (H-Arabica): Arabica coffee processed using the natural method, where whole ripe cherries are dried into dry cherries before hulling.</p>
-<p class="guide-entry">Robusta: Robusta coffee, which in Tanzania is predominantly processed naturally by drying whole ripe cherries before hulling.</p>
+<p class="guide-entry"><strong>Mild Arabica (M-Arabica):</strong> Arabica coffee processed using the wet method, where harvested ripe cherries are pulped before drying.</p>
+<p class="guide-entry"><strong>Hard Arabica (H-Arabica):</strong> Arabica coffee processed using the natural method, where whole ripe cherries are dried into dry cherries before hulling.</p>
+<p class="guide-entry"><strong>Robusta:</strong> Robusta coffee, which in Tanzania is predominantly processed naturally by drying whole ripe cherries before hulling.</p>
 <h3>6. Understanding the Sales Figures</h3>
 <p><strong>MT (Metric Tonne): 1 MT = 1,000 kilograms.</strong></p>
-<h3>Important Notes</h3>
-<p class="guide-entry">Farmgate and clean coffee figures represent different processing and marketing stages and should not be added together to avoid double counting.</p>
-<p class="guide-entry">Local Sale is an intermediate channel; its remaining balance is reported to avoid counting coffee again after Direct Export.</p>
-<p class="guide-entry">Farmgate sales values are reported in TZS, while clean coffee sales values are reported in USD.</p>
-<p class="guide-entry">Market reference prices indicate prevailing price levels and may differ from actual transaction prices.</p>
-<p class="guide-entry">Percentage Achieved measures clean coffee sales against estimated production, not the proportion of coffee harvested.</p>
 <table class="guide-indicators"><thead><tr><th>Indicator</th><th>Meaning</th></tr></thead><tbody>
 <tr><td>This Week (MT)</td><td>Quantity sold during the reporting week (Monday–Friday).</td></tr>
 <tr><td>Value (TZS/USD)</td><td>Monetary value of coffee sold during the reporting week.</td></tr>
