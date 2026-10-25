@@ -3056,7 +3056,7 @@ menu.addEventListener('click',async e=>{
 .terminal-price-card button[type=submit]{background:#704327;color:#fff;border-color:#704327}.terminal-price-card .error{color:#b42318;min-height:18px;margin-top:9px}
 </style>
 <style>
-#salesDashboardDocument .certified-edit{cursor:pointer;text-decoration:underline dotted #98663b;text-underline-offset:3px}
+#salesDashboardDocument .certified-edit{cursor:pointer;text-decoration:none!important;text-underline-offset:0}
 #salesDashboardDocument .certified-edit:hover,#salesDashboardDocument .certified-edit:focus{background:#fff3db;outline:1px solid #b78858}
 </style>
 <div id="marketPriceDialog" class="terminal-price-dialog" hidden data-html2canvas-ignore="true" aria-hidden="true">
