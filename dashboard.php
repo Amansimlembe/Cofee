@@ -1968,20 +1968,15 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
   <table class="sales-meta">
    <tr><th>Sale Season (FY)</th><td><b><?=htmlspecialchars($season)?></b></td><th>End Date</th><td><b><?=date('d/m/Y',strtotime($salesEnd))?></b></td></tr>
   </table>
-  <table class="sales-meta market-reference-prices">
-   <colgroup><col style="width:22%"><col style="width:25%"><col style="width:14%"><col style="width:25%"><col style="width:14%"></colgroup>
-   <thead><tr class="market-reference-heading sales-band"><td colspan="5">Market Reference Prices</td></tr>
-   <tr class="market-reference-columns"><th>Market</th><th>Coffee Type</th><th>Price</th><th>Coffee Type</th><th>Price</th></tr></thead>
-   <tbody>
+  <table class="sales-table market-reference-prices">
+   <tbody><tr class="market-reference-heading sales-band"><td colspan="5">Market Reference Prices</td></tr>
+   <tr class="market-reference-columns"><th>Market</th><th>Coffee Type</th><th>Price</th><th>Coffee Type</th><th>Price</th></tr>
    <?php $marketPrice=static function(string $key,int $dec=2)use($tcbPrices):string{return isset($tcbPrices[$key])?number_format((float)$tcbPrices[$key],$dec,'.',','):'—';}; ?>
    <tr><th scope="row">Terminal (USD/kg)</th><td>Arabica (NY)</td><td class="sales-num"><?= $marketPrice('ny',2) ?></td><td>Robusta (London)</td><td class="sales-num"><?= $marketPrice('london',2) ?></td></tr>
    <tr><th scope="rowgroup" rowspan="2" class="market-reference-merged">Farmgate (TZS/kg)</th><td>H/Arabica (Dry Cherry)</td><td class="sales-num"><?= $marketPrice('hard_cherry',0) ?></td><td>Robusta (Dry Cherry)</td><td class="sales-num"><?= $marketPrice('robusta_cherry',0) ?></td></tr>
    <tr><td>Arabica CPU</td><td class="sales-num"><?= $marketPrice('cpu',0) ?></td><td>Arabica HP</td><td class="sales-num"><?= $marketPrice('hp',0) ?></td></tr>
    <tr><th scope="row">Clean Auction (USD/kg)</th><td>Arabica</td><td class="sales-num"><?= $marketPrice('auction_arabica',2) ?></td><td>Robusta</td><td class="sales-num"><?= $marketPrice('auction_robusta',2) ?></td></tr>
    </tbody>
-  </table>
-  <div style="font-size:10px;text-align:right;margin:2px 0 6px;color:#645345">Source: Tanzania Coffee Board — Average Market Prices<?=!empty($tcbMarket['published'])?' · Published '.htmlspecialchars(date('d M Y',strtotime($tcbMarket['published']))):' · Source unavailable'?><?=($tcbMarket['status']??'')==='cached'?' (last verified cache)':(($tcbMarket['status']??'')==='reference'?' (23 Oct 2026 reference; live retrieval unavailable)':' (live website data)')?>. Latest available publication, not necessarily prices for the selected reporting Friday.</div>
-  <table class="sales-table">
    <tr class="sales-band"><td colspan="5">Farmgate Market</td></tr>
    <tr><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
    <?php foreach(['Dry Cherry','Clean Coffee'] as$ct):$r=$salesFarm[$ct];?><tr><td class="sales-label">&#8226; <?=htmlspecialchars($ct === 'Clean Coffee' ? 'Clean Coffee (Ungraded)' : $ct)?></td><td class="sales-num"><?=nf($r['weekkg']/1000,3)?></td><td class="sales-num"><?=nf($r['weekval'],2)?></td><td class="sales-num"><?=nf($r['seasonkg']/1000,3)?></td><td class="sales-num"><?=nf($r['seasonval'],2)?></td></tr><?php endforeach;?>
