@@ -1873,6 +1873,38 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
 </style>
 <style id="direct-ranking-filter-styles">#directRankingPanels .direct-ranking-filters{grid-column:1/-1;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:9px;padding:10px 14px;background:#f8f5f1;border:1px solid #e7dcd2;border-radius:9px;margin-bottom:5px}#directRankingPanels .direct-ranking-filters label{font-size:11px;font-weight:700;color:#50372b}#directRankingPanels .direct-ranking-filters select{min-width:145px;max-width:280px;padding:7px 10px;border:1px solid #d7c8bb;border-radius:7px;background:white;color:#4b2e20;font-size:12px}@media(max-width:650px){#directRankingPanels .direct-ranking-filters{justify-content:stretch}#directRankingPanels .direct-ranking-filters select{flex:1;min-width:100px}}</style>
 <style id="direct-ranking-inline-filters-css">#directRankingPanels .rank-panel-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#directRankingPanels .direct-ranking-inline-filters{display:flex;align-items:center;gap:9px;flex-wrap:wrap}#directRankingPanels .direct-ranking-inline-filters label{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#50372b}#directRankingPanels .direct-ranking-inline-filters select{width:clamp(115px,13vw,190px);max-width:100%;padding:7px 8px;border:1px solid #d7c8bb;border-radius:7px;background:#fff;color:#4b2e20;font-size:11px}#directRankingPanels .rank-export-panel .panel-head{flex-wrap:wrap}#directRankingPanels .direct-panel-export{flex-shrink:0}@media(max-width:720px){#directRankingPanels .rank-panel-actions{width:100%;justify-content:flex-end}#directRankingPanels .direct-ranking-inline-filters{flex:1}#directRankingPanels .direct-ranking-inline-filters label{flex:1;min-width:135px}#directRankingPanels .direct-ranking-inline-filters select{width:100%}}</style>
+<style id="dashboard-seamless-navigation">
+/* Same-origin cross-document navigation: the outgoing report remains painted
+   until the incoming server-rendered report is ready. No blank intermediate frame. */
+@view-transition { navigation: auto; }
+::view-transition-old(root),::view-transition-new(root) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(.22,1,.36,1);
+  animation-fill-mode: both;
+}
+::view-transition-old(root) { animation-name: dashboard-push-out; }
+::view-transition-new(root) { animation-name: dashboard-push-in; }
+@keyframes dashboard-push-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-24%); opacity: .92; }
+}
+@keyframes dashboard-push-in {
+  from { transform: translateX(24%); opacity: .96; }
+  to { transform: translateX(0); opacity: 1; }
+}
+/* Stable page chrome, with content sliding beneath it. */
+.topbar { view-transition-name: dashboard-toolbar; }
+::view-transition-old(dashboard-toolbar),::view-transition-new(dashboard-toolbar) {
+  animation-duration: 250ms;
+  animation-timing-function: ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),::view-transition-new(root),
+  ::view-transition-old(dashboard-toolbar),::view-transition-new(dashboard-toolbar) {
+    animation-duration: .01ms !important;
+  }
+}
+</style>
 </head>
 <body class="<?=in_array($display,['sales','preauction'],true)?'report-sticky-mode':''?>">
 <div class="dashboard">
