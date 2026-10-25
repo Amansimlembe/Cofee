@@ -2260,15 +2260,61 @@ function showSection(
  frames.forEach(frame=>{
    const placeholder=frame.closest('.section')?.querySelector('.frame-placeholder');
    if(!placeholder)return;
-   const hide=()=>{placeholder.hidden=true;};
+   const hide=()=>{placeholder.hidden=true;try{sessionStorage.setItem('tcb:frame-ready:'+frame.id,'1');}catch(e){}};
+   try{if(sessionStorage.getItem('tcb:frame-ready:'+frame.id)==='1')placeholder.hidden=true;}catch(e){}
    frame.addEventListener('load',()=>{
      if(frame.getAttribute('src')==='about:blank')return;
      hide();
    });
    // For already loaded pages (e.g. restored from back/forward cache).
    try{if(frame.getAttribute('src')!=='about:blank'&&frame.contentDocument?.readyState==='complete')hide();}catch(e){}
-   new MutationObserver(()=>{if(frame.getAttribute('src')!=='about:blank')placeholder.hidden=false;}).observe(frame,{attributes:true,attributeFilter:['src']});
+   new MutationObserver(()=>{if(frame.getAttribute('src')!=='about:blank'){try{placeholder.hidden=sessionStorage.getItem('tcb:frame-ready:'+frame.id)==='1';}catch(e){placeholder.hidden=false;}}}).observe(frame,{attributes:true,attributeFilter:['src']});
  });
+})();
+</script>
+<script id="persistent-module-navigation">
+/* Preserve the exact selected navigation item across browser refreshes. */
+(function(){
+ const KEY='tcb:last-module:v2';
+ const entries=[...document.querySelectorAll('.menu-link[onclick], .submenu a[onclick], .collapsed-tooltip a[onclick]')];
+ const valid=/^(?:showSection\('dashboard'|openCleanAuction|openKageraAuction|openDirectSales|openFarmGate|openLicenses)/;
+ function identify(el){
+   const handler=(el.getAttribute('onclick')||'').trim();
+   if(!valid.test(handler))return null;
+   if(handler.startsWith('openDirectSales')){
+     const m=handler.match(/openDirectSales\(['"]([^'"]+)/);
+     return m?'direct:'+m[1]:null;
+   }
+   if(handler.startsWith('showSection'))return 'dashboard';
+   return handler.split('(')[0];
+ }
+ function remember(el){
+   const id=identify(el);
+   if(id){try{sessionStorage.setItem(KEY,id);}catch(e){}
+     // Keep a shareable navigation location without forcing a page reload.
+     const url=new URL(location.href);url.searchParams.set('module',id);
+     history.replaceState(history.state,'',url.pathname+url.search+url.hash);
+   }
+ }
+ entries.forEach(el=>el.addEventListener('click',()=>remember(el)));
+ function restore(){
+   let id=null;
+   try{id=new URL(location.href).searchParams.get('module')||sessionStorage.getItem(KEY);}catch(e){}
+   if(!id||id==='dashboard')return;
+   const el=entries.find(x=>identify(x)===id && !x.closest('.collapsed-tooltip'));
+   if(!el)return;
+   // Invoke existing module handlers: they update frame, sidebar selection and heading.
+   const handler=el.getAttribute('onclick')||'';
+   if(id.startsWith('direct:'))openDirectSales(id.slice(7),el);
+   else if(id==='openCleanAuction')openCleanAuction(el);
+   else if(id==='openKageraAuction')openKageraAuction(el);
+   else if(id==='openFarmGate')openFarmGate(el);
+   else if(id==='openLicenses')openLicenses(el);
+   // Highlight the parent sidebar group for expanded menus.
+   const parent=el.closest('.menu-item');
+   if(parent && el.closest('.submenu'))parent.classList.add('open');
+ }
+ restore();
 })();
 </script>
 </body>
