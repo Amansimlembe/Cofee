@@ -3279,6 +3279,11 @@ body.kagera-edit-mode .kagera-row-actions{display:table-cell}
 
 </style>
 
+
+<style id="tcb-nonblocking-loading-fix">
+/* Never obscure the auction display during data retrieval or export. */
+#kageraTaskOverlay, #kageraTaskOverlay.active { display:none !important; visibility:hidden !important; pointer-events:none !important; backdrop-filter:none !important; }
+</style>
 </head>
 
 <body>

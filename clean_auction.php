@@ -724,6 +724,11 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style id="tcb-nonblocking-loading-fix">
+/* Never obscure the auction display during data retrieval or export. */
+#cleanProgressOverlay, #cleanProgressOverlay.active { display:none !important; visibility:hidden !important; pointer-events:none !important; backdrop-filter:none !important; }
+</style>
 </head>
 <body>
 <div class="app">
