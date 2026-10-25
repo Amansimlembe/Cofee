@@ -2981,57 +2981,61 @@ async function excelWithImage(canvas){
  ct=ct.replace('</Types>','<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');zip.file('[Content_Types].xml',ct);
  save(await zip.generateAsync({type:'blob',compression:'DEFLATE'}),base()+'.xlsx');
 }
-/* Editable DOCX: native Word paragraphs and table cells, never a flattened screenshot. */
-async function wordEditable(){
+async function wordWithImage(canvas){
  await library('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',()=>!!window.JSZip);
- update(65,'Building editable Word tables and text…');
- const zip=new JSZip(), declaration='<'+'?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
- const esc=xmlEscape;
- const run=(value,bold=false,color='382A20',size=18)=>'<w:r><w:rPr>'+(bold?'<w:b/>':'')+'<w:color w:val="'+color+'"/><w:sz w:val="'+size+'"/></w:rPr><w:t xml:space="preserve">'+esc(value)+'</w:t></w:r>';
- const paragraph=(value,opts={})=>'<w:p><w:pPr><w:jc w:val="'+(opts.align||'left')+'"/><w:spacing w:after="'+(opts.after??65)+'"/></w:pPr>'+run(value,!!opts.bold,opts.color||'382A20',opts.size||18)+'</w:p>';
- const shade=(hex)=>'<w:shd w:fill="'+hex+'"/>';
- const table=element=>{
-  const rows=Array.from(element.querySelectorAll('tr'));
-  let output='<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="CBB9A7"/><w:left w:val="single" w:sz="4" w:color="CBB9A7"/><w:bottom w:val="single" w:sz="4" w:color="CBB9A7"/><w:right w:val="single" w:sz="4" w:color="CBB9A7"/><w:insideH w:val="single" w:sz="3" w:color="E0D5C9"/><w:insideV w:val="single" w:sz="3" w:color="E0D5C9"/></w:tblBorders><w:tblCellMar><w:top w:w="55" w:type="dxa"/><w:bottom w:w="55" w:type="dxa"/><w:left w:w="75" w:type="dxa"/><w:right w:w="75" w:type="dxa"/></w:tblCellMar></w:tblPr>';
-  rows.forEach(tr=>{
-   const band=tr.classList.contains('sales-band')||tr.classList.contains('market-reference-heading');
-   const head=tr.classList.contains('sales-column-heading')||tr.classList.contains('market-reference-columns');
-   const total=tr.classList.contains('sales-grand');
-   const fill=band?'61412C':head?'EADDD0':total?'E8D6C1':null;
-   output+='<w:tr>';
-   Array.from(tr.children).filter(c=>/^(TD|TH)$/.test(c.tagName)).forEach(cell=>{
-    const span=Math.max(1,parseInt(cell.getAttribute('colspan')||'1',10));
-    const isBold=band||head||total||cell.tagName==='TH'||!!cell.querySelector('b,strong');
-    const numeric=cell.classList.contains('sales-num');
-    const text=(cell.innerText||cell.textContent||'').replace(/\s+/g,' ').trim();
-    output+='<w:tc><w:tcPr>'+(span>1?'<w:gridSpan w:val="'+span+'"/>':'')+(fill?shade(fill):'')+'<w:vAlign w:val="center"/></w:tcPr>'+paragraph(text,{bold:isBold,color:band?'FFFFFF':'382A20',align:band||numeric||head?'center':'left',size:band?18:16,after:0})+'</w:tc>';
-   });
-   output+='</w:tr>';
-  });
-  return output+'</w:tbl>';
+ update(75,'Creating a genuine Word DOCX document…');
+ const png=await canvasBlob(canvas,'image/png');
+ const zip=new JSZip();
+ const cx=5486400,cy=Math.round(cx*1447/1023);
+ const xml='<'+'?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+ zip.file('[Content_Types].xml',xml+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+ zip.file('_rels/.rels',xml+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+ zip.file('word/_rels/document.xml.rels',xml+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/dashboard.png"/></Relationships>');
+ zip.file('word/media/dashboard.png',png);
+ const drawing='<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="'+cx+'" cy="'+cy+'"/><wp:docPr id="1" name="Tanzania Coffee Board Sales Dashboard"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="Dashboard"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdImage1"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>';
+ const document=xml+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr><w:r>'+drawing+'</w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="180" w:right="180" w:bottom="180" w:left="180" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>';
+ // Preserve the designed dashboard on page one and add genuinely editable Word tables.
+ // The picture itself is not editable; every visible report table is reproduced below it
+ // as native Word table cells so users can change words and numbers in Microsoft Word.
+ const wordText=(value)=>'<w:r><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="17"/></w:rPr><w:t xml:space="preserve">'+xmlEscape(value)+'</w:t></w:r>';
+ const paragraph=(value,bold=false)=>'<w:p><w:pPr><w:spacing w:after="90"/></w:pPr><w:r>'+(bold?'<w:rPr><w:b/><w:sz w:val="23"/></w:rPr>':'<w:rPr><w:sz w:val="18"/></w:rPr>')+'<w:t xml:space="preserve">'+xmlEscape(value)+'</w:t></w:r></w:p>';
+ const cell=(value,heading=false,span=1)=>{
+  const fill=heading?'543C2B':'FFFFFF';
+  const grid=span>1?'<w:gridSpan w:val="'+span+'"/>':'';
+  return '<w:tc><w:tcPr>'+grid+'<w:shd w:fill="'+fill+'"/><w:tcBorders><w:bottom w:val="single" w:sz="4" w:color="C9B8A6"/><w:right w:val="single" w:sz="4" w:color="C9B8A6"/></w:tcBorders><w:tcMar><w:top w:w="75" w:type="dxa"/><w:bottom w:w="75" w:type="dxa"/><w:left w:w="95" w:type="dxa"/><w:right w:w="95" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:r><w:rPr><w:sz w:val="16"/>'+(heading?'<w:b/><w:color w:val="FFFFFF"/>':'')+'</w:rPr><w:t xml:space="preserve">'+xmlEscape(value)+'</w:t></w:r></w:p></w:tc>';
  };
- let content=paragraph('THE UNITED REPUBLIC OF TANZANIA',{bold:true,align:'center',size:20,after:10})+paragraph('MINISTRY OF AGRICULTURE',{bold:true,align:'center',size:18,after:10})+paragraph('TANZANIA COFFEE BOARD',{bold:true,align:'center',size:20,after:90})+paragraph('SALES DASHBOARD',{bold:true,align:'center',size:28,after:160});
- paper.querySelectorAll('.sales-ppt-body table').forEach(t=>{content+=table(t)+paragraph('',{after:80});});
- content+=paragraph('www.coffee.go.tz   |   info@coffee.go.tz   |   +255 27 2752324',{align:'center',size:15,after:0});
- const document=declaration+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+content+'<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="650" w:bottom="850" w:left="650"/></w:sectPr></w:body></w:document>';
- zip.file('[Content_Types].xml',declaration+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
- zip.file('_rels/.rels',declaration+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
- zip.file('word/document.xml',document);
- update(90,'Packaging editable Word document…');
+ const editableTable=(table)=>{
+  let rows='';
+  for(const tr of table.querySelectorAll('tr')){
+   const cells=Array.from(tr.children).filter(el=>el.matches('th,td'));
+   if(!cells.length)continue;
+   const band=tr.classList.contains('sales-band')||tr.classList.contains('market-reference-heading');
+   const heading=band||tr.classList.contains('sales-column-heading')||tr.classList.contains('market-reference-columns');
+   rows+='<w:tr>'+cells.map(el=>cell(el.innerText.replace(/\\s+/g,' ').trim(),heading||el.tagName==='TH',Number(el.getAttribute('colspan')||1)))+'</w:tr>';
+  }
+  return '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblLayout w:type="autofit"/><w:tblBorders><w:top w:val="single" w:sz="5" w:color="BDAA97"/><w:bottom w:val="single" w:sz="5" w:color="BDAA97"/></w:tblBorders></w:tblPr>'+rows+'</w:tbl>';
+ };
+ const tables=Array.from(paper.querySelectorAll('table'));
+ const editableContent='<w:p><w:pPr><w:pageBreakBefore/></w:pPr></w:p>'
+  +paragraph('TANZANIA COFFEE BOARD — SALES DASHBOARD',true)
+  +paragraph('Editable report data | Sale Season: '+<?=json_encode($season)?>+' | Reporting Friday: '+<?=json_encode($salesReportDate)?>)
+  +paragraph('The first page retains the original dashboard design. The following tables contain editable text and figures.')
+  +tables.map(editableTable).join('<w:p/>');
+ const editableDocument=document.replace('</w:body>',editableContent+'</w:body>');
+ zip.file('word/document.xml',editableDocument);
  save(await zip.generateAsync({type:'blob',compression:'DEFLATE'}),base()+'.docx');
 }
 menu.addEventListener('click',async e=>{
  const type=e.target.closest('[data-type]')?.dataset.type;if(!type)return;
  e.stopPropagation();menu.hidden=true;button.disabled=true;const task=window.reportTask.start('Exporting Sales Dashboard','Preparing '+type.toUpperCase()+' export…');update(5,'Preparing dashboard export…');window.reportTask.update(5,'Preparing dashboard export…');
  try{
-  if(type==='doc'){await wordEditable();update(100,'Editable Word export completed');window.reportTask.end(task,false);return;}
   const canvas=await snapshot();
   if(type==='png'||type==='jpg'){update(85,'Encoding image…');save(await canvasBlob(canvas,type==='png'?'image/png':'image/jpeg',.96),base()+'.'+type);}
   else if(type==='pdf'){
    await library('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
    update(85,'Composing PDF…');const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,210,297);pdf.save(base()+'.pdf');
   }else if(type==='xlsx')await excelWithImage(canvas);
-
+  else if(type==='doc')await wordWithImage(canvas);
   update(100,'Export completed');window.reportTask.end(task,false);
  }catch(err){update(0,'Export failed');window.reportTask.end(task,true);alert('Dashboard export failed: '+err.message);console.error(err);}
  finally{button.disabled=false;setTimeout(()=>{if(progress)progress.hidden=true;},2200);}
