@@ -3070,7 +3070,7 @@ menu.addEventListener('click',async e=>{
  </form>
 </div>
 <style>
-#salesDashboardDocument .market-price-edit{cursor:pointer;text-decoration:underline dotted #89532e;text-underline-offset:3px}
+#salesDashboardDocument .market-price-edit{cursor:pointer;text-decoration:none!important;text-underline-offset:0}
 #salesDashboardDocument .market-price-edit:hover,#salesDashboardDocument .market-price-edit:focus{background:#fff3db;outline:1px solid #b78858}
 </style>
 <script id="market-friday-price-edit-js">
