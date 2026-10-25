@@ -37,29 +37,97 @@ if(($_GET['action']??'')==='save_terminal_price'){
 }
 /* Official TCB market reference prices. Cache the complete validated publication. */
 function tcb_market_prices(): array {
- $empty=['prices'=>[],'published'=>null,'status'=>'unavailable'];
- $cache=sys_get_temp_dir().'/tcb_average_market_prices_v1.json';
- $old=null;
- if(is_file($cache)){$decoded=json_decode((string)@file_get_contents($cache),true);if(is_array($decoded)&&isset($decoded['prices'])&&count($decoded['prices'])===8)$old=$decoded;}
- if($old && time()-(int)($old['fetched_at']??0)<21600)return $old;
- if(!function_exists('curl_init')||!class_exists('DOMDocument'))return $old?array_merge($old,['status'=>'cached']):$empty;
- $ch=curl_init('https://www.coffee.go.tz/pages/average-market-price');
- curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>12,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_USERAGENT=>'TCB Sales Dashboard/1.0',CURLOPT_MAXREDIRS=>2]);
- $html=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);
- if(!is_string($html)||$http!==200||strlen($html)>1500000)return $old?array_merge($old,['status'=>'cached']):$empty;
- $dom=new DOMDocument();$prev=libxml_use_internal_errors(true);$loaded=$dom->loadHTML('<?xml encoding="utf-8"?>'.$html);libxml_clear_errors();libxml_use_internal_errors($prev);
- if(!$loaded)return $old?array_merge($old,['status'=>'cached']):$empty;
- $xp=new DOMXPath($dom);$pairs=[];
- foreach($xp->query('//tr') as $tr){$cells=[];foreach($tr->childNodes as $node)if($node instanceof DOMElement && in_array(strtolower($node->tagName),['td','th'],true)){$v=trim(preg_replace('/\s+/u',' ',$node->textContent));if($v!=='')$cells[]=$v;}
-  if(count($cells)>=2){$price=end($cells);if(preg_match('/^\s*([\d,]+(?:\.\d+)?)\s*$/',$price,$m)){$label=implode(' ',array_slice($cells,0,-1));$pairs[]=[$label,(float)str_replace(',','',$m[1])];}}
- }
- $patterns=['ny'=>'/^(?:NYC|NY|New York)$/i','london'=>'/^London$/i','hard_cherry'=>'/^H\s*\/\s*Arabica\s*\((?:Maganda|Dry Cherry)\)$/i','cpu'=>'/^Arabica\s*\(?CPU\)?$/i','hp'=>'/^Arabica\s*HP$/i','robusta_cherry'=>'/^Robusta\s*\((?:Maganda|Dry Cherry)\)$/i','auction_arabica'=>'/^Arabica\s*[-–]\s*Clean Coffee$/i','auction_robusta'=>'/^Robusta\s*[-–]\s*Clean Coffee$/i'];
- $prices=[];foreach($patterns as $key=>$regex){foreach($pairs as [$label,$value])if(preg_match($regex,$label)){$prices[$key]=$value;break;}}
- if(count($prices)!==8)return $old?array_merge($old,['status'=>'cached']):$empty;
- $text=trim(preg_replace('/\s+/u',' ',$dom->textContent));$published=null;
- if(preg_match('/\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*,?\s+(20\d{2})\b/i',$text,$m)){$dt=DateTimeImmutable::createFromFormat('!j M Y',$m[1].' '.ucfirst(strtolower($m[2])).' '.$m[3]);if($dt)$published=$dt->format('Y-m-d');}
- if(!$published)return $old?array_merge($old,['status'=>'cached']):$empty;
- $data=['prices'=>$prices,'published'=>$published,'status'=>'live','fetched_at'=>time()];@file_put_contents($cache,json_encode($data),LOCK_EX);return $data;
+  // Screenshot-verified TCB publication of 23 Oct 2026. Used only when no valid
+  // newer publication can be fetched; never describe these figures as live.
+  $baseline=['ny'=>6.9,'london'=>3.3,'hard_cherry'=>4500,'cpu'=>12000,
+    'hp'=>10500,'robusta_cherry'=>3800,'auction_arabica'=>7.0,'auction_robusta'=>3.4];
+  $fallback=['prices'=>$baseline,'published'=>'2026-10-23','status'=>'reference','fetched_at'=>0];
+  $cache=sys_get_temp_dir().'/tcb_average_market_prices_v2.json';
+  $old=null;
+  if(is_file($cache)){
+    $decoded=json_decode((string)@file_get_contents($cache),true);
+    if(is_array($decoded)&&isset($decoded['prices'])&&is_array($decoded['prices'])
+       && count(array_intersect_key($decoded['prices'],$baseline))===8
+       && !empty($decoded['published']))$old=$decoded;
+  }
+  if($old && time()-(int)($old['fetched_at']??0)<21600)return $old;
+  $previous=$old ?: $fallback;
+  if(!function_exists('curl_init') || !class_exists('DOMDocument')){
+    error_log('TCB market prices: PHP cURL or DOM extension missing');
+    return array_merge($previous,['status'=>$old?'cached':'reference']);
+  }
+  $ch=curl_init('https://www.coffee.go.tz/pages/average-market-price');
+  curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,
+    CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>20,CURLOPT_SSL_VERIFYPEER=>true,
+    CURLOPT_USERAGENT=>'Mozilla/5.0 (compatible; TCB-SalesDashboard/1.0)',CURLOPT_MAXREDIRS=>3]);
+  $html=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
+  $err=curl_error($ch);curl_close($ch);
+  if(!is_string($html)||$http!==200||strlen($html)>3000000){
+    error_log('TCB market prices: HTTP '.$http.' '.$err);
+    return array_merge($previous,['status'=>$old?'cached':'reference']);
+  }
+  $dom=new DOMDocument();$prev=libxml_use_internal_errors(true);
+  $loaded=$dom->loadHTML('<?xml encoding="utf-8"?>'.$html);
+  libxml_clear_errors();libxml_use_internal_errors($prev);
+  if(!$loaded)return array_merge($previous,['status'=>$old?'cached':'reference']);
+  $xp=new DOMXPath($dom);$pairs=[];
+  // The public page contains separate Terminal, Farm Gate and Auction sections.
+  // Extract the label/value from each row, irrespective of th/td markup.
+  foreach($xp->query('//tr') as $tr){
+    $cells=[];
+    foreach($tr->childNodes as $node){
+      if($node instanceof DOMElement && in_array(strtolower($node->tagName),['td','th'],true)){
+        $v=trim(preg_replace('/\s+/u',' ',str_replace("\xc2\xa0",' ',$node->textContent)));
+        if($v!=='')$cells[]=$v;
+      }
+    }
+    if(count($cells)<2)continue;
+    for($i=0;$i<count($cells)-1;$i++){
+      if(preg_match('/^\s*([\d,]+(?:\.\d+)?)\s*$/',$cells[$i+1],$m))
+        $pairs[]=[$cells[$i],(float)str_replace(',','',$m[1])];
+    }
+  }
+  // Also handle CMS pages that render label/value pairs using divs instead of rows.
+  if(count($pairs)<8){
+    $plain=trim(preg_replace('/\s+/u',' ',$dom->textContent));
+    $labels=['NYC','London','H/Arabica (Maganda)','Arabica (CPU)','Arabica HP',
+      'Robusta (Maganda)','Arabica-Clean Coffee','Robusta- Clean Coffee'];
+    foreach($labels as $label){
+      $quoted=preg_quote($label,'/');
+      if(preg_match('/'.$quoted.'\s*([\d,]+(?:\.\d+)?)/iu',$plain,$m))
+        $pairs[]=[$label,(float)str_replace(',','',$m[1])];
+    }
+  }
+  $patterns=[
+    'ny'=>'/^(?:NYC|NY|New York)$/i',
+    'london'=>'/^London$/i',
+    'hard_cherry'=>'/^H\s*\/\s*Arabica\s*\((?:Maganda|Dry Cherry)\)$/i',
+    'cpu'=>'/^Arabica\s*\(?CPU\)?$/i',
+    'hp'=>'/^Arabica\s*HP$/i',
+    'robusta_cherry'=>'/^Robusta\s*\((?:Maganda|Dry Cherry)\)$/i',
+    'auction_arabica'=>'/^Arabica\s*[-–]?\s*Clean\s+Coffee$/i',
+    'auction_robusta'=>'/^Robusta\s*[-–]?\s*Clean\s+Coffee$/i'];
+  $prices=[];
+  foreach($patterns as $key=>$regex){
+    foreach($pairs as [$label,$value]){
+      if(preg_match($regex,trim($label)) && $value>0){$prices[$key]=$value;break;}
+    }
+  }
+  if(count($prices)!==8){
+    error_log('TCB market prices: parsing failed; found '.implode(',',array_keys($prices)));
+    return array_merge($previous,['status'=>$old?'cached':'reference']);
+  }
+  $pageText=trim(preg_replace('/\s+/u',' ',$dom->textContent));$published=null;
+  if(preg_match('/\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*,?\s+(20\d{2})\b/i',$pageText,$m)){
+    $dt=DateTimeImmutable::createFromFormat('!j M Y',$m[1].' '.ucfirst(strtolower($m[2])).' '.$m[3]);
+    if($dt)$published=$dt->format('Y-m-d');
+  }
+  if(!$published){error_log('TCB market prices: publication date missing');return array_merge($previous,['status'=>$old?'cached':'reference']);}
+  // Never replace a newer verified publication with an older one.
+  if($published < $previous['published'])return array_merge($previous,['status'=>$old?'cached':'reference']);
+  $data=['prices'=>$prices,'published'=>$published,'status'=>'live','fetched_at'=>time()];
+  @file_put_contents($cache,json_encode($data),LOCK_EX);
+  return $data;
 }
 
 /* Certified Coffee: manual farmgate figures, independent for each Friday report. */
@@ -1912,7 +1980,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
    <tr><th scope="row">Clean Auction (USD/kg)</th><td>Arabica</td><td class="sales-num"><?= $marketPrice('auction_arabica',2) ?></td><td>Robusta</td><td class="sales-num"><?= $marketPrice('auction_robusta',2) ?></td></tr>
    </tbody>
   </table>
-  <div style="font-size:10px;text-align:right;margin:2px 0 6px;color:#645345">Source: Tanzania Coffee Board — Average Market Prices<?=!empty($tcbMarket['published'])?' · Published '.htmlspecialchars(date('d M Y',strtotime($tcbMarket['published']))):' · Source unavailable'?><?=($tcbMarket['status']??'')==='cached'?' (last verified cache)':''?>. Latest published prices, not necessarily prices for the selected reporting Friday.</div>
+  <div style="font-size:10px;text-align:right;margin:2px 0 6px;color:#645345">Source: Tanzania Coffee Board — Average Market Prices<?=!empty($tcbMarket['published'])?' · Published '.htmlspecialchars(date('d M Y',strtotime($tcbMarket['published']))):' · Source unavailable'?><?=($tcbMarket['status']??'')==='cached'?' (last verified cache)':(($tcbMarket['status']??'')==='reference'?' (23 Oct 2026 reference; live retrieval unavailable)':' (live website data)')?>. Latest available publication, not necessarily prices for the selected reporting Friday.</div>
   <table class="sales-table">
    <tr class="sales-band"><td colspan="5">Farmgate Market</td></tr>
    <tr><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
