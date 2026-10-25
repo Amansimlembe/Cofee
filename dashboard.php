@@ -3094,7 +3094,7 @@ menu.addEventListener('click',async e=>{
 #salesDashboardGuide .guide-body p{margin:3px 0 5px;break-inside:avoid}
 #salesDashboardGuide .guide-body .guide-entry{padding-left:10px;border-left:2px solid #d4b99d}
 #salesDashboardGuide .guide-body .guide-intro{font-weight:600;margin-bottom:8px}
-#salesDashboardGuide .guide-indicators{width:100%;table-layout:fixed;border-collapse:collapse;font-size:.96em;break-inside:avoid;column-span:all;margin-top:12px;margin-bottom:4px;line-height:1.4}
+#salesDashboardGuide .guide-indicators{width:100%;table-layout:fixed;border-collapse:collapse;font-size:1em;break-inside:avoid;column-span:all;margin-top:12px;margin-bottom:4px;line-height:1.4}
 #salesDashboardGuide .guide-indicators td,#salesDashboardGuide .guide-indicators th{border:1px solid #d9c8b5;padding:6px 8px;text-align:left;white-space:normal;overflow-wrap:break-word;word-break:normal;vertical-align:top}#salesDashboardGuide .guide-indicators th:first-child,#salesDashboardGuide .guide-indicators td:first-child{width:28%;font-weight:600}#salesDashboardGuide .guide-indicators th:nth-child(2),#salesDashboardGuide .guide-indicators td:nth-child(2){width:72%}
 #salesDashboardGuide .guide-indicators th{background:#e9d9c5}
 #salesDashboardGuide .guide-footer{position:absolute;bottom:0;left:0;right:0;background:#68462e;color:white;padding:1% 5%;text-align:center;font-size:11px;letter-spacing:.5px}
