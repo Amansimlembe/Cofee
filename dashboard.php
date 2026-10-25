@@ -2981,64 +2981,57 @@ async function excelWithImage(canvas){
  ct=ct.replace('</Types>','<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');zip.file('[Content_Types].xml',ct);
  save(await zip.generateAsync({type:'blob',compression:'DEFLATE'}),base()+'.xlsx');
 }
+/* Editable DOCX: native Word paragraphs and table cells, never a flattened screenshot. */
 async function wordEditable(){
  await library('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',()=>!!window.JSZip);
- update(55,'Building editable Word text and tables…');
- const zip=new JSZip();
- const x=s=>xmlEscape(s==null?'':String(s).replace(/\s+/g,' ').trim());
- const para=(value,opts={})=>{
-   const align=opts.align||'left',size=opts.size||18,bold=opts.bold?'1':'0';
-   return '<w:p><w:pPr><w:jc w:val="'+align+'"/><w:spacing w:before="0" w:after="'+(opts.after||60)+'"/></w:pPr><w:r><w:rPr><w:b w:val="'+bold+'"/><w:sz w:val="'+size+'"/><w:color w:val="'+(opts.color||'30251C')+'"/></w:rPr><w:t xml:space="preserve">'+x(value)+'</w:t></w:r></w:p>';
+ update(65,'Building editable Word tables and text…');
+ const zip=new JSZip(), declaration='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+ const esc=xmlEscape;
+ const run=(value,bold=false,color='382A20',size=18)=>'<w:r><w:rPr>'+(bold?'<w:b/>':'')+'<w:color w:val="'+color+'"/><w:sz w:val="'+size+'"/></w:rPr><w:t xml:space="preserve">'+esc(value)+'</w:t></w:r>';
+ const paragraph=(value,opts={})=>'<w:p><w:pPr><w:jc w:val="'+(opts.align||'left')+'"/><w:spacing w:after="'+(opts.after??65)+'"/></w:pPr>'+run(value,!!opts.bold,opts.color||'382A20',opts.size||18)+'</w:p>';
+ const shade=(hex)=>'<w:shd w:fill="'+hex+'"/>';
+ const table=element=>{
+  const rows=Array.from(element.querySelectorAll('tr'));
+  let output='<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="CBB9A7"/><w:left w:val="single" w:sz="4" w:color="CBB9A7"/><w:bottom w:val="single" w:sz="4" w:color="CBB9A7"/><w:right w:val="single" w:sz="4" w:color="CBB9A7"/><w:insideH w:val="single" w:sz="3" w:color="E0D5C9"/><w:insideV w:val="single" w:sz="3" w:color="E0D5C9"/></w:tblBorders><w:tblCellMar><w:top w:w="55" w:type="dxa"/><w:bottom w:w="55" w:type="dxa"/><w:left w:w="75" w:type="dxa"/><w:right w:w="75" w:type="dxa"/></w:tblCellMar></w:tblPr>';
+  rows.forEach(tr=>{
+   const band=tr.classList.contains('sales-band')||tr.classList.contains('market-reference-heading');
+   const head=tr.classList.contains('sales-column-heading')||tr.classList.contains('market-reference-columns');
+   const total=tr.classList.contains('sales-grand');
+   const fill=band?'61412C':head?'EADDD0':total?'E8D6C1':null;
+   output+='<w:tr>';
+   Array.from(tr.children).filter(c=>/^(TD|TH)$/.test(c.tagName)).forEach(cell=>{
+    const span=Math.max(1,parseInt(cell.getAttribute('colspan')||'1',10));
+    const isBold=band||head||total||cell.tagName==='TH'||!!cell.querySelector('b,strong');
+    const numeric=cell.classList.contains('sales-num');
+    const text=(cell.innerText||cell.textContent||'').replace(/\s+/g,' ').trim();
+    output+='<w:tc><w:tcPr>'+(span>1?'<w:gridSpan w:val="'+span+'"/>':'')+(fill?shade(fill):'')+'<w:vAlign w:val="center"/></w:tcPr>'+paragraph(text,{bold:isBold,color:band?'FFFFFF':'382A20',align:band||numeric||head?'center':'left',size:band?18:16,after:0})+'</w:tc>';
+   });
+   output+='</w:tr>';
+  });
+  return output+'</w:tbl>';
  };
- const widths=[2700,1750,1950,1750,1850];
- const tableXml=(t,meta=false)=>{
-  const rows=[...t.querySelectorAll('tr')];
-  let out='<w:tbl><w:tblPr><w:tblW w:w="10000" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="BFAE9A"/><w:left w:val="single" w:sz="4" w:color="BFAE9A"/><w:bottom w:val="single" w:sz="4" w:color="BFAE9A"/><w:right w:val="single" w:sz="4" w:color="BFAE9A"/><w:insideH w:val="single" w:sz="3" w:color="D9CEC0"/><w:insideV w:val="single" w:sz="3" w:color="D9CEC0"/></w:tblBorders></w:tblPr>';
-  out+='<w:tblGrid>'+ (meta?[2500,2500,2500,2500]:widths).map(w=>'<w:gridCol w:w="'+w+'"/>').join('')+'</w:tblGrid>';
-  for(const row of rows){
-   const isBand=row.classList.contains('sales-band'),isHead=row.classList.contains('sales-column-heading')||row.classList.contains('market-reference-columns'),isGrand=row.classList.contains('sales-grand'),isHeading=row.classList.contains('market-reference-heading');
-   const bg=(isBand||isHeading)?'C9824D':isHead?'E8D7C1':isGrand?'D9E6D7':null;
-   out+='<w:tr>';
-   for(const cell of row.children){if(!/^(TD|TH)$/.test(cell.tagName))continue;
-    const span=Math.max(1,Math.min(5,Number(cell.colSpan)||1));
-    const text=cell.innerText||cell.textContent||'';
-    const isBold=isBand||isHeading||isHead||isGrand||cell.tagName==='TH'||meta;
-    const centered=(!meta&&!isBand&&!isHeading)||isHead;
-    out+='<w:tc><w:tcPr><w:tcW w:w="'+(meta?2500:widths[0])+'" w:type="dxa"/>'+(span>1?'<w:gridSpan w:val="'+span+'"/>':'')+(bg?'<w:shd w:fill="'+bg+'"/>':'')+'<w:tcMar><w:top w:w="55" w:type="dxa"/><w:bottom w:w="55" w:type="dxa"/><w:left w:w="85" w:type="dxa"/><w:right w:w="85" w:type="dxa"/></w:tcMar></w:tcPr>';
-    out+=para(text,{bold:isBold,align:centered?'center':'left',size:meta?19:17,after:0,color:isBand||isHeading?'FFFFFF':'30251C'});
-    out+='</w:tc>';
-   }
-   out+='</w:tr>';
-  }
-  return out+'</w:tbl>';
- };
- let body='';
- body+=para('THE UNITED REPUBLIC OF TANZANIA',{bold:true,align:'center',size:21,after:20});
- body+=para('MINISTRY OF AGRICULTURE',{bold:true,align:'center',size:20,after:20});
- body+=para('TANZANIA COFFEE BOARD',{bold:true,align:'center',size:23,after:130});
- body+=para('SALES DASHBOARD',{bold:true,align:'center',size:32,color:'704327',after:170});
- const tables=[...paper.querySelectorAll('table')];
- tables.forEach((t,i)=>{body+=tableXml(t,i===0);body+=para('',{after:65});});
- // Text and numbers above are native Word runs and cells, never a flattened image.
- const xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
- zip.file('[Content_Types].xml',xml+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
- zip.file('_rels/.rels',xml+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
- zip.file('word/document.xml',xml+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+body+'<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="550" w:right="520" w:bottom="550" w:left="520"/></w:sectPr></w:body></w:document>');
- update(90,'Saving editable DOCX…');
+ let content=paragraph('THE UNITED REPUBLIC OF TANZANIA',{bold:true,align:'center',size:20,after:10})+paragraph('MINISTRY OF AGRICULTURE',{bold:true,align:'center',size:18,after:10})+paragraph('TANZANIA COFFEE BOARD',{bold:true,align:'center',size:20,after:90})+paragraph('SALES DASHBOARD',{bold:true,align:'center',size:28,after:160});
+ paper.querySelectorAll('.sales-ppt-body table').forEach(t=>{content+=table(t)+paragraph('',{after:80});});
+ content+=paragraph('www.coffee.go.tz   |   info@coffee.go.tz   |   +255 27 2752324',{align:'center',size:15,after:0});
+ const document=declaration+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+content+'<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="650" w:bottom="850" w:left="650"/></w:sectPr></w:body></w:document>';
+ zip.file('[Content_Types].xml',declaration+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+ zip.file('_rels/.rels',declaration+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+ zip.file('word/document.xml',document);
+ update(90,'Packaging editable Word document…');
  save(await zip.generateAsync({type:'blob',compression:'DEFLATE'}),base()+'.docx');
 }
 menu.addEventListener('click',async e=>{
  const type=e.target.closest('[data-type]')?.dataset.type;if(!type)return;
  e.stopPropagation();menu.hidden=true;button.disabled=true;const task=window.reportTask.start('Exporting Sales Dashboard','Preparing '+type.toUpperCase()+' export…');update(5,'Preparing dashboard export…');window.reportTask.update(5,'Preparing dashboard export…');
  try{
-  if(type==='doc'){await wordEditable();update(100,'Export completed');window.reportTask.end(task,false);return;}
+  if(type==='doc'){await wordEditable();update(100,'Editable Word export completed');window.reportTask.end(task,false);return;}
   const canvas=await snapshot();
   if(type==='png'||type==='jpg'){update(85,'Encoding image…');save(await canvasBlob(canvas,type==='png'?'image/png':'image/jpeg',.96),base()+'.'+type);}
   else if(type==='pdf'){
    await library('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
    update(85,'Composing PDF…');const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,210,297);pdf.save(base()+'.pdf');
   }else if(type==='xlsx')await excelWithImage(canvas);
-  else if(type==='doc')await wordEditable();
+
   update(100,'Export completed');window.reportTask.end(task,false);
  }catch(err){update(0,'Export failed');window.reportTask.end(task,true);alert('Dashboard export failed: '+err.message);console.error(err);}
  finally{button.disabled=false;setTimeout(()=>{if(progress)progress.hidden=true;},2200);}
