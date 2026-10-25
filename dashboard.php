@@ -1978,7 +1978,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
    <tr><th scope="row">Clean Auction (USD/kg)</th><td>Arabica</td><td class="sales-num"><?= $marketPrice('auction_arabica',2) ?></td><td>Robusta</td><td class="sales-num"><?= $marketPrice('auction_robusta',2) ?></td></tr>
    </tbody>
    <tr class="sales-band"><td colspan="5">Farmgate Market</td></tr>
-   <tr><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
+   <tr class="sales-column-heading"><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
    <?php foreach(['Dry Cherry','Clean Coffee'] as$ct):$r=$salesFarm[$ct];?><tr><td class="sales-label">&#8226; <?=htmlspecialchars($ct === 'Clean Coffee' ? 'Clean Coffee (Ungraded)' : $ct)?></td><td class="sales-num"><?=nf($r['weekkg']/1000,3)?></td><td class="sales-num"><?=nf($r['weekval'],2)?></td><td class="sales-num"><?=nf($r['seasonkg']/1000,3)?></td><td class="sales-num"><?=nf($r['seasonval'],2)?></td></tr><?php endforeach;?>
    <tr><td class="sales-label">2&nbsp; Certified Coffee</td><?php foreach(['week_mt','week_value_tzs','season_mt','season_value_tzs'] as $field):$val=$certifiedCoffee[$field];?><td class="sales-num certified-edit" data-field="<?=$field?>" data-value="<?=htmlspecialchars((string)$val,ENT_QUOTES)?>" title="Double-click to edit Certified Coffee" tabindex="0" role="button" aria-label="Edit Certified Coffee <?=htmlspecialchars(str_replace('_',' ',$field))?>"><?=$val?nf_clean($val,str_ends_with($field,'mt')?3:2):'—'?></td><?php endforeach;?></tr>
    <tr><td class="sales-label">3&nbsp; Parchments (CPU & HP)</td><?php foreach(['weekkg','weekval','seasonkg','seasonval'] as $field): $v=$salesParchment[$field]; ?><td class="sales-num"><?=$v?nf(str_ends_with($field,'kg')?$v/1000:$v,str_ends_with($field,'kg')?3:2):'—'?></td><?php endforeach; ?></tr>
@@ -1986,7 +1986,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
    <tr class="sales-grand" id="farmgateGrandTotal"><td>Grand Total</td><td class="sales-num"><?=nf_clean($farmWeekKg/1000,3)?></td><td class="sales-num"><?=nf_clean($farmWeekVal,2)?></td><td class="sales-num"><?=nf_clean($farmSeasonKg/1000,3)?></td><td class="sales-num"><?=nf_clean($farmSeasonVal,2)?></td></tr>
    <tr class="sales-band"><td colspan="5">Clean Coffee Market</td></tr>
    <?php foreach($channels as$ci=>$ch): ?>
-   <tr><th><?=$ci+1?>&nbsp; <?=htmlspecialchars($ch)?></th><th>This Week (MT)</th><th>Value ($)</th><th>Season Total (MT)</th><th>Total Value ($)</th></tr>
+   <tr class="sales-column-heading"><th><?=$ci+1?>&nbsp; <?=htmlspecialchars($ch)?></th><th>This Week (MT)</th><th>Value ($)</th><th>Season Total (MT)</th><th>Total Value ($)</th></tr>
    <?php foreach($coffeeTypes as$ct):$r=$salesClean[$ch][$ct];?><tr><td class="sales-label"><?=htmlspecialchars($ct)?></td><td class="sales-num"><?=$r['weekkg']?nf($r['weekkg']/1000,2):'—'?></td><td class="sales-num"><?=$r['weekval']?nf($r['weekval'],2):'—'?></td><td class="sales-num"><?=$r['seasonkg']?nf($r['seasonkg']/1000,2):'—'?></td><td class="sales-num"><?=$r['seasonval']?nf($r['seasonval'],2):'—'?></td></tr><?php endforeach;?>
    <?php endforeach;?>
    <tr class="sales-grand"><td>Grand Total </td><td class="sales-num"><?=nf($salesGrandWeekKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandWeekVal,2)?></td><td class="sales-num"><?=nf($salesGrandKg/1000,2)?></td><td class="sales-num"><?=nf($salesGrandVal,2)?></td></tr>
@@ -2176,7 +2176,14 @@ foreach($tcVisibleGrades as $grade):
      body+='<tr>'+(continuation.has(i)?'':td(r[0],starts.has(i)?'rowspan="'+starts.get(i)+'"':'','font-weight:bold;'))+
        td(r[1])+td(r[2],'','text-align:right;')+td(r[3],'','text-align:right;')+'</tr>';
    }
-   const html='<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#222}table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:10pt}tr{page-break-inside:avoid}th,td{border:1px solid #444}</style></head><body><h3>TANZANIA COFFEE BOARD</h3><h3>'+escapeHtml(heading)+'</h3><p>Sale Season: '+escapeHtml(season)+'</p><table border="1" cellspacing="0" cellpadding="0">'+header+body+'</table></body></html>';
+   const html='<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#222}table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:10pt}tr{page-break-inside:avoid}th,td{border:1px solid #444}</style></head><body><h3>TANZANIA COFFEE BOARD</h3><h3>'+escapeHtml(heading)+'</h3><p>Sale Season: '+escapeHtml(season)+'</p><table border="1" cellspacing="0" cellpadding="0">'+header+body+'</table><style id="sales-dashboard-bold-column-headings">
+/* Bold only the requested column-heading rows, including PDF/image export clones. */
+#salesDashboardDocument .sales-table tr.market-reference-columns > th,
+#salesDashboardDocument .sales-table tr.sales-column-heading > th {
+  font-weight:800!important;
+}
+</style>
+</body></html>';
    const blob=new Blob(['\ufeff',html],{type:'application/msword;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=base+'.doc';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
  }
  menu.addEventListener('click',e=>{const format=e.target.closest('[data-format]')?.dataset.format;if(!format)return;e.stopPropagation();menu.classList.remove('show');btn.setAttribute('aria-expanded','false');if(format==='xlsx')excel();else if(format==='pdf')pdf();else if(format==='doc')word();});
@@ -3104,5 +3111,24 @@ window.reportTask=(function(){
  document.querySelectorAll('body.report-sticky-mode form.season select').forEach(select=>select.addEventListener('change',()=>{if(select.form){window.reportTask.start('Loading report','Updating the selected report…');window.reportTask.update(18,'Retrieving report data…');}}));
 })();
 </script>
+
+<style id="sales-dashboard-centered-columns">
+/* Center the five-column market and sales tables in preview and export clones. */
+#salesDashboardDocument .sales-table tr.market-reference-columns > th,
+#salesDashboardDocument .sales-table tr.sales-column-heading > th {
+  font-weight:800!important;
+  text-align:center!important;
+  vertical-align:middle!important;
+}
+#salesDashboardDocument .sales-table tr:not(.sales-band):not(.sales-section) > td,
+#salesDashboardDocument .sales-table tr:not(.sales-band):not(.sales-section) > th {
+  text-align:center!important;
+  vertical-align:middle!important;
+}
+#salesDashboardDocument .sales-table tr:not(.sales-band):not(.sales-section) > td.sales-label,
+#salesDashboardDocument .sales-table tr:not(.sales-band):not(.sales-section) > td.sales-num {
+  text-align:center!important;
+}
+</style>
 </body>
 </html>
