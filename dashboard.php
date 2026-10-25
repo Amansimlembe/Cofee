@@ -3086,7 +3086,7 @@ const targets=[document.getElementById('salesDashboardDocument'),document.getEle
 const entries=[];
 for(const root of targets){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode()){if(!node.nodeValue.trim()||node.parentElement?.closest('script,style'))continue;entries.push([node,node.nodeValue]);}}
 const english=document.getElementById('salesLangEnglish'),swahili=document.getElementById('salesLangSwahili');if(!english||!swahili)return;
-const translate=(value)=>{const trimmed=value.trim();let out=dict[trimmed];if(!out){const match=trimmed.match(/^(\d+)\s+(.+)$/);if(match&&dict[match[2]])out=match[1]+' '+dict[match[2]];}
+const translate=(value)=>{const trimmed=value.trim();let out=dict[trimmed];if(!out){const bullet=trimmed.match(/^([•\u2022]\s*)(.+)$/);if(bullet&&dict[bullet[2]])out=bullet[1]+dict[bullet[2]];}if(!out){const match=trimmed.match(/^(\d+)\s+(.+)$/);if(match&&dict[match[2]])out=match[1]+' '+dict[match[2]];}
 if(!out&&trimmed.startsWith('Sales Season '))out='Msimu wa Mauzo '+trimmed.slice(13).replace(' · Reporting Friday ',' · Ijumaa ya Taarifa ');
 if(!out&&trimmed.startsWith('· Reporting Friday '))out='· Ijumaa ya Taarifa '+trimmed.slice('· Reporting Friday '.length);
 return out?value.replace(trimmed,out):value;};
