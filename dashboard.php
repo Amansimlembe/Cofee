@@ -1999,7 +1999,7 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
  </div>
 </section>
 <?php elseif($display==='sales'): ?>
-<div class="sales-actions" data-html2canvas-ignore="true"><div class="sales-export-control pre-export-wrap"><button type="button" id="salesExportButton" class="pre-export-btn" aria-haspopup="true" aria-expanded="false">⇩ Export Dashboard</button><div id="salesExportOptions" class="pre-export-menu" hidden><button type="button" data-type="pdf">PDF</button><button type="button" data-type="xlsx">Excel</button><button type="button" data-type="doc">Word</button><button type="button" data-type="png">PNG Image</button><button type="button" data-type="jpg">JPEG Image</button></div></div></div>
+<div class="sales-actions" data-html2canvas-ignore="true"><button type="button" id="salesGuideToggle" class="pre-export-btn" aria-controls="salesDashboardGuide" aria-expanded="false">Show Guide</button><div class="sales-export-control pre-export-wrap"><button type="button" id="salesExportButton" class="pre-export-btn" aria-haspopup="true" aria-expanded="false">⇩ Export Dashboard</button><div id="salesExportOptions" class="pre-export-menu" hidden><button type="button" data-type="pdf">PDF</button><button type="button" data-type="xlsx">Excel</button><button type="button" data-type="doc">Word</button><button type="button" data-type="png">PNG Image</button><button type="button" data-type="jpg">JPEG Image</button></div></div></div>
 <div id="salesProgress" class="sales-progress" role="status" aria-live="polite" hidden><span class="sales-spinner"></span><span id="salesProgressText">Preparing…</span><div class="sales-progress-track"><div id="salesProgressFill"></div></div><strong id="salesProgressPercent">0%</strong></div>
 <section class="sales-ppt" id="salesDashboardDocument">
  <div class="sales-ppt-header"><div class="gov-title">THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div></div>
@@ -2036,6 +2036,54 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
   </table>
  </div>
  <div class="sales-ppt-footer"><span class="contact web">www.coffee.go.tz</span><span class="contact email">info@coffee.go.tz</span><span class="contact phone">+255 27 2752324</span><span class="contact social">coffeeboardtz</span></div>
+</section>
+<section id="salesDashboardGuide" class="sales-guide-page" hidden aria-label="Guide to Understanding the Coffee Sales Dashboard">
+ <div class="guide-heading"><div class="guide-org">THE UNITED REPUBLIC OF TANZANIA · TANZANIA COFFEE BOARD</div><h2>GUIDE TO UNDERSTANDING THE COFFEE SALES DASHBOARD</h2><div class="guide-report-meta">Sales Season <?=htmlspecialchars($season)?> · Reporting Friday <?=date('d M Y',strtotime($salesReportDate))?></div></div>
+ <div class="guide-body"><p class="guide-intro">The Tanzania Coffee Board Sales Dashboard summarizes the quantity, average reference prices and value of coffee sold through different marketing channels, showing weekly and seasonal sales performance.</p>
+<h3>1. Reporting Period</h3>
+<p class="guide-entry">Sales Season (FY – Financial Year): Runs from 1 July to 30 June of the following year.</p>
+<p class="guide-entry">End Date (Reporting Date): The selected Friday on which the sales report ends.</p>
+<p class="guide-entry">This Week: Sales recorded from Monday to Friday of the reporting week.</p>
+<p class="guide-entry">Season Total: Cumulative sales recorded from 1 July to the selected reporting Friday.</p>
+<h3>2. Market Reference Prices</h3>
+<p>These are reference prices for the selected reporting Friday date:</p>
+<p class="guide-entry">Terminal (USD/kg): World coffee reference prices for Arabica (New York market) and Robusta (London market).</p>
+<p class="guide-entry">Farmgate (TZS/kg): Reference prices per kilogram for Hard Arabica Dry Cherry, Robusta Dry Cherry, Arabica CPU, and Arabica HP.</p>
+<p class="guide-entry">Clean Auction (USD/kg): Reference prices per kilogram for graded Arabica and Robusta coffee sold through the clean coffee auction.</p>
+<h3>3. Farmgate Market</h3>
+<p>This covers coffee traded at the primary marketing stage through three categories:</p>
+<p class="guide-entry">Kagera Auction: Coffee sold through the Kagera Coffee Auction, including Dry Coffee Cherries (naturally dried coffee) and Clean Coffee (home-hulled, ungraded coffee).</p>
+<p class="guide-entry">Certified Coffee: Coffee produced and marketed under recognized certification standards.</p>
+<p class="guide-entry">Parchment Coffee: Pulped and dried coffee retaining its parchment layer, sold through registered Farmgate Contracts (Mikataba ya Kahawa Ghafi).</p>
+<h3>4. Clean Coffee Market</h3>
+<p>These covers processed and graded coffee traded through four marketing channels:</p>
+<p class="guide-entry">Clean Auction: Graded clean coffee sold through a competitive auction system to licensed green coffee exporters and local coffee roasters. The purchased coffee is subsequently exported or roasted locally.</p>
+<p class="guide-entry">Direct Export: Coffee sold directly to international buyers as a final sales channel.</p>
+<p class="guide-entry">Local Roast: Coffee sold to local roasting businesses as a final sales channel.</p>
+<p class="guide-entry">Local Sale: An intermediate sales channel for graded clean coffee traded between local buyers before reaching final markets, such as Direct Export or Local Roast. The dashboard reports the remaining Local Sale balance after deducting quantities subsequently sold through Direct Export or Local Roast.</p>
+<h3>4. Types of Coffee</h3>
+<h4>Arabica</h4>
+<p class="guide-entry">Mild Arabica (M-Arabica): Arabica coffee processed using the wet method, where harvested ripe cherries are pulped before drying.</p>
+<p class="guide-entry">Hard Arabica (H-Arabica): Arabica coffee processed using the natural method, where whole ripe cherries are dried into dry cherries before hulling.</p>
+<p class="guide-entry">Robusta: Robusta coffee, which in Tanzania is predominantly processed naturally by drying whole ripe cherries before hulling.</p>
+<h3>6. Understanding the Sales Figures</h3>
+<p><strong>MT (Metric Tonne): 1 MT = 1,000 kilograms.</strong></p>
+<h3>Important Notes</h3>
+<p class="guide-entry">Farmgate and clean coffee figures represent different processing and marketing stages and should not be added together to avoid double counting.</p>
+<p class="guide-entry">Local Sale is an intermediate channel; its remaining balance is reported to avoid counting coffee again after Direct Export.</p>
+<p class="guide-entry">Farmgate sales values are reported in TZS, while clean coffee sales values are reported in USD.</p>
+<p class="guide-entry">Market reference prices indicate prevailing price levels and may differ from actual transaction prices.</p>
+<p class="guide-entry">Percentage Achieved measures clean coffee sales against estimated production, not the proportion of coffee harvested.</p>
+<table class="guide-indicators"><thead><tr><th>Indicator</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>This Week (MT)</td><td>Quantity sold during the reporting week (Monday–Friday).</td></tr>
+<tr><td>Value (TZS/USD)</td><td>Monetary value of coffee sold during the reporting week.</td></tr>
+<tr><td>Season Total (MT)</td><td>Cumulative quantity sold from 1 July to the reporting Friday.</td></tr>
+<tr><td>Total Value (TZS/USD)</td><td>Cumulative sales value from 1 July to the reporting Friday.</td></tr>
+<tr><td>Grand Total</td><td>Combined clean coffee sales across all channels, including the remaining Local Sale balance.</td></tr>
+<tr><td>Estimated Production (MT)</td><td>Expected national clean coffee production for the season.</td></tr>
+<tr><td>Percentage Achieved</td><td>Total clean coffee sold as a percentage of estimated national production.</td></tr>
+</tbody></table></div>
+ <div class="guide-footer">TANZANIA COFFEE BOARD · www.coffee.go.tz</div>
 </section>
 <?php endif; ?>
 
@@ -2889,6 +2937,9 @@ document.addEventListener('DOMContentLoaded',()=>preApplyTableAlignment(document
 (function(){
 const paper=document.getElementById('salesDashboardDocument');if(!paper)return;
 const body=paper.querySelector('.sales-ppt-body');
+const guide=document.getElementById('salesDashboardGuide'),guideToggle=document.getElementById('salesGuideToggle');
+if(guide&&guideToggle){guideToggle.addEventListener('click',()=>{const show=guide.hidden;guide.hidden=!show;guideToggle.textContent=show?'Hide Guide':'Show Guide';guideToggle.setAttribute('aria-expanded',String(show));});}
+
 /* The poster background is embedded in the CSS. Decode it before showing data.
    This also guards against a damaged/missing background after deployment. */
 let backgroundReadyResolve;
@@ -2954,6 +3005,14 @@ async function snapshot(){
   }
  });
  if(canvas.width<2000||canvas.height<3000)throw new Error('Export image dimensions are unexpectedly small');
+ if(guide&&!guide.hidden){
+  update(53,'Rendering dashboard guide…');
+  const guideCanvas=await html2canvas(guide,{scale:2.5,useCORS:true,backgroundColor:'#ffffff',logging:false,width:1023,height:1447,windowWidth:1200,windowHeight:1600,scrollX:0,scrollY:0,
+   onclone:doc=>{const g=doc.getElementById('salesDashboardGuide');doc.body.appendChild(g);g.hidden=false;g.style.setProperty('position','absolute','important');g.style.setProperty('top','0','important');g.style.setProperty('left','0','important');g.style.setProperty('width','1023px','important');g.style.setProperty('max-width','1023px','important');g.style.setProperty('height','1447px','important');g.style.setProperty('aspect-ratio','auto','important');g.style.setProperty('margin','0','important');g.style.setProperty('box-shadow','none','important');}});
+  const combined=document.createElement('canvas');combined.width=canvas.width;combined.height=canvas.height+guideCanvas.height;
+  const ctx=combined.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,combined.width,combined.height);ctx.drawImage(canvas,0,0);ctx.drawImage(guideCanvas,0,canvas.height);
+  return combined;
+ }
  return canvas;
 }
 function canvasBlob(canvas,type,quality){return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Image encoding failed')),type,quality));}
@@ -2965,7 +3024,7 @@ async function excelWithImage(canvas){
  const wb=XLSX.utils.book_new();
  const ws=XLSX.utils.aoa_to_sheet([['TANZANIA COFFEE BOARD — SALES DASHBOARD'],['Dashboard image is embedded below. Editable source tables are in the following sheets.']]);
  ws['!cols']=[{wch:100}];XLSX.utils.book_append_sheet(wb,ws,'Dashboard');
- paper.querySelectorAll('table').forEach((t,i)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.table_to_sheet(t,{raw:true}),'Data '+(i+1)));
+ paper.querySelectorAll('table').forEach((t,i)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.table_to_sheet(t,{raw:true}),'Data '+(i+1)));if(guide&&!guide.hidden){const guideRows=[['GUIDE TO UNDERSTANDING THE COFFEE SALES DASHBOARD']];guide.querySelectorAll('h3,h4,p').forEach(el=>guideRows.push([el.textContent.trim()]));const gws=XLSX.utils.aoa_to_sheet(guideRows);gws['!cols']=[{wch:110}];XLSX.utils.book_append_sheet(wb,gws,'Guide');}
  const bytes=XLSX.write(wb,{bookType:'xlsx',type:'array'});
  const zip=await JSZip.loadAsync(bytes);
  const image=await canvasBlob(canvas,'image/png');zip.file('xl/media/dashboard.png',image);
@@ -2973,7 +3032,7 @@ async function excelWithImage(canvas){
  sheetXml=sheetXml.replace('</worksheet>','<drawing r:id="rIdDashboard" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></worksheet>');zip.file(sheet,sheetXml);
  const relPath='xl/worksheets/_rels/sheet1.xml.rels';let rel=zip.file(relPath)?await zip.file(relPath).async('string'):'<'+'?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
  rel=rel.replace('</Relationships>','<Relationship Id="rIdDashboard" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>');zip.file(relPath,rel);
- const cx=1023*9525,cy=1447*9525;
+ const cx=1023*9525,cy=Math.round(1023*canvas.height/canvas.width)*9525;
  zip.file('xl/drawings/drawing1.xml','<'+'?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>3</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="'+cx+'" cy="'+cy+'"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="1" name="Sales Dashboard"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdImage1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>');
  zip.file('xl/drawings/_rels/drawing1.xml.rels','<'+'?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/dashboard.png"/></Relationships>');
  let ct=await zip.file('[Content_Types].xml').async('string');
@@ -2984,17 +3043,27 @@ async function excelWithImage(canvas){
 async function wordWithImage(canvas){
  await library('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',()=>!!window.JSZip);
  update(75,'Creating a genuine Word DOCX document…');
- const png=await canvasBlob(canvas,'image/png');
+ const hasGuide=canvas.height>canvas.width*1.7;
+ const pageHeight=hasGuide?Math.round(canvas.height/2):canvas.height;
+ const first=document.createElement('canvas');first.width=canvas.width;first.height=pageHeight;first.getContext('2d').drawImage(canvas,0,0,canvas.width,pageHeight,0,0,canvas.width,pageHeight);
+ const png=await canvasBlob(first,'image/png');
+ let secondPng=null;if(hasGuide){const second=document.createElement('canvas');second.width=canvas.width;second.height=pageHeight;second.getContext('2d').drawImage(canvas,0,pageHeight,canvas.width,pageHeight,0,0,canvas.width,pageHeight);secondPng=await canvasBlob(second,'image/png');}
  const zip=new JSZip();
  const cx=5486400,cy=Math.round(cx*1447/1023);
  const xml='<'+'?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
  zip.file('[Content_Types].xml',xml+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
  zip.file('_rels/.rels',xml+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
  zip.file('word/_rels/document.xml.rels',xml+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/dashboard.png"/></Relationships>');
- zip.file('word/media/dashboard.png',png);
+ zip.file('word/media/dashboard.png',png);if(secondPng)zip.file('word/media/guide.png',secondPng);
  const drawing='<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="'+cx+'" cy="'+cy+'"/><wp:docPr id="1" name="Tanzania Coffee Board Sales Dashboard"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="Dashboard"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdImage1"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>';
  const document=xml+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr><w:r>'+drawing+'</w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="180" w:right="180" w:bottom="180" w:left="180" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>';
- zip.file('word/document.xml',document);
+ if(secondPng){
+  const secondDrawing=drawing.replace(/rIdImage1/g,'rIdImage2').replace('id="1" name="Tanzania Coffee Board Sales Dashboard"','id="2" name="Coffee Sales Dashboard Guide"');
+  const pageBreak='<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+  const secondParagraph='<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r>'+secondDrawing+'</w:r></w:p>';
+  const updated=document.replace('</w:body>',pageBreak+secondParagraph+'</w:body>');zip.file('word/document.xml',updated);
+  const relName='word/_rels/document.xml.rels';const rel=await zip.file(relName).async('string');zip.file(relName,rel.replace('</Relationships>','<Relationship Id="rIdImage2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/guide.png"/></Relationships>'));
+ }else zip.file('word/document.xml',document);
  save(await zip.generateAsync({type:'blob',compression:'DEFLATE'}),base()+'.docx');
 }
 menu.addEventListener('click',async e=>{
@@ -3005,7 +3074,7 @@ menu.addEventListener('click',async e=>{
   if(type==='png'||type==='jpg'){update(85,'Encoding image…');save(await canvasBlob(canvas,type==='png'?'image/png':'image/jpeg',.96),base()+'.'+type);}
   else if(type==='pdf'){
    await library('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>!!window.jspdf?.jsPDF);
-   update(85,'Composing PDF…');const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,210,297);pdf.save(base()+'.pdf');
+   update(85,'Composing PDF…');const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});const pageCount=Math.max(1,Math.round(canvas.height/(canvas.width*1447/1023)));for(let i=0;i<pageCount;i++){if(i)pdf.addPage();const part=document.createElement('canvas');part.width=canvas.width;part.height=Math.round(canvas.height/pageCount);part.getContext('2d').drawImage(canvas,0,i*part.height,canvas.width,part.height,0,0,part.width,part.height);pdf.addImage(part.toDataURL('image/png'),'PNG',0,0,210,297);}pdf.save(base()+'.pdf');
   }else if(type==='xlsx')await excelWithImage(canvas);
   else if(type==='doc')await wordWithImage(canvas);
   update(100,'Export completed');window.reportTask.end(task,false);
@@ -3015,6 +3084,29 @@ menu.addEventListener('click',async e=>{
 })();
 </script>
 
+
+<style id="sales-guide-style">
+.sales-actions{display:flex!important;align-items:center;gap:10px;flex-wrap:wrap}
+#salesGuideToggle{white-space:nowrap}
+#salesDashboardGuide[hidden]{display:none!important}
+#salesDashboardGuide.sales-guide-page{position:relative;box-sizing:border-box;width:100%;max-width:1023px;aspect-ratio:1023/1447;min-height:0;margin:18px auto 26px;background:#fffdf9;color:#392b21;border:1px solid #b68a63;box-shadow:0 3px 14px #4a2d191f;overflow:hidden;font-family:Arial,sans-serif}
+#salesDashboardGuide .guide-heading{background:#f3e9da;border-bottom:5px solid #89522e;padding:3.5% 5% 2%;text-align:center}
+#salesDashboardGuide .guide-org{font-size:clamp(9px,1.2vw,13px);font-weight:700;letter-spacing:.5px;color:#754423}
+#salesDashboardGuide h2{font-size:clamp(16px,2.05vw,23px);margin:13px 0 9px;color:#603a23}
+#salesDashboardGuide .guide-report-meta{font-size:clamp(9px,1.2vw,13px);color:#6b503b}
+#salesDashboardGuide .guide-body{padding:2.1% 5%;columns:2;column-gap:30px;font-size:clamp(8px,1.15vw,12px);line-height:1.36}
+#salesDashboardGuide .guide-body h3{break-after:avoid;break-inside:avoid;column-break-after:avoid;margin:10px 0 4px;color:#754423;font-size:1.1em;border-bottom:1px solid #e3d4c2;padding-bottom:3px}
+#salesDashboardGuide .guide-body h4{break-after:avoid;margin:6px 0 3px;font-size:1em;color:#603a23}
+#salesDashboardGuide .guide-body p{margin:3px 0 5px;break-inside:avoid}
+#salesDashboardGuide .guide-body .guide-entry{padding-left:10px;border-left:2px solid #d4b99d}
+#salesDashboardGuide .guide-body .guide-intro{font-weight:600;margin-bottom:8px}
+#salesDashboardGuide .guide-indicators{width:100%;border-collapse:collapse;font-size:.93em;break-inside:avoid}
+#salesDashboardGuide .guide-indicators td,#salesDashboardGuide .guide-indicators th{border:1px solid #d9c8b5;padding:4px;text-align:left}
+#salesDashboardGuide .guide-indicators th{background:#e9d9c5}
+#salesDashboardGuide .guide-footer{position:absolute;bottom:0;left:0;right:0;background:#68462e;color:white;padding:1.1% 5%;text-align:center;font-size:11px;letter-spacing:.5px}
+@media(max-width:650px){#salesDashboardGuide .guide-body{column-gap:12px;font-size:clamp(6px,1.5vw,10px)}#salesDashboardGuide h2{font-size:clamp(11px,2.3vw,17px)}}
+@media print{#salesDashboardGuide:not([hidden]){page-break-before:always;break-before:page;box-shadow:none!important}}
+</style>
 <style id="market-reference-prices-style">
 #salesDashboardDocument .market-reference-prices{table-layout:fixed;width:100%;}
 #salesDashboardDocument .market-reference-prices tr.market-reference-heading th{background:#61412c;color:#fff;text-align:center;font-weight:700;}
