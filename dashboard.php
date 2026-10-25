@@ -2037,14 +2037,7 @@ $wzDateLabel=date('jS F Y',strtotime($reportDate));
 <article class="wizara-report">
 <h1>COFFEE SALES OVERVIEW SEASON ENDING <?=htmlspecialchars($wzDateLabel)?></h1>
 <h2>1. Market Situation as of <?=htmlspecialchars($wzDateLabel)?></h2>
-<?php
-$wzMarket=$coffeeMarketOnline['today']??null;
-$wzPrevious=$coffeeMarketOnline['previous']??null;
-?>
-<?php if($wzMarket && (float)($wzMarket['cents_lb']??0)>0): ?>
-<p>The New York Arabica Coffee Futures reference price is <strong><?=$wzNumber($wzMarket['cents_lb'],2)?> US cents per pound</strong>, equivalent to <strong>USD <?=$wzNumber(coffee_usd_per_50kg((float)$wzMarket['cents_lb']),2)?> per 50 kg</strong> (market observation: <?=htmlspecialchars((string)($wzMarket['date']??'not specified'))?>).
-<?php if($wzPrevious && isset($wzPrevious['cents_lb'])): ?> The previous comparable observation was <strong><?=$wzNumber($wzPrevious['cents_lb'],2)?> US cents per pound</strong>.<?php endif; ?></p>
-<?php else: ?><p>Verified terminal-market closing prices are unavailable for this reporting period. Market figures will be shown when a validated reference is available.</p><?php endif; ?>
+<p>Today’s closing price for New York Arabica Coffee Futures is <strong>________ US cents per pound</strong>, equivalent to <strong>USD ________ per 50 Kgs</strong>. This indicates an increase in the terminal market of <strong>________ US cents per pound</strong>, equivalent to <strong>USD ________ per 50 Kgs</strong>, compared with last auction terminal market price recorded on <strong>________</strong>, when the price was <strong>________ US cents per pound</strong>, equivalent to <strong>USD ________ per 50 Kgs</strong>.</p>
 <h2>A. Auction Results No. <?=htmlspecialchars((string)$wzClean['number'])?>, Held on: <?=!empty($wzClean['date'])?date('j F Y',strtotime($wzClean['date'])):'—'?>, Ex-Warehouse</h2>
 <div class="wz-table-scroll"><table><thead><tr><th>Grade</th><th>Kgs Offered</th><th>Kgs Sold</th><th>Low USD/50kg</th><th>Average USD/50kg</th><th>High USD/50kg</th><th>Prev. Average Price USD/50kg</th></tr></thead><tbody>
 <?php $wzOff=0;$wzSold=0;$wzWeighted=0;$wzLow=null;$wzHigh=null;foreach($wzCleanGrades as $grade):$r=$wzClean['rows'][$grade]??[];$o=(float)($r['offered']??0);$kg=(float)($r['sold']??0);$wzOff+=$o;$wzSold+=$kg;$wzWeighted+=$kg*(float)($r['av']??0);if($kg>0){$wzLow=$wzLow===null?(float)$r['lo']:min($wzLow,(float)$r['lo']);$wzHigh=$wzHigh===null?(float)$r['hi']:max($wzHigh,(float)$r['hi']);} ?>
@@ -2061,7 +2054,7 @@ $wzPrevious=$coffeeMarketOnline['previous']??null;
 <tr class="wz-total"><td>Grand Total</td><?php foreach($wzChannels as $ch):$kg=0;$val=0;foreach($wzTypes as $type){$kg+=$wzSales[$type][$ch]['kg'];$val+=$wzSales[$type][$ch]['val'];}?><td><?=$wzNumber($kg,0)?></td><td><?=$wzNumber($val,2)?></td><td><?=$kg>0?$wzNumber($val*50/$kg,2):'—'?></td><?php endforeach;?><td><?=$wzNumber($wzTotalKg,0)?></td><td><?=$wzNumber($wzTotalVal,2)?></td><td><?=$wzTotalKg>0?'100.00':'—'?></td></tr>
 <tr><td>Channel Share (%)</td><?php foreach($wzChannels as $ch):$kg=0;foreach($wzTypes as $type)$kg+=$wzSales[$type][$ch]['kg'];?><td><?=$wzTotalKg>0?$wzNumber($kg*100/$wzTotalKg,2):'—'?></td><td colspan="2">—</td><?php endforeach;?><td colspan="3">—</td></tr>
 </tbody></table></div>
-<p class="wz-subnote">Sales totals reflect the dashboard's existing channel rules, including the net Local Sale balance. The example Word document is used as a layout reference, not as a source of live figures.</p>
+
 </article>
 
  <?php else: ?>
