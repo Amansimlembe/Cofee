@@ -2983,46 +2983,40 @@ async function excelWithImage(canvas){
 }
 async function wordWithImage(canvas){
  await library('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',()=>!!window.JSZip);
- update(75,'Creating a genuine Word DOCX document…');
+ update(75,'Creating editable Word dashboard…');
+ const zip=new JSZip(), xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+ const esc=v=>xmlEscape(String(v??'').replace(/\s+/g,' ').trim());
+ const p=(value,bold=false,size=18)=>'<w:p><w:pPr><w:spacing w:before="80" w:after="80"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="'+size+'"/>'+(bold?'<w:b/><w:color w:val="543C2B"/>':'')+'</w:rPr><w:t xml:space="preserve">'+esc(value)+'</w:t></w:r></w:p>';
+ const tc=(value,header=false,span=1)=>'<w:tc><w:tcPr>'+(span>1?'<w:gridSpan w:val="'+span+'"/>':'')+'<w:shd w:fill="'+(header?'543C2B':'FFFFFF')+'"/><w:tcBorders><w:bottom w:val="single" w:sz="5" w:color="D1C1B1"/><w:right w:val="single" w:sz="5" w:color="D1C1B1"/></w:tcBorders><w:tcMar><w:top w:w="85" w:type="dxa"/><w:bottom w:w="85" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="16"/>'+(header?'<w:b/><w:color w:val="FFFFFF"/>':'')+'</w:rPr><w:t xml:space="preserve">'+esc(value)+'</w:t></w:r></w:p></w:tc>';
+ const nativeTable=table=>{
+  let rows='';
+  for(const tr of table.querySelectorAll('tr')){
+   const cells=[...tr.children].filter(x=>x.matches('th,td'));
+   if(!cells.length)continue;
+   const heading=cells.every(x=>x.tagName==='TH')||tr.classList.contains('sales-band');
+   rows+='<w:tr>'+cells.map(x=>tc(x.innerText,heading||x.tagName==='TH',Math.max(1,Number(x.getAttribute('colspan')||1)))).join('')+'</w:tr>';
+  }
+  return '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblLayout w:type="autofit"/><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr>'+rows+'</w:tbl>';
+ };
+ // Word content must be the real document, not a screenshot covering page one.
+ const tables=[...paper.querySelectorAll('table')].filter(t=>t.getClientRects().length);
+ const headers=[...paper.querySelectorAll('h1,h2,h3')].filter(x=>x.getClientRects().length).map(x=>x.innerText.trim()).filter(Boolean);
+ let body=p('TANZANIA COFFEE BOARD',true,30)+p('SALES DASHBOARD',true,26)
+  +p('Sales Season: '+<?=json_encode($season)?>+'     Reporting Friday: '+<?=json_encode($salesReportDate)?>,true,18);
+ for(const h of headers)body+=p(h,true,20);
+ for(const table of tables)body+=nativeTable(table)+p('');
+ if(!tables.length)throw Error('No dashboard tables found to export.');
+ // Optional visual reference goes AFTER the editable content.
  const png=await canvasBlob(canvas,'image/png');
- const zip=new JSZip();
+ zip.file('word/media/dashboard.png',png);
  const cx=5486400,cy=Math.round(cx*1447/1023);
- const xml='<'+'?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+ const drawing='<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="'+cx+'" cy="'+cy+'"/><wp:docPr id="1" name="Original Dashboard Design"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="Dashboard Reference"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdImage1"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>';
+ body+='<w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>Original Dashboard Design — Visual Reference</w:t></w:r></w:p><w:p><w:r>'+drawing+'</w:r></w:p>';
+ body+='<w:sectPr><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="550" w:right="500" w:bottom="550" w:left="500"/></w:sectPr>';
  zip.file('[Content_Types].xml',xml+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
  zip.file('_rels/.rels',xml+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
  zip.file('word/_rels/document.xml.rels',xml+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/dashboard.png"/></Relationships>');
- zip.file('word/media/dashboard.png',png);
- const drawing='<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="'+cx+'" cy="'+cy+'"/><wp:docPr id="1" name="Tanzania Coffee Board Sales Dashboard"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="Dashboard"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdImage1"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>';
- const document=xml+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr><w:r>'+drawing+'</w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="180" w:right="180" w:bottom="180" w:left="180" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>';
- // Preserve the designed dashboard on page one and add genuinely editable Word tables.
- // The picture itself is not editable; every visible report table is reproduced below it
- // as native Word table cells so users can change words and numbers in Microsoft Word.
- const wordText=(value)=>'<w:r><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="17"/></w:rPr><w:t xml:space="preserve">'+xmlEscape(value)+'</w:t></w:r>';
- const paragraph=(value,bold=false)=>'<w:p><w:pPr><w:spacing w:after="90"/></w:pPr><w:r>'+(bold?'<w:rPr><w:b/><w:sz w:val="23"/></w:rPr>':'<w:rPr><w:sz w:val="18"/></w:rPr>')+'<w:t xml:space="preserve">'+xmlEscape(value)+'</w:t></w:r></w:p>';
- const cell=(value,heading=false,span=1)=>{
-  const fill=heading?'543C2B':'FFFFFF';
-  const grid=span>1?'<w:gridSpan w:val="'+span+'"/>':'';
-  return '<w:tc><w:tcPr>'+grid+'<w:shd w:fill="'+fill+'"/><w:tcBorders><w:bottom w:val="single" w:sz="4" w:color="C9B8A6"/><w:right w:val="single" w:sz="4" w:color="C9B8A6"/></w:tcBorders><w:tcMar><w:top w:w="75" w:type="dxa"/><w:bottom w:w="75" w:type="dxa"/><w:left w:w="95" w:type="dxa"/><w:right w:w="95" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:r><w:rPr><w:sz w:val="16"/>'+(heading?'<w:b/><w:color w:val="FFFFFF"/>':'')+'</w:rPr><w:t xml:space="preserve">'+xmlEscape(value)+'</w:t></w:r></w:p></w:tc>';
- };
- const editableTable=(table)=>{
-  let rows='';
-  for(const tr of table.querySelectorAll('tr')){
-   const cells=Array.from(tr.children).filter(el=>el.matches('th,td'));
-   if(!cells.length)continue;
-   const band=tr.classList.contains('sales-band')||tr.classList.contains('market-reference-heading');
-   const heading=band||tr.classList.contains('sales-column-heading')||tr.classList.contains('market-reference-columns');
-   rows+='<w:tr>'+cells.map(el=>cell(el.innerText.replace(/\\s+/g,' ').trim(),heading||el.tagName==='TH',Number(el.getAttribute('colspan')||1)))+'</w:tr>';
-  }
-  return '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblLayout w:type="autofit"/><w:tblBorders><w:top w:val="single" w:sz="5" w:color="BDAA97"/><w:bottom w:val="single" w:sz="5" w:color="BDAA97"/></w:tblBorders></w:tblPr>'+rows+'</w:tbl>';
- };
- const tables=Array.from(paper.querySelectorAll('table'));
- const editableContent='<w:p><w:pPr><w:pageBreakBefore/></w:pPr></w:p>'
-  +paragraph('TANZANIA COFFEE BOARD — SALES DASHBOARD',true)
-  +paragraph('Editable report data | Sale Season: '+<?=json_encode($season)?>+' | Reporting Friday: '+<?=json_encode($salesReportDate)?>)
-  +paragraph('The first page retains the original dashboard design. The following tables contain editable text and figures.')
-  +tables.map(editableTable).join('<w:p/>');
- const editableDocument=document.replace('</w:body>',editableContent+'</w:body>');
- zip.file('word/document.xml',editableDocument);
+ zip.file('word/document.xml',xml+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>'+body+'</w:body></w:document>');
  save(await zip.generateAsync({type:'blob',compression:'DEFLATE'}),base()+'.docx');
 }
 menu.addEventListener('click',async e=>{
