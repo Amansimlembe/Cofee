@@ -658,6 +658,24 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
     .hl-table th,.hl-table td{padding:3px 2px;height:20px}
     .hl-percent td{padding-right:4px}
 }
+
+/* Tanzania Coffee Exchange poster layout — responsive and exportable */
+#highLowLayout{display:none;min-width:152px;margin-left:auto;border-color:#c8b4a0;background:#fff9f2;font-weight:700}
+.report.show{overflow:auto;flex:1;min-height:0}
+.highlow-poster{--coffee:#78300b;position:relative;isolation:isolate;width:min(100%,720px);min-height:720px;margin:0 auto;padding:22px 28px 24px;color:#3d260f;background:radial-gradient(ellipse at 54% 73%,rgba(232,212,183,.42),transparent 43%),linear-gradient(155deg,rgba(255,255,255,.88),rgba(239,229,216,.74) 43%,rgba(86,49,26,.72) 100%),linear-gradient(110deg,#eeeae3,#c4aa8b 70%,#583b2b);font-family:Arial,Helvetica,sans-serif;box-shadow:0 12px 34px #34201433;overflow:hidden}
+.highlow-poster:before{content:"";position:absolute;inset:0;z-index:-1;opacity:.3;background:repeating-linear-gradient(157deg,transparent 0 38px,rgba(83,49,25,.12) 39px 41px,transparent 42px 80px)}
+.poster-gov{display:grid;grid-template-columns:85px 1fr 90px;align-items:center;gap:12px;text-align:center;color:#5c2b12;font-weight:900;font-size:15px;line-height:1.15;margin-bottom:12px}
+.poster-emblem{display:grid;place-items:center;font-size:45px;line-height:1;min-height:65px}.poster-brand{font-size:16px;font-weight:1000;letter-spacing:.7px;border-top:3px solid #63341d;border-bottom:3px solid #63341d;padding:5px 0}
+.poster-strip{background:#ffd09b;border:2px solid #fff;border-radius:6px;text-align:center;font-size:26px;font-weight:900;line-height:1.12;padding:4px 8px;color:#603515;letter-spacing:.5px}
+.poster-main{background:#78300b;border:3px solid #fff;border-radius:9px;text-align:center;color:white;padding:8px 8px 10px;margin-top:3px;margin-bottom:5px}
+.poster-main .poster-big{font-size:clamp(27px,5vw,47px);font-weight:400;letter-spacing:1px;line-height:1.04}.poster-main .poster-sale{font-size:clamp(22px,4vw,34px);line-height:1.2}.poster-main .poster-date{font-size:19px;margin-top:5px}.poster-main .poster-units{font-size:20px;margin-top:4px}
+.poster-triple{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:5px 0}
+.poster-tile{background:linear-gradient(120deg,#ffcc94,#ffe2c4);border:3px solid #fff;border-radius:7px;text-align:center;min-width:0;padding:7px 4px;color:#5b3b24;box-shadow:0 2px 5px #0001}
+.poster-tile .poster-label{display:block;color:#287d30;font-weight:800;font-size:clamp(12px,2.2vw,18px);line-height:1.16}.poster-tile .poster-value{display:block;font-weight:900;font-size:clamp(16px,2.6vw,23px);margin-top:4px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.poster-grade{background:#ffce97;border:2px solid #fff;border-radius:5px;text-align:center;color:#287d30;font-size:clamp(16px,2.5vw,22px);font-weight:900;font-style:italic;padding:4px 6px;margin:5px 0 2px}
+.poster-percent{margin:20px 0 0 auto;width:max-content;max-width:100%;background:#ffdbb2;border:3px solid #fff;border-radius:5px;color:#267d2d;font-size:19px;font-weight:800;padding:7px 12px;text-align:center}
+.poster-footer{margin-top:65px;padding:12px 0 0;border-top:1px solid #ffffff77;display:flex;justify-content:center;flex-wrap:wrap;gap:8px 16px;color:#fff;font-size:13px;font-weight:700;text-shadow:0 1px 3px #2a130d}
+@media(max-width:650px){.highlow-poster{padding:12px;min-height:600px}.poster-gov{grid-template-columns:45px 1fr 55px;gap:5px;font-size:10px}.poster-emblem{font-size:26px;min-height:42px}.poster-brand{font-size:10px}.poster-strip{font-size:17px}.poster-triple{gap:5px}.poster-tile{padding:6px 2px}.poster-main .poster-date,.poster-main .poster-units{font-size:14px}.poster-footer{margin-top:35px;font-size:10px}.poster-percent{font-size:14px}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -668,7 +686,8 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
   <div><span class="title">Clean Auction</span> <span class="muted">Results stored in PostgreSQL</span></div>
   <div class="controls">
    <select id="display"><option value="report">High & Low</option><option value="summary">Sale Summary</option><option value="results">Auction Results</option></select>
-   <div class="exportwrap" id="exportWrap">
+   <select id="highLowLayout" title="High & Low presentation" aria-label="High & Low presentation"><option value="table">High & Low Table</option><option value="poster">High & Low Poster</option></select>
+    <div class="exportwrap" id="exportWrap">
     <button type="button" id="exportButton" onclick="toggleExportMenu(event)">⇩ Export</button>
     <div class="exportmenu" id="exportMenu">
       <button type="button" onclick="exportHighLow('pdf')">PDF</button>
@@ -749,10 +768,30 @@ function exportTableMarkup(){
  if(!highlow) throw new Error('High & Low report is not ready yet.');
  return highlow.outerHTML;
 }
+async function exportPoster(type){
+ const source=$('report').querySelector('.highlow-poster');if(!source)throw Error('Poster is not ready. Select an auction.');
+ if(!window.html2canvas)throw Error('Image export library is unavailable.');
+ const clone=source.cloneNode(true),stage=document.createElement('div');
+ stage.style.cssText='position:fixed;left:-12000px;top:0;width:720px;z-index:-1';clone.style.width='720px';clone.style.maxWidth='720px';stage.appendChild(clone);document.body.appendChild(stage);
+ try{
+  const canvas=await html2canvas(clone,{scale:2.3,useCORS:true,backgroundColor:'#ede4d6',logging:false});
+  const img=canvas.toDataURL('image/png');const filename=highLowExportName(type==='pdf'?'pdf':type==='word'?'doc':'xls').replace('High_Low','High_Low_Poster');
+  if(type==='pdf'){
+   if(!window.jspdf?.jsPDF)throw Error('PDF library unavailable.');
+   const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true});const w=190,h=canvas.height*w/canvas.width;
+   pdf.addImage(img,'PNG',10,10,w,Math.min(h,277));pdf.save(filename);
+  }else{
+   const html=`<!doctype html><html><head><meta charset="utf-8"></head><body><img src="${img}" style="width:100%;max-width:720px"></body></html>`;
+   downloadBlob(new Blob(['\ufeff',html],{type:type==='word'?'application/msword':'application/vnd.ms-excel'}),filename);
+  }
+  message('High & Low poster '+type.toUpperCase()+' prepared.');
+ }finally{stage.remove()}
+}
 function exportHighLow(type){
  $('exportMenu').classList.remove('open');
  const mode=$('display').value;
  if(type.startsWith('all_')){ cleanExportAll(type.slice(4)); return; }
+ if(mode==='report'&&$('highLowLayout').value==='poster'){if(type==='pdf')return exportPoster('pdf');if(type==='word')return exportPoster('word');if(type==='excel')return exportPoster('excel');}
  if(mode==='summary'){
    try{
      if(type==='excel') return exportSaleSummaryExcel();
@@ -958,6 +997,7 @@ async function exportHighLowPdf(){
 }
 
 function syncExportVisibility(){
+ const layout=$('highLowLayout');if(layout)layout.style.display=$('display').value==='report'?'block':'none';
  const wrap=$('exportWrap');
  const mode=$('display').value;
  if(wrap)wrap.style.display=(mode==='report'||mode==='summary')?'block':'none';
@@ -1014,7 +1054,7 @@ async function loadReport(){
  if(mode!=='report')return;
  if(!$('auction').value){$('report').innerHTML='<div class="muted">Select an auction to view High & Low.</div>';return}
  let d=await api('clean_auction.php?action=report&season='+encodeURIComponent($('season').value)+'&auction_no='+encodeURIComponent($('auction').value));
- $('report').innerHTML=cleanHighLowHTML(d.report,$('auction').value);
+ $('report').innerHTML=$('highLowLayout').value==='poster'?cleanHighLowPosterHTML(d.report,$('auction').value):cleanHighLowHTML(d.report,$('auction').value);
 }
 function cleanHighLowHTML(r,auctionNo){
  const p=r.prices||{};
@@ -1042,6 +1082,23 @@ function cleanHighLowHTML(r,auctionNo){
     <tr class="hl-values"><td>${num(low.low_price)}</td><td>${num(low.avg_price)}</td><td>${num(low.high_price)}</td></tr>
     <tr class="hl-percent"><td colspan="3">PERCENTAGE SOLD = ${num(r.percentage_sold)}%</td></tr>
    </table></div>`;
+}
+function cleanHighLowPosterHTML(r,auctionNo){
+ const p=r.prices||{},top=p.top||{low_price:r.top_low,avg_price:r.top_avg,high_price:r.top_high},cg=p.c||{low_price:r.c_low,avg_price:r.c_avg,high_price:r.c_high},low=p.lower||{low_price:r.lower_low,avg_price:r.lower_avg,high_price:r.lower_high};
+ const held=r.auction_date?new Date(r.auction_date+'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):'—';
+ const tile=(label,value,suffix='')=>`<div class="poster-tile"><span class="poster-label">${label}</span><span class="poster-value">${value==null?'—':num(value,2)}${suffix}</span></div>`;
+ const prices=(g)=>`<div class="poster-triple">${tile('Highest Price',g.high_price,' USD')}${tile('Average Price',g.avg_price,' USD')}${tile('Lowest Price',g.low_price,' USD')}</div>`;
+ return `<div class="highlow-poster" role="img" aria-label="Tanzania Coffee Exchange auction high and low poster">
+  <div class="poster-gov"><div class="poster-emblem" aria-hidden="true">🇹🇿</div><div>THE UNITED REPUBLIC OF TANZANIA<br>MINISTRY OF AGRICULTURE<br>TANZANIA COFFEE BOARD</div><div class="poster-brand">☕<br>COFFEE</div></div>
+  <div class="poster-strip">TANZANIA COFFEE EXCHANGE</div>
+  <div class="poster-main"><div class="poster-big">AUCTION RESULTS</div><div class="poster-sale">SALE NO. TCB/M${esc(auctionNo)}</div><div class="poster-date">Held On ${esc(held)}</div><div class="poster-units">Price USD/50KGS</div></div>
+  <div class="poster-triple">${tile('Kgs Offered',r.offered_kgs)}${tile('Kgs Sold',r.sold_kgs)}${tile('Total Value (USD)',r.total_value,' USD')}</div>
+  <div class="poster-grade">TOP GRADES (AAA, AA, A, AB, B, PB)</div>${prices(top)}
+  <div class="poster-grade">C - Grade</div>${prices(cg)}
+  <div class="poster-grade">LOWER GRADES (AF, F, E, TT, UG)</div>${prices(low)}
+  <div class="poster-percent">Percentage Sold&nbsp; ${num(r.percentage_sold,2)}%</div>
+  <div class="poster-footer"><span>🌐 www.coffee.go.tz</span><span>✉ info@coffee.go.tz</span><span>☎ +255 27 2752324</span><span>coffeeboardtz</span></div>
+ </div>`;
 }
 async function refreshAll(){syncExportVisibility();try{await loadRows();await loadReport()}catch(e){message(e.message,false)}}
 async function upload(confirmReplace){
@@ -1162,7 +1219,7 @@ async function cleanPdfFromHtml(html,filename,multiple=false){
 const cleanOldExport=exportHighLow;
 exportHighLow=function(type){
  if(type.startsWith('all_'))return cleanExportAll(type.slice(4));
- if(type==='pdf'&&$('display').value==='report'){
+ if(type==='pdf'&&$('display').value==='report'&&$('highLowLayout').value==='table'){
   $('exportMenu').classList.remove('open');
   try{
    cleanProgress('Exporting High & Low',20,'Preparing document…');
@@ -1177,6 +1234,7 @@ exportHighLow=function(type){
 $('season').addEventListener('change',async()=>{await loadAuctions();$('auction').value='';await refreshAll()});
 $('auction').addEventListener('change',refreshAll);
 $('display').addEventListener('change',refreshAll);
+$('highLowLayout').addEventListener('change',refreshAll);
 document.addEventListener('click',e=>{
  if(!e.target.closest('.settings'))$('settingsMenu').classList.remove('open');
  if(!e.target.closest('.exportwrap'))$('exportMenu').classList.remove('open');
