@@ -3056,14 +3056,14 @@ async function wordWithImage(canvas){
  zip.file('word/_rels/document.xml.rels',xml+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/dashboard.png"/></Relationships>');
  zip.file('word/media/dashboard.png',png);if(secondPng)zip.file('word/media/guide.png',secondPng);
  const drawing='<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="'+cx+'" cy="'+cy+'"/><wp:docPr id="1" name="Tanzania Coffee Board Sales Dashboard"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="Dashboard"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdImage1"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>';
- const document=xml+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr><w:r>'+drawing+'</w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="180" w:right="180" w:bottom="180" w:left="180" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>';
+ const wordDocumentXml=xml+'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr><w:r>'+drawing+'</w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="180" w:right="180" w:bottom="180" w:left="180" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>';
  if(secondPng){
   const secondDrawing=drawing.replace(/rIdImage1/g,'rIdImage2').replace('id="1" name="Tanzania Coffee Board Sales Dashboard"','id="2" name="Coffee Sales Dashboard Guide"');
   const pageBreak='<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
   const secondParagraph='<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r>'+secondDrawing+'</w:r></w:p>';
-  const updated=document.replace('</w:body>',pageBreak+secondParagraph+'</w:body>');zip.file('word/document.xml',updated);
+  const updated=wordDocumentXml.replace('</w:body>',pageBreak+secondParagraph+'</w:body>');zip.file('word/document.xml',updated);
   const relName='word/_rels/document.xml.rels';const rel=await zip.file(relName).async('string');zip.file(relName,rel.replace('</Relationships>','<Relationship Id="rIdImage2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/guide.png"/></Relationships>'));
- }else zip.file('word/document.xml',document);
+ }else zip.file('word/document.xml',wordDocumentXml);
  save(await zip.generateAsync({type:'blob',compression:'DEFLATE'}),base()+'.docx');
 }
 menu.addEventListener('click',async e=>{
@@ -3089,21 +3089,21 @@ menu.addEventListener('click',async e=>{
 .sales-actions{display:flex!important;align-items:center;gap:10px;flex-wrap:wrap}
 #salesGuideToggle{white-space:nowrap}
 #salesDashboardGuide[hidden]{display:none!important}
-#salesDashboardGuide.sales-guide-page{position:relative;box-sizing:border-box;width:100%;max-width:1023px;aspect-ratio:1023/1447;min-height:0;margin:18px auto 26px;background:#fffdf9;color:#392b21;border:1px solid #b68a63;box-shadow:0 3px 14px #4a2d191f;overflow:hidden;font-family:Arial,sans-serif}
+#salesDashboardGuide.sales-guide-page{position:relative;box-sizing:border-box;width:100%;max-width:1023px;aspect-ratio:1023/1447;min-height:0;margin:10px auto 12px;background:#fffdf9;color:#392b21;border:1px solid #b68a63;box-shadow:0 3px 14px #4a2d191f;overflow:hidden;font-family:Arial,sans-serif}
 #salesDashboardGuide .guide-heading{background:#f3e9da;border-bottom:5px solid #89522e;padding:3.5% 5% 2%;text-align:center}
 #salesDashboardGuide .guide-org{font-size:clamp(9px,1.2vw,13px);font-weight:700;letter-spacing:.5px;color:#754423}
 #salesDashboardGuide h2{font-size:clamp(16px,2.05vw,23px);margin:13px 0 9px;color:#603a23}
 #salesDashboardGuide .guide-report-meta{font-size:clamp(9px,1.2vw,13px);color:#6b503b}
-#salesDashboardGuide .guide-body{padding:2.1% 5%;columns:2;column-gap:30px;font-size:clamp(8px,1.15vw,12px);line-height:1.36}
+#salesDashboardGuide .guide-body{padding:2.4% 5% 3%;columns:2;column-gap:24px;font-size:clamp(9px,1.3vw,13.5px);line-height:1.45;overflow:visible}
 #salesDashboardGuide .guide-body h3{break-after:avoid;break-inside:avoid;column-break-after:avoid;margin:10px 0 4px;color:#754423;font-size:1.1em;border-bottom:1px solid #e3d4c2;padding-bottom:3px}
 #salesDashboardGuide .guide-body h4{break-after:avoid;margin:6px 0 3px;font-size:1em;color:#603a23}
 #salesDashboardGuide .guide-body p{margin:3px 0 5px;break-inside:avoid}
 #salesDashboardGuide .guide-body .guide-entry{padding-left:10px;border-left:2px solid #d4b99d}
 #salesDashboardGuide .guide-body .guide-intro{font-weight:600;margin-bottom:8px}
-#salesDashboardGuide .guide-indicators{width:100%;border-collapse:collapse;font-size:.93em;break-inside:avoid}
-#salesDashboardGuide .guide-indicators td,#salesDashboardGuide .guide-indicators th{border:1px solid #d9c8b5;padding:4px;text-align:left}
+#salesDashboardGuide .guide-indicators{width:100%;table-layout:fixed;border-collapse:collapse;font-size:.96em;break-inside:avoid;column-span:all;margin-top:12px;margin-bottom:4px;line-height:1.4}
+#salesDashboardGuide .guide-indicators td,#salesDashboardGuide .guide-indicators th{border:1px solid #d9c8b5;padding:6px 8px;text-align:left;white-space:normal;overflow-wrap:break-word;word-break:normal;vertical-align:top}#salesDashboardGuide .guide-indicators th:first-child,#salesDashboardGuide .guide-indicators td:first-child{width:28%;font-weight:600}#salesDashboardGuide .guide-indicators th:nth-child(2),#salesDashboardGuide .guide-indicators td:nth-child(2){width:72%}
 #salesDashboardGuide .guide-indicators th{background:#e9d9c5}
-#salesDashboardGuide .guide-footer{position:absolute;bottom:0;left:0;right:0;background:#68462e;color:white;padding:1.1% 5%;text-align:center;font-size:11px;letter-spacing:.5px}
+#salesDashboardGuide .guide-footer{position:absolute;bottom:0;left:0;right:0;background:#68462e;color:white;padding:1% 5%;text-align:center;font-size:11px;letter-spacing:.5px}
 @media(max-width:650px){#salesDashboardGuide .guide-body{column-gap:12px;font-size:clamp(6px,1.5vw,10px)}#salesDashboardGuide h2{font-size:clamp(11px,2.3vw,17px)}}
 @media print{#salesDashboardGuide:not([hidden]){page-break-before:always;break-before:page;box-shadow:none!important}}
 </style>
