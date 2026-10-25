@@ -646,7 +646,7 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
 .hl-money{font-variant-numeric:tabular-nums}
 @media(max-width:900px){
     .report{padding:7px}
-    .highlow{width:100%;max-width:720px;padding:4px}
+    .highlow{width:100%;max-width:800px;padding:4px}
 }
 @media(max-width:600px){
     .report{padding:4px}
@@ -683,6 +683,37 @@ thead th{position:sticky;top:0;background:#4b342c;color:#fff;z-index:3;font-size
 .highlow-poster .poster-gov{display:block;min-height:0;margin-bottom:12px;text-align:center;font-size:15px}
 .highlow-poster .poster-gov .poster-emblem,.highlow-poster .poster-gov .poster-brand{display:none!important}
 @media(max-width:650px){.highlow-poster{padding-top:15.6%;min-height:0;aspect-ratio:1216/1293}.highlow-poster .poster-gov{font-size:clamp(8px,2.1vw,14px)}}
+
+
+/* Reference poster: exact 800 × 850 composition at full resolution. */
+.highlow-poster{
+ width:800px!important;max-width:100%!important;height:850px!important;
+ min-height:850px!important;aspect-ratio:16/17!important;
+ padding:27px 94px 47px!important;
+ background-size:100% 100%!important;
+ box-shadow:none!important;
+ display:flex;flex-direction:column;justify-content:flex-start;
+ container-type:inline-size;
+}
+.highlow-poster .poster-gov{height:80px!important;flex:0 0 80px;margin:0!important;font-size:20px!important;line-height:1.08!important;font-weight:900!important;display:flex!important;justify-content:center;align-items:flex-start;padding-top:0!important}
+.highlow-poster .poster-strip{font-size:29px!important;line-height:1.08!important;padding:0 5px!important;min-height:32px!important;flex:0 0 32px}
+.highlow-poster .poster-main{margin:2px 0 4px!important;padding:3px 5px!important;min-height:143px!important;flex:0 0 143px}
+.highlow-poster .poster-main .poster-big{font-size:37px!important;line-height:1.05!important}
+.highlow-poster .poster-main .poster-sale{font-size:35px!important;line-height:1.12!important}
+.highlow-poster .poster-main .poster-date{font-size:23px!important;margin-top:1px!important}
+.highlow-poster .poster-main .poster-units{font-size:22px!important;margin-top:1px!important}
+.highlow-poster .poster-triple{gap:19px!important;margin:2px 0!important;flex:0 0 57px}
+.highlow-poster .poster-tile{padding:3px 3px!important;border-width:3px!important;border-radius:6px!important}
+.highlow-poster .poster-tile .poster-label{font-size:20px!important;line-height:1.08!important}
+.highlow-poster .poster-tile .poster-value{font-size:23px!important;line-height:1.08!important;margin-top:3px!important}
+.highlow-poster .poster-grade{font-size:22px!important;line-height:1.06!important;padding:2px 4px!important;margin:3px 0 1px!important;min-height:32px!important;flex:0 0 32px}
+.highlow-poster .poster-percent{margin:24px 0 0 auto!important;font-size:20px!important;padding:4px 10px!important}
+.highlow-poster .poster-footer{position:absolute!important;left:8px;right:8px;bottom:4px;margin:0!important;padding:0!important;border:0!important;gap:8px!important;flex-wrap:nowrap!important;justify-content:space-between!important;font-size:15px!important;white-space:nowrap!important}
+/* Keep reference proportions on narrower screens without changing export size. */
+@media(max-width:850px){
+ .highlow-poster{width:800px!important;max-width:none!important;transform-origin:top left}
+}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -779,7 +810,7 @@ async function exportPoster(type){
  const source=$('report').querySelector('.highlow-poster');if(!source)throw Error('Poster is not ready. Select an auction.');
  if(!window.html2canvas)throw Error('Image export library is unavailable.');
  const clone=source.cloneNode(true),stage=document.createElement('div');
- stage.style.cssText='position:fixed;left:-12000px;top:0;width:720px;z-index:-1';clone.style.width='720px';clone.style.maxWidth='720px';stage.appendChild(clone);document.body.appendChild(stage);
+ stage.style.cssText='position:fixed;left:-12000px;top:0;width:800px;z-index:-1';clone.style.width='800px';clone.style.maxWidth='800px';stage.appendChild(clone);document.body.appendChild(stage);
  try{
   const canvas=await html2canvas(clone,{scale:2.3,useCORS:true,backgroundColor:'#ede4d6',logging:false});
   const img=canvas.toDataURL('image/png');const filename=highLowExportName(type==='pdf'?'pdf':type==='word'?'doc':'xls').replace('High_Low','High_Low_Poster');
@@ -788,7 +819,7 @@ async function exportPoster(type){
    const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true});const w=190,h=canvas.height*w/canvas.width;
    pdf.addImage(img,'PNG',10,10,w,Math.min(h,277));pdf.save(filename);
   }else{
-   const html=`<!doctype html><html><head><meta charset="utf-8"></head><body><img src="${img}" style="width:100%;max-width:720px"></body></html>`;
+   const html=`<!doctype html><html><head><meta charset="utf-8"></head><body><img src="${img}" style="width:100%;max-width:800px"></body></html>`;
    downloadBlob(new Blob(['\ufeff',html],{type:type==='word'?'application/msword':'application/vnd.ms-excel'}),filename);
   }
   message('High & Low poster '+type.toUpperCase()+' prepared.');
