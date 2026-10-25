@@ -130,68 +130,6 @@ function tcb_market_prices(): array {
   return $data;
 }
 
-/* Durable Friday market-price snapshots (Render PostgreSQL, not ephemeral disk). */
-function tcb_friday_market_table(PDO $pdo): void {
- $pdo->exec("CREATE TABLE IF NOT EXISTS public.dashboard_friday_market_prices (report_date DATE PRIMARY KEY, prices JSONB NOT NULL, source_published DATE NOT NULL, saved_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
-}
-function tcb_market_prices_for_friday(string $reportDate): array {
- $today=(new DateTimeImmutable('now',new DateTimeZone('Africa/Dar_es_Salaam')))->format('Y-m-d');
- $latest=tcb_market_prices();
- try {
-  $pdo=terminal_price_db();tcb_friday_market_table($pdo);
-  $q=$pdo->prepare('SELECT prices,source_published FROM public.dashboard_friday_market_prices WHERE report_date=:d');
-  $q->execute(['d'=>$reportDate]);$saved=$q->fetch();
-  if($saved){
-   $prices=json_decode((string)$saved['prices'],true);
-   if(is_array($prices)&&count($prices)>0)return ['prices'=>array_replace($latest['prices']??[],$prices),'published'=>$saved['source_published'],'status'=>'friday_saved'];
-  }
-  /* Capture only the current actual Friday, and only a live, Friday-dated publication.
-     Never assign today's market prices to a historical selected Friday. */
-  if($reportDate===$today && (int)(new DateTimeImmutable($today))->format('N')===5
-    && ($latest['status']??'')==='live' && ($latest['published']??'')===$today
-    && count($latest['prices']??[])===8){
-   $save=$pdo->prepare('INSERT INTO public.dashboard_friday_market_prices(report_date,prices,source_published) VALUES (:d,CAST(:p AS JSONB),:published) ON CONFLICT (report_date) DO NOTHING');
-   $save->execute(['d'=>$today,'p'=>json_encode($latest['prices'],JSON_THROW_ON_ERROR),'published'=>$today]);
-   $q->execute(['d'=>$today]);$saved=$q->fetch();
-   if($saved){$prices=json_decode((string)$saved['prices'],true);if(is_array($prices)&&count($prices)>0)return ['prices'=>array_replace($latest['prices']??[],$prices),'published'=>$saved['source_published'],'status'=>'friday_saved'];}
-  }
- } catch(Throwable $e){error_log('TCB Friday market snapshot: '.$e->getMessage());}
- return $latest;
-}
-
-/* Authorized manual market-price corrections, tied to the selected Friday. */
-if(($_GET['action']??'')==='save_friday_market_price'){
- header('Content-Type: application/json; charset=utf-8');header('Cache-Control: no-store');
- try{
-  if(($_SERVER['REQUEST_METHOD']??'')!=='POST')throw new InvalidArgumentException('POST required.');
-  if(!hash_equals($_SESSION['terminal_price_csrf'],(string)($_POST['csrf']??'')))throw new InvalidArgumentException('Invalid security token.');
-  $date=(string)($_POST['report_date']??'');$dt=DateTimeImmutable::createFromFormat('!Y-m-d',$date);
-  if(!$dt||$dt->format('Y-m-d')!==$date||$dt->format('N')!=='5')throw new InvalidArgumentException('Select a valid reporting Friday.');
-  $key=(string)($_POST['price_key']??'');
-  $keys=['ny','london','hard_cherry','robusta_cherry','cpu','hp','auction_arabica','auction_robusta'];
-  if(!in_array($key,$keys,true))throw new InvalidArgumentException('Invalid price type.');
-  $raw=trim((string)($_POST['price']??''));
-  if(!preg_match('/^\d{1,9}(?:\.\d{1,4})?$/D',$raw))throw new InvalidArgumentException('Enter a non-negative price with up to four decimal places.');
-  $pdo=terminal_price_db();tcb_friday_market_table($pdo);
-  /* Lock concurrent corrections so a change to another price cannot be lost. */
-  $pdo->beginTransaction();
-  $lock=$pdo->prepare('SELECT pg_advisory_xact_lock(hashtext(:d))');$lock->execute(['d'=>'tcb_market_'.$date]);
-  $q=$pdo->prepare('SELECT prices,source_published FROM public.dashboard_friday_market_prices WHERE report_date=:d');$q->execute(['d'=>$date]);$saved=$q->fetch();
-  if($saved){$prices=json_decode((string)$saved['prices'],true);$published=$saved['source_published'];}
-  else{$prices=json_decode((string)($_POST['display_prices']??''),true);$published=(string)($_POST['source_published']??'');}
-  if(!is_array($prices))$prices=[];
-  /* Preserve other displayed prices when creating the Friday record. */
-  $prices[$key]=(float)$raw;
-  $sourceDate=DateTimeImmutable::createFromFormat('!Y-m-d',$published);
-  if(!$sourceDate||$sourceDate->format('Y-m-d')!==$published)$published=$date;
-  $write=$pdo->prepare('INSERT INTO public.dashboard_friday_market_prices(report_date,prices,source_published) VALUES (:d,CAST(:p AS JSONB),:published) ON CONFLICT(report_date) DO UPDATE SET prices=EXCLUDED.prices,saved_at=NOW()');
-  $write->execute(['d'=>$date,'p'=>json_encode($prices,JSON_THROW_ON_ERROR),'published'=>$published]);
-  $pdo->commit();echo json_encode(['success'=>true,'price'=>(float)$raw]);
- }catch(InvalidArgumentException $e){http_response_code(422);echo json_encode(['success'=>false,'message'=>$e->getMessage()]);}
- catch(Throwable $e){if(isset($pdo)&&$pdo->inTransaction())$pdo->rollBack();error_log('Market price manual update: '.$e->getMessage());http_response_code(500);echo json_encode(['success'=>false,'message'=>'Unable to save market price.']);}
- exit;
-}
-
 /* Certified Coffee: manual farmgate figures, independent for each Friday report. */
 function certified_coffee_table(PDO $pdo):void{
  $pdo->exec("CREATE TABLE IF NOT EXISTS public.dashboard_certified_coffee (season VARCHAR(9) NOT NULL, report_date DATE NOT NULL, week_mt NUMERIC(18,3) NOT NULL DEFAULT 0 CHECK(week_mt>=0), week_value_tzs NUMERIC(22,2) NOT NULL DEFAULT 0 CHECK(week_value_tzs>=0), season_mt NUMERIC(18,3) NOT NULL DEFAULT 0 CHECK(season_mt>=0), season_value_tzs NUMERIC(22,2) NOT NULL DEFAULT 0 CHECK(season_value_tzs>=0), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(season,report_date))");
@@ -484,7 +422,7 @@ if($display==='sales'){
     $salesGrandWeekKg+=$salesClean[$ch][$ct]['weekkg'];$salesGrandWeekVal+=$salesClean[$ch][$ct]['weekval'];
   }
  $estimatedProduction=85000.0;$productionPct=$estimatedProduction>0?($salesGrandKg/1000)/$estimatedProduction*100:0;
-   $tcbMarket=tcb_market_prices_for_friday($salesReportDate);
+   $tcbMarket=tcb_market_prices();
    $tcbPrices=$tcbMarket['prices'];
 $certifiedCoffee=['week_mt'=>0.0,'week_value_tzs'=>0.0,'season_mt'=>0.0,'season_value_tzs'=>0.0];
  try{$certDb=terminal_price_db();certified_coffee_table($certDb);$cq=$certDb->prepare('SELECT week_mt,week_value_tzs,season_mt,season_value_tzs FROM public.dashboard_certified_coffee WHERE season=:s AND report_date=:d');$cq->execute(['s'=>$season,'d'=>$salesReportDate]);$saved=$cq->fetch();if($saved)foreach($certifiedCoffee as$k=>$unused)$certifiedCoffee[$k]=(float)$saved[$k];}catch(Throwable $e){error_log('Certified Coffee read: '.$e->getMessage());}
@@ -2034,10 +1972,10 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
    <tbody><tr class="market-reference-heading sales-band"><td colspan="5">Market Reference Prices</td></tr>
    <tr class="market-reference-columns"><th>Market</th><th>Coffee Type</th><th>Price</th><th>Coffee Type</th><th>Price</th></tr>
    <?php $marketPrice=static function(string $key,int $dec=2)use($tcbPrices):string{return isset($tcbPrices[$key])?number_format((float)$tcbPrices[$key],$dec,'.',','):'—';}; ?>
-   <tr><th scope="row">Terminal (USD/kg)</th><td>Arabica (NY)</td><td class="sales-num market-price-edit" data-key="ny" data-dec="2" title="Double-click to edit price for selected Friday" tabindex="0" role="button"><?= $marketPrice('ny',2) ?></td><td>Robusta (London)</td><td class="sales-num market-price-edit" data-key="london" data-dec="2" title="Double-click to edit price for selected Friday" tabindex="0" role="button"><?= $marketPrice('london',2) ?></td></tr>
-   <tr><th scope="rowgroup" rowspan="2" class="market-reference-merged">Farmgate (TZS/kg)</th><td>H/Arabica (Dry Cherry)</td><td class="sales-num market-price-edit" data-key="hard_cherry" data-dec="0" title="Double-click to edit price for selected Friday" tabindex="0" role="button"><?= $marketPrice('hard_cherry',0) ?></td><td>Robusta (Dry Cherry)</td><td class="sales-num market-price-edit" data-key="robusta_cherry" data-dec="0" title="Double-click to edit price for selected Friday" tabindex="0" role="button"><?= $marketPrice('robusta_cherry',0) ?></td></tr>
-   <tr><td>Arabica CPU</td><td class="sales-num market-price-edit" data-key="cpu" data-dec="0" title="Double-click to edit price for selected Friday" tabindex="0" role="button"><?= $marketPrice('cpu',0) ?></td><td>Arabica HP</td><td class="sales-num market-price-edit" data-key="hp" data-dec="0" title="Double-click to edit price for selected Friday" tabindex="0" role="button"><?= $marketPrice('hp',0) ?></td></tr>
-   <tr><th scope="row">Clean Auction (USD/kg)</th><td>Arabica</td><td class="sales-num market-price-edit" data-key="auction_arabica" data-dec="2" title="Double-click to edit price for selected Friday" tabindex="0" role="button"><?= $marketPrice('auction_arabica',2) ?></td><td>Robusta</td><td class="sales-num market-price-edit" data-key="auction_robusta" data-dec="2" title="Double-click to edit price for selected Friday" tabindex="0" role="button"><?= $marketPrice('auction_robusta',2) ?></td></tr>
+   <tr><th scope="row">Terminal (USD/kg)</th><td>Arabica (NY)</td><td class="sales-num"><?= $marketPrice('ny',2) ?></td><td>Robusta (London)</td><td class="sales-num"><?= $marketPrice('london',2) ?></td></tr>
+   <tr><th scope="rowgroup" rowspan="2" class="market-reference-merged">Farmgate (TZS/kg)</th><td>H/Arabica (Dry Cherry)</td><td class="sales-num"><?= $marketPrice('hard_cherry',0) ?></td><td>Robusta (Dry Cherry)</td><td class="sales-num"><?= $marketPrice('robusta_cherry',0) ?></td></tr>
+   <tr><td>Arabica CPU</td><td class="sales-num"><?= $marketPrice('cpu',0) ?></td><td>Arabica HP</td><td class="sales-num"><?= $marketPrice('hp',0) ?></td></tr>
+   <tr><th scope="row">Clean Auction (USD/kg)</th><td>Arabica</td><td class="sales-num"><?= $marketPrice('auction_arabica',2) ?></td><td>Robusta</td><td class="sales-num"><?= $marketPrice('auction_robusta',2) ?></td></tr>
    </tbody>
    <tr class="sales-band"><td colspan="5">Farmgate Market</td></tr>
    <tr class="sales-column-heading"><th style="width:29%">1&nbsp; Kagera Auction</th><th>This Week (MT)</th><th>Value (TZS)</th><th>Season Total (MT)</th><th>Total Value (TZS)</th></tr>
@@ -3081,56 +3019,6 @@ menu.addEventListener('click',async e=>{
 #salesDashboardDocument .certified-edit{cursor:pointer;text-decoration:underline dotted #98663b;text-underline-offset:3px}
 #salesDashboardDocument .certified-edit:hover,#salesDashboardDocument .certified-edit:focus{background:#fff3db;outline:1px solid #b78858}
 </style>
-<style>
-#salesDashboardDocument .market-price-edit{cursor:pointer;outline-offset:2px}
-#salesDashboardDocument .market-price-edit:hover,#salesDashboardDocument .market-price-edit:focus{background:#fff1d9!important;outline:1px dashed #98663b}
-#marketPriceEditDialog[hidden]{display:none!important}
-#marketPriceEditDialog{position:fixed;inset:0;z-index:100000;background:rgba(25,19,14,.55);display:grid;place-items:center;padding:16px}
-#marketPriceEditDialog .market-edit-card{width:min(400px,100%);box-sizing:border-box;background:#fff;border-radius:14px;padding:24px;color:#37291d;box-shadow:0 18px 60px #0004;font-family:Arial,sans-serif}
-#marketPriceEditDialog label{display:block;margin:15px 0 6px;font-weight:700}
-#marketPriceEditDialog input{box-sizing:border-box;width:100%;padding:11px;border:1px solid #a89585;border-radius:7px;font-size:17px}
-#marketPriceEditDialog .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
-#marketPriceEditDialog button{padding:9px 15px;border:1px solid #b6a594;border-radius:7px;cursor:pointer}
-#marketPriceEditDialog button[type=submit]{background:#68442e;color:white}
-#marketPriceEditError{color:#a02020;font-size:13px;margin-top:8px}
-</style>
-<div id="marketPriceEditDialog" hidden data-html2canvas-ignore="true" aria-hidden="true">
- <form id="marketPriceEditForm" class="market-edit-card" role="dialog" aria-modal="true" aria-labelledby="marketPriceEditTitle">
-  <h3 id="marketPriceEditTitle">Edit market price</h3>
-  <p>Reporting Friday: <?=htmlspecialchars(date('d M Y',strtotime($salesReportDate)))?></p>
-  <label for="marketPriceEditInput">Price <span id="marketPriceEditUnit"></span></label>
-  <input id="marketPriceEditInput" type="number" min="0" step="any" required>
-  <div id="marketPriceEditError" role="alert"></div>
-  <div class="actions"><button type="button" id="marketPriceEditCancel">Cancel</button><button type="submit" id="marketPriceEditSave">Save price</button></div>
- </form>
-</div>
-<script id="market-price-manual-edit-js">
-(()=>{
- const dialog=document.getElementById('marketPriceEditDialog');if(!dialog)return;
- const form=document.getElementById('marketPriceEditForm'),input=document.getElementById('marketPriceEditInput'),error=document.getElementById('marketPriceEditError'),save=document.getElementById('marketPriceEditSave');
- const cells=[...document.querySelectorAll('#salesDashboardDocument .market-price-edit')];
- const prices=<?=json_encode($tcbPrices,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>;
- let active=null,focusBefore=null;
- const close=()=>{if(save.disabled)return;dialog.hidden=true;dialog.setAttribute('aria-hidden','true');focusBefore?.focus();};
- const open=(cell)=>{active=cell;focusBefore=document.activeElement;input.value=prices[cell.dataset.key]??'';error.textContent='';document.getElementById('marketPriceEditUnit').textContent=['hard_cherry','robusta_cherry','cpu','hp'].includes(cell.dataset.key)?'(TZS/kg)':'(USD/kg)';dialog.hidden=false;dialog.setAttribute('aria-hidden','false');input.focus();input.select();};
- cells.forEach(cell=>{cell.addEventListener('dblclick',()=>open(cell));cell.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open(cell);}});});
- document.getElementById('marketPriceEditCancel').addEventListener('click',close);
- dialog.addEventListener('click',e=>{if(e.target===dialog)close();});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.hidden)close();});
- form.addEventListener('submit',async e=>{
-  e.preventDefault();if(!active||save.disabled)return;
-  const value=input.value.trim();if(!/^\d{1,9}(?:\.\d{1,4})?$/.test(value)){error.textContent='Enter a valid non-negative price (up to 4 decimals).';return;}
-  save.disabled=true;save.textContent='Saving…';error.textContent='';
-  try{
-   const body=new URLSearchParams({csrf:<?=json_encode($_SESSION['terminal_price_csrf'])?>,report_date:<?=json_encode($salesReportDate)?>,price_key:active.dataset.key,price:value,display_prices:JSON.stringify(prices),source_published:<?=json_encode($tcbMarket['published']??$salesReportDate)?>});
-   const response=await fetch('dashboard.php?action=save_friday_market_price',{method:'POST',credentials:'same-origin',headers:{Accept:'application/json'},body});
-   const result=await response.json();if(!response.ok||!result.success)throw new Error(result.message||'Saving failed.');
-   const number=Number(result.price),dec=Number(active.dataset.dec);prices[active.dataset.key]=number;
-   active.textContent=number.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
-   save.disabled=false;close();window.salesDashboardFit?.();
-  }catch(err){error.textContent=err.message||'Unable to save price.';}finally{save.disabled=false;save.textContent='Save price';}
- });
-})();
-</script>
 <div id="certifiedCoffeeDialog" class="terminal-price-dialog" hidden data-html2canvas-ignore="true" aria-hidden="true">
  <form id="certifiedCoffeeForm" class="terminal-price-card" role="dialog" aria-modal="true" aria-labelledby="certifiedCoffeeHeading">
   <h3 id="certifiedCoffeeHeading">Edit Certified Coffee</h3><p>Farmgate Market · selected Friday report. Quantities are in MT; values are in TZS.</p>
@@ -3223,12 +3111,23 @@ window.reportTask=(function(){
  document.querySelectorAll('body.report-sticky-mode form.season select').forEach(select=>select.addEventListener('change',()=>{if(select.form){window.reportTask.start('Loading report','Updating the selected report…');window.reportTask.update(18,'Retrieving report data…');}}));
 })();
 </script>
-<style id="sales-dashboard-centered-numeric-columns">
-/* Center the four sales metric headings and their data in the dashboard and exports. */
-#salesDashboardDocument .sales-table tr.sales-column-heading > th:not(:first-child),
-#salesDashboardDocument .sales-table tr:not(.market-reference-columns) > td:nth-child(n+2):nth-child(-n+5):not([colspan]) {
+
+<style id="sales-dashboard-centered-columns">
+/* Center the five-column market and sales tables in preview and export clones. */
+#salesDashboardDocument .sales-table tr.market-reference-columns > th,
+#salesDashboardDocument .sales-table tr.sales-column-heading > th {
+  font-weight:800!important;
   text-align:center!important;
   vertical-align:middle!important;
+}
+#salesDashboardDocument .sales-table tr:not(.sales-band):not(.sales-section) > td,
+#salesDashboardDocument .sales-table tr:not(.sales-band):not(.sales-section) > th {
+  text-align:center!important;
+  vertical-align:middle!important;
+}
+#salesDashboardDocument .sales-table tr:not(.sales-band):not(.sales-section) > td.sales-label,
+#salesDashboardDocument .sales-table tr:not(.sales-band):not(.sales-section) > td.sales-num {
+  text-align:center!important;
 }
 </style>
 </body>
