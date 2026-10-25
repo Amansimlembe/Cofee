@@ -51,10 +51,6 @@ function tcb_market_prices(): array {
        && !empty($decoded['published']))$old=$decoded;
   }
   if($old && time()-(int)($old['fetched_at']??0)<21600)return $old;
-   // Throttle failed remote fetches too; never delay every visitor on an outage.
-   $retryFile=sys_get_temp_dir().'/tcb_market_price_retry_v2.txt';
-   if(is_file($retryFile) && time()-(int)@file_get_contents($retryFile)<900)return array_merge($old?:$fallback,['status'=>$old?'cached':'reference']);
-   @file_put_contents($retryFile,(string)time(),LOCK_EX);
   $previous=$old ?: $fallback;
   if(!function_exists('curl_init') || !class_exists('DOMDocument')){
     error_log('TCB market prices: PHP cURL or DOM extension missing');
@@ -62,7 +58,7 @@ function tcb_market_prices(): array {
   }
   $ch=curl_init('https://www.coffee.go.tz/pages/average-market-price');
   curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,
-    CURLOPT_CONNECTTIMEOUT=>2,CURLOPT_TIMEOUT=>4,CURLOPT_SSL_VERIFYPEER=>true,
+    CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>20,CURLOPT_SSL_VERIFYPEER=>true,
     CURLOPT_USERAGENT=>'Mozilla/5.0 (compatible; TCB-SalesDashboard/1.0)',CURLOPT_MAXREDIRS=>3]);
   $html=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
   $err=curl_error($ch);curl_close($ch);
@@ -3265,12 +3261,12 @@ window.salesDashboardApplyLanguage=setLanguage;
 <style>
 /* Shared report task indicator; independent of printable report content. */
 #reportTaskOverlay[hidden]{display:none!important}
-#reportTaskOverlay{position:fixed;right:18px;bottom:18px;top:auto;left:auto;z-index:2147483000;background:transparent;display:block;pointer-events:none;padding:0;box-sizing:border-box;max-width:calc(100vw - 36px)}
-.report-task-card{width:min(330px,calc(100vw - 36px));background:#fff;border:1px solid #e7ded7;border-radius:14px;padding:14px 16px;box-shadow:0 9px 30px rgba(0,0,0,.15);font-family:Arial,sans-serif;color:#3e2723;box-sizing:border-box}
-.report-task-icon{width:30px;height:30px;border-radius:9px;background:#f2e7dc;color:#65452f;display:grid;place-items:center;font-size:16px;margin-bottom:6px}
-.report-task-heading{font-size:14px;font-weight:800;margin:0 0 4px}
-.report-task-description{font-size:13px;color:#685b51;line-height:1.4;min-height:16px;margin-bottom:9px}
-.report-task-meter{height:5px;background:#eae4df;border-radius:20px;overflow:hidden}
+#reportTaskOverlay{position:fixed;inset:auto 18px 18px auto;z-index:2147483000;background:transparent;display:block;pointer-events:none;max-width:calc(100vw - 36px)}
+.report-task-card{width:min(340px,100%);background:#fff;border-radius:17px;padding:25px;box-shadow:0 22px 75px rgba(0,0,0,.28);font-family:Arial,sans-serif;color:#3e2723;box-sizing:border-box}
+.report-task-icon{width:46px;height:46px;border-radius:14px;background:#f2e7dc;color:#65452f;display:grid;place-items:center;font-size:23px;margin-bottom:13px}
+.report-task-heading{font-size:18px;font-weight:800;margin:0 0 7px}
+.report-task-description{font-size:13px;color:#685b51;line-height:1.5;min-height:20px;margin-bottom:18px}
+.report-task-meter{height:9px;background:#eae4df;border-radius:20px;overflow:hidden}
 #reportTaskBar{height:100%;width:0;background:linear-gradient(90deg,#795548,#ba8b52);border-radius:20px;transition:width .25s ease}
 .report-task-bottom{display:flex;justify-content:space-between;margin-top:10px;font-size:12px;font-weight:700;color:#795548}
 @media(prefers-reduced-motion:reduce){#reportTaskBar{transition:none}}
@@ -3294,8 +3290,8 @@ window.reportTask=(function(){
 })();
 (function(){
  const form=document.querySelector('body.report-sticky-mode form.season');
- if(form)form.addEventListener('submit',()=>{window.reportTask.start('Loading report','Applying filters and retrieving report data…');window.reportTask.update(5,'Loading selected season and report date…');});
- document.querySelectorAll('body.report-sticky-mode form.season select').forEach(select=>select.addEventListener('change',()=>{if(select.form){window.reportTask.start('Loading report','Updating the selected report…');window.reportTask.update(5,'Retrieving report data…');}}));
+ /* Report navigation remains unblocked; no viewport loading overlay. */
+ 
 })();
 </script>
 
