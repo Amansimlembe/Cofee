@@ -85,14 +85,89 @@ function farm_date($v):?string{
 }
 function farm_col_index(string $letters):int{$n=0;foreach(str_split($letters)as$c)$n=$n*26+(ord(strtoupper($c))-64);return$n-1;}
 function farm_parse_xlsx(string $file):array{
-    if(!class_exists('ZipArchive'))throw new RuntimeException('ZipArchive is required to read .xlsx files.');
-    $z=new ZipArchive();if($z->open($file)!==true)throw new RuntimeException('The Excel workbook could not be opened.');
-    $shared=[];$ss=$z->getFromName('xl/sharedStrings.xml');
-    if($ss!==false){$x=simplexml_load_string($ss);if($x)foreach($x->si as$si){$p=[];if(isset($si->t))$p[]=(string)$si->t;if(isset($si->r))foreach($si->r as$r)$p[]=(string)$r->t;$shared[]=implode('',$p);}}
-    $sheet=$z->getFromName('xl/worksheets/sheet1.xml');if($sheet===false){$z->close();throw new RuntimeException('Worksheet sheet1.xml was not found.');}
-    $x=simplexml_load_string($sheet);$rows=[];
-    foreach($x->sheetData->row as$row){$o=[];foreach($row->c as$c){preg_match('/([A-Z]+)\d+/',(string)$c['r'],$m);$i=farm_col_index($m[1]??'A');$type=(string)$c['t'];$v='';if($type==='s')$v=$shared[(int)$c->v]??'';elseif($type==='inlineStr')$v=(string)$c->is->t;else$v=(string)$c->v;$o[$i]=$v;}if($o){ksort($o);$full=array_fill(0,max(array_keys($o))+1,'');foreach($o as$i=>$v)$full[$i]=$v;$rows[]=$full;}}
-    $z->close();return$rows;
+    if(!class_exists('ZipArchive')) throw new RuntimeException('ZipArchive is required to read .xlsx files.');
+    $z=new ZipArchive();
+    if($z->open($file)!==true) throw new RuntimeException('The Excel workbook could not be opened.');
+
+    $shared=[];
+    $ss=$z->getFromName('xl/sharedStrings.xml');
+    if($ss!==false){
+        $dom=new DOMDocument();
+        if(@$dom->loadXML($ss)){
+            $xp=new DOMXPath($dom);
+            foreach($xp->query('//*[local-name()="si"]') as $si){
+                $parts=[];
+                foreach($xp->query('.//*[local-name()="t"]',$si) as $tn) $parts[]=$tn->textContent;
+                $shared[]=implode('',$parts);
+            }
+        }
+    }
+
+    /* Resolve the first worksheet through workbook relationships instead of
+       assuming that its physical filename must always be sheet1.xml. */
+    $sheetPath='xl/worksheets/sheet1.xml';
+    $workbook=$z->getFromName('xl/workbook.xml');
+    $rels=$z->getFromName('xl/_rels/workbook.xml.rels');
+    if($workbook!==false && $rels!==false){
+        $wd=new DOMDocument(); $rd=new DOMDocument();
+        if(@$wd->loadXML($workbook) && @$rd->loadXML($rels)){
+            $wx=new DOMXPath($wd); $rx=new DOMXPath($rd);
+            $sheet=$wx->query('//*[local-name()="sheets"]/*[local-name()="sheet"][1]')->item(0);
+            if($sheet){
+                $rid=$sheet->getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+                if($rid==='') $rid=$sheet->getAttribute('r:id');
+                foreach($rx->query('//*[local-name()="Relationship"]') as $rel){
+                    if($rel->getAttribute('Id')===$rid){
+                        $target=$rel->getAttribute('Target');
+                        if(str_starts_with($target,'/')) $sheetPath=ltrim($target,'/');
+                        elseif(str_starts_with($target,'xl/')) $sheetPath=$target;
+                        else $sheetPath='xl/'.ltrim($target,'/');
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    $xml=$z->getFromName($sheetPath);
+    if($xml===false){$z->close();throw new RuntimeException('The first Excel worksheet could not be found.');}
+
+    $dom=new DOMDocument();
+    if(!@$dom->loadXML($xml)){$z->close();throw new RuntimeException('The Excel worksheet is not valid XML.');}
+    $xp=new DOMXPath($dom);
+    $rows=[];
+
+    foreach($xp->query('//*[local-name()="sheetData"]/*[local-name()="row"]') as $rowNode){
+        $out=[];
+        foreach($xp->query('./*[local-name()="c"]',$rowNode) as $c){
+            $ref=$c->getAttribute('r');
+            preg_match('/([A-Z]+)\d+/i',$ref,$m);
+            $idx=farm_col_index($m[1]??'A');
+            $type=$c->getAttribute('t');
+            $value='';
+
+            if($type==='inlineStr'){
+                $parts=[];
+                foreach($xp->query('.//*[local-name()="is"]//*[local-name()="t"]',$c) as $tn) $parts[]=$tn->textContent;
+                $value=implode('',$parts);
+            }else{
+                $vNode=$xp->query('./*[local-name()="v"]',$c)->item(0);
+                $raw=$vNode ? $vNode->textContent : '';
+                if($type==='s') $value=$shared[(int)$raw]??'';
+                elseif($type==='b') $value=((string)$raw==='1'?'1':'0');
+                else $value=$raw;
+            }
+            $out[$idx]=$value;
+        }
+        if($out){
+            ksort($out);
+            $full=array_fill(0,max(array_keys($out))+1,'');
+            foreach($out as $i=>$v) $full[$i]=$v;
+            $rows[]=$full;
+        }
+    }
+    $z->close();
+    return $rows;
 }
 function farm_parse_csv(string$file):array{$r=[];$h=fopen($file,'rb');if(!$h)return[];while(($x=fgetcsv($h))!==false)$r[]=$x;fclose($h);return$r;}
 function farm_parse(string$file,string$ext):array{if(in_array($ext,['xlsx','xlsm','xltx'],true))return farm_parse_xlsx($file);if($ext==='csv')return farm_parse_csv($file);throw new RuntimeException('Please upload an .xlsx, .xlsm, .xltx or .csv file.');}
@@ -123,7 +198,7 @@ function farm_upload():void{
     if($hi===null)farm_json(false,'The Farm Gate Contract header row could not be identified.',[],400);
     $map=farm_map($rows[$hi]);$missing=[];$labels=farm_labels();foreach($map as$k=>$v)if($v===null)$missing[]=$labels[$k];
     $non=array_values(array_filter($rows[$hi],fn($x)=>trim((string)$x)!==''));
-    if(count($non)!==11||$missing)farm_json(false,'Upload stopped. Farm Gate Contract requires exactly 11 columns.'.($missing?' Missing: '.implode(', ',$missing).'.':'').' Expected: '.implode(', ',array_values($labels)).'.',[],400);
+    if(count($non)!==11||$missing)farm_json(false,'Upload stopped. Farm Gate Contract requires exactly 11 source columns; do not add a Value column because Value is calculated automatically.'.($missing?' Missing: '.implode(', ',$missing).'.':'').' Expected: '.implode(', ',array_values($labels)).'.',[],400);
     $records=[];$errors=[];
     foreach($rows as$ri=>$row){if($ri<=$hi)continue;$get=function($k)use($row,$map){return trim((string)($row[$map[$k]]??''));};
       $date=farm_date($get('contract_date'));$seller=$get('seller_name');$buyer=$get('buyer_name');$kg=farm_num($get('kilos_to_be_sold'));$price=farm_num($get('price_per_kilo_tzs'));
@@ -215,7 +290,7 @@ table{border-collapse:collapse;width:100%;min-width:1080px;font-size:9px}th,td{p
 </div></div>
 <div><div class="filters"><select id="season" title="Sale Season: 1 July to 30 June"><option value="">All Sale Seasons</option></select>
 <select id="summaryMode" style="display:none"><option value="coffee_type">By Coffee Type</option><option value="seller_region">By Seller Region</option><option value="buyer_name">By Buyer</option><option value="seller_name">By Supplier / Seller</option></select>
-<button onclick="refreshAll()">↻ Refresh</button><div class="uploadbox" id="uploadbox"><input type="file" id="file" accept=".xlsx,.xlsm,.xltx,.csv"><button class="primary" onclick="upload(false)">Upload Farm Gate Contracts</button></div></div><div class="msg" id="msg"></div></div>
+<button onclick="refreshAll()">↻ Refresh</button><div class="uploadbox" id="uploadbox"><input type="file" id="file" accept=".xlsx,.xlsm,.xltx,.csv"><button class="primary" onclick="upload(false)">Upload Farm Gate Contracts</button><span class="muted">Expected 11 Excel columns only · Value is calculated automatically (Kilos × Price/Kg)</span></div></div><div class="msg" id="msg"></div></div>
 <div class="card" id="card"><div class="tablewrap" id="tablewrap"><table id="table"></table></div><div class="summarywrap" id="summarywrap"><div class="summary-head"><div><div class="summary-title" id="summaryTitle">Sale Summary</div><div class="muted">Value = Kilos × Price per Kilo (TZS)</div></div></div><table class="summary-table" id="summaryTable"></table></div></div>
 </div>
 <script>
@@ -239,4 +314,38 @@ function download(blob,name){let a=document.createElement('a');a.href=URL.create
 async function exportPdf(name){if(!window.html2canvas||!window.jspdf){message('PDF exporter did not load. Refresh and try again.',false);return}let el=$('display').value==='summary'?$('summarywrap'):$('tablewrap');let c=await html2canvas(el,{scale:1.5,backgroundColor:'#fff'}),img=c.toDataURL('image/png'),jsPDF=window.jspdf.jsPDF,pdf=new jsPDF({orientation:c.width>c.height?'landscape':'portrait',unit:'mm',format:'a4'}),pw=pdf.internal.pageSize.getWidth()-12,ph=c.height*pw/c.width;pdf.addImage(img,'PNG',6,6,pw,ph);pdf.save(name+'.pdf')}
 $('display').addEventListener('change',refreshAll);$('season').addEventListener('change',refreshAll);$('summaryMode').addEventListener('change',refreshAll);document.addEventListener('click',e=>{if(!e.target.closest('.settings'))$('settingsMenu').classList.remove('open');if(!e.target.closest('.exportwrap'))$('exportMenu').classList.remove('open')});
 (async()=>{try{await loadFilters();await refreshAll()}catch(e){message(e.message,false)}})();
-</script></body></html>
+</script><style id="tcb-push-style">
+.tcb-push-stage{position:relative;isolation:isolate;overflow:hidden;min-height:80px}
+.tcb-push-ghost{position:absolute!important;top:0;left:0;width:100%;height:100%;overflow:hidden;pointer-events:none!important;z-index:5;background:var(--card-bg,#fff);will-change:transform,opacity;animation:tcb-push-old .48s cubic-bezier(.22,1,.36,1) both}
+.tcb-push-arrive{animation:tcb-push-new .48s cubic-bezier(.22,1,.36,1) both;will-change:transform,opacity}
+@keyframes tcb-push-old{0%{transform:translate3d(0,0,0);opacity:1}100%{transform:translate3d(-26%,0,0);opacity:0}}
+@keyframes tcb-push-new{0%{transform:translate3d(14%,0,0);opacity:.4}100%{transform:translate3d(0,0,0);opacity:1}}
+@media(prefers-reduced-motion:reduce){.tcb-push-ghost,.tcb-push-arrive{animation:none!important}}
+</style>
+<script id="tcb-push-script">
+(()=>{
+ const controlId="display", regionSelector="#card";
+ const control=controlId?document.getElementById(controlId):null;
+ const region=()=>{const candidates=[...document.querySelectorAll(regionSelector)];return candidates.find(e=>getComputedStyle(e).display!=='none')||candidates[0]||null};
+ let running=null;
+ function push(){
+   const node=region();if(!node||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+   if(running){running.remove();running=null}
+   const rect=node.getBoundingClientRect();if(rect.width<1||rect.height<1)return;
+   node.classList.add('tcb-push-stage');
+   const ghost=node.cloneNode(true);
+   ghost.removeAttribute('id');ghost.querySelectorAll('[id]').forEach(e=>e.removeAttribute('id'));
+   ghost.classList.add('tcb-push-ghost');ghost.classList.remove('tcb-push-stage');
+   ghost.setAttribute('aria-hidden','true');ghost.inert=true;
+   ghost.style.height=Math.min(rect.height,Math.max(window.innerHeight*1.4,500))+'px';
+   node.appendChild(ghost);running=ghost;
+   requestAnimationFrame(()=>requestAnimationFrame(()=>{
+     node.classList.add('tcb-push-arrive');
+     setTimeout(()=>{node.classList.remove('tcb-push-arrive');if(ghost.isConnected)ghost.remove();if(running===ghost)running=null},510);
+   }));
+ }
+ if(control)control.addEventListener('change',push,{capture:true});
+ // Keep the module's existing data fetching, filters, and renderers unchanged.
+})();
+</script>
+</body></html>

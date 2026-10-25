@@ -69,4 +69,38 @@ async function refresh(){try{await Promise.all([loadRows(),loadStats()])}catch(e
 async function upload(confirmReplace){let f=$('file').files[0];if(!f){msg('Select the licence Excel file first.',false);return}let fd=new FormData();fd.append('license_excel',f);if(confirmReplace)fd.append('replace_seasons','1');try{let r=await fetch('licenses.php',{method:'POST',body:fd}),j=await r.json();if(!r.ok||j.success===false)throw new Error(j.message||'Upload failed');if(j.data?.requires_confirmation){let detail=(j.data.existing||[]).map(x=>`${x.license_sale_season}: ${x.n} existing`).join('\n');if(confirm('Existing licence data was found:\n'+detail+'\n\nReplace the existing data for these season(s) with this workbook?'))return upload(true);return}msg(j.message);await loadFilters();await refresh()}catch(e){msg(e.message,false)}}
 async function editRow(id){let r=rows.find(x=>Number(x.id)===Number(id));if(!r)return;let out={id};for(const [k,label] of cols){let v=prompt(label,r[k]??'');if(v===null)return;out[k]=v}try{await api('licenses.php?action=update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(out)});msg('Licence record updated.');await loadFilters();await refresh()}catch(e){msg(e.message,false)}}async function deleteRow(id){if(!confirm('Delete this licence record?'))return;try{await api('licenses.php?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});msg('Licence record deleted.');await refresh()}catch(e){msg(e.message,false)}}async function deleteAll(){if(!confirm('Delete ALL licence records from the database? This cannot be undone.'))return;try{await api('licenses.php?action=delete_all',{method:'POST'});msg('All licence records deleted.');await loadFilters();await refresh()}catch(e){msg(e.message,false)}}
 function exportCsv(){if(!rows.length){msg('There is no displayed licence data to export.',false);return}let q=s=>`"${String(s??'').replace(/"/g,'""')}"`;let csv=[cols.map(c=>q(c[1])).join(',')].concat(rows.map(r=>cols.map(c=>q(r[c[0]])).join(','))).join('\r\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff',csv],{type:'text/csv;charset=utf-8'}));a.download='Coffee_Licences_'+($('season').value||'All_Seasons').replace('/','-')+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
-(async()=>{try{await loadFilters();await refresh()}catch(e){msg(e.message,false)}})();</script></body></html>
+(async()=>{try{await loadFilters();await refresh()}catch(e){msg(e.message,false)}})();</script><style id="tcb-push-style">
+.tcb-push-stage{position:relative;isolation:isolate;overflow:hidden;min-height:80px}
+.tcb-push-ghost{position:absolute!important;top:0;left:0;width:100%;height:100%;overflow:hidden;pointer-events:none!important;z-index:5;background:var(--card-bg,#fff);will-change:transform,opacity;animation:tcb-push-old .48s cubic-bezier(.22,1,.36,1) both}
+.tcb-push-arrive{animation:tcb-push-new .48s cubic-bezier(.22,1,.36,1) both;will-change:transform,opacity}
+@keyframes tcb-push-old{0%{transform:translate3d(0,0,0);opacity:1}100%{transform:translate3d(-26%,0,0);opacity:0}}
+@keyframes tcb-push-new{0%{transform:translate3d(14%,0,0);opacity:.4}100%{transform:translate3d(0,0,0);opacity:1}}
+@media(prefers-reduced-motion:reduce){.tcb-push-ghost,.tcb-push-arrive{animation:none!important}}
+</style>
+<script id="tcb-push-script">
+(()=>{
+ const controlId=null, regionSelector="#card";
+ const control=controlId?document.getElementById(controlId):null;
+ const region=()=>{const candidates=[...document.querySelectorAll(regionSelector)];return candidates.find(e=>getComputedStyle(e).display!=='none')||candidates[0]||null};
+ let running=null;
+ function push(){
+   const node=region();if(!node||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+   if(running){running.remove();running=null}
+   const rect=node.getBoundingClientRect();if(rect.width<1||rect.height<1)return;
+   node.classList.add('tcb-push-stage');
+   const ghost=node.cloneNode(true);
+   ghost.removeAttribute('id');ghost.querySelectorAll('[id]').forEach(e=>e.removeAttribute('id'));
+   ghost.classList.add('tcb-push-ghost');ghost.classList.remove('tcb-push-stage');
+   ghost.setAttribute('aria-hidden','true');ghost.inert=true;
+   ghost.style.height=Math.min(rect.height,Math.max(window.innerHeight*1.4,500))+'px';
+   node.appendChild(ghost);running=ghost;
+   requestAnimationFrame(()=>requestAnimationFrame(()=>{
+     node.classList.add('tcb-push-arrive');
+     setTimeout(()=>{node.classList.remove('tcb-push-arrive');if(ghost.isConnected)ghost.remove();if(running===ghost)running=null},510);
+   }));
+ }
+ ['season','category','region'].forEach(id=>document.getElementById(id)?.addEventListener('change',push,{capture:true}));
+ // Keep the module's existing data fetching, filters, and renderers unchanged.
+})();
+</script>
+</body></html>

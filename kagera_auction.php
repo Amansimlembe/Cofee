@@ -6177,5 +6177,39 @@ function kageraTaskEnd(token){
  setTimeout(()=>{if(token===kageraTaskToken){kageraTaskActive=false;document.getElementById('kageraTaskOverlay').classList.remove('active')}},350);
 }
 </script>
+<style id="tcb-push-style">
+.tcb-push-stage{position:relative;isolation:isolate;overflow:hidden;min-height:80px}
+.tcb-push-ghost{position:absolute!important;top:0;left:0;width:100%;height:100%;overflow:hidden;pointer-events:none!important;z-index:5;background:var(--card-bg,#fff);will-change:transform,opacity;animation:tcb-push-old .48s cubic-bezier(.22,1,.36,1) both}
+.tcb-push-arrive{animation:tcb-push-new .48s cubic-bezier(.22,1,.36,1) both;will-change:transform,opacity}
+@keyframes tcb-push-old{0%{transform:translate3d(0,0,0);opacity:1}100%{transform:translate3d(-26%,0,0);opacity:0}}
+@keyframes tcb-push-new{0%{transform:translate3d(14%,0,0);opacity:.4}100%{transform:translate3d(0,0,0);opacity:1}}
+@media(prefers-reduced-motion:reduce){.tcb-push-ghost,.tcb-push-arrive{animation:none!important}}
+</style>
+<script id="tcb-push-script">
+(()=>{
+ const controlId="kageraDisplayType", regionSelector=".kagera-table-wrap";
+ const control=controlId?document.getElementById(controlId):null;
+ const region=()=>{const candidates=[...document.querySelectorAll(regionSelector)];return candidates.find(e=>getComputedStyle(e).display!=='none')||candidates[0]||null};
+ let running=null;
+ function push(){
+   const node=region();if(!node||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+   if(running){running.remove();running=null}
+   const rect=node.getBoundingClientRect();if(rect.width<1||rect.height<1)return;
+   node.classList.add('tcb-push-stage');
+   const ghost=node.cloneNode(true);
+   ghost.removeAttribute('id');ghost.querySelectorAll('[id]').forEach(e=>e.removeAttribute('id'));
+   ghost.classList.add('tcb-push-ghost');ghost.classList.remove('tcb-push-stage');
+   ghost.setAttribute('aria-hidden','true');ghost.inert=true;
+   ghost.style.height=Math.min(rect.height,Math.max(window.innerHeight*1.4,500))+'px';
+   node.appendChild(ghost);running=ghost;
+   requestAnimationFrame(()=>requestAnimationFrame(()=>{
+     node.classList.add('tcb-push-arrive');
+     setTimeout(()=>{node.classList.remove('tcb-push-arrive');if(ghost.isConnected)ghost.remove();if(running===ghost)running=null},510);
+   }));
+ }
+ if(control)control.addEventListener('change',push,{capture:true});
+ // Keep the module's existing data fetching, filters, and renderers unchanged.
+})();
+</script>
 </body>
 </html>
