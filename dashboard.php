@@ -2985,7 +2985,7 @@ async function excelWithImage(canvas){
 async function wordEditable(){
  await library('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',()=>!!window.JSZip);
  update(65,'Building editable Word tables and text…');
- const zip=new JSZip(), declaration='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+ const zip=new JSZip(), declaration='<'+'?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
  const esc=xmlEscape;
  const run=(value,bold=false,color='382A20',size=18)=>'<w:r><w:rPr>'+(bold?'<w:b/>':'')+'<w:color w:val="'+color+'"/><w:sz w:val="'+size+'"/></w:rPr><w:t xml:space="preserve">'+esc(value)+'</w:t></w:r>';
  const paragraph=(value,opts={})=>'<w:p><w:pPr><w:jc w:val="'+(opts.align||'left')+'"/><w:spacing w:after="'+(opts.after??65)+'"/></w:pPr>'+run(value,!!opts.bold,opts.color||'382A20',opts.size||18)+'</w:p>';
