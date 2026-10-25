@@ -3,6 +3,8 @@ session_start();
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) { header('Location: login.php'); exit; }
 
 $display=strtolower(trim($_GET['display']??'sales'));
+$salesReportView=(string)($_GET['sales_report_view']??'preauction');
+if(!in_array($salesReportView,['preauction','wizara'],true))$salesReportView='preauction';
 if(!in_array($display,['sales','preauction','kagera','clean','direct','totalclean','farmgate'],true))$display='sales';
 /* Manual terminal market prices: persistent, report-date-specific and authenticated. */
 if(!isset($_SESSION['terminal_price_csrf']))$_SESSION['terminal_price_csrf']=bin2hex(random_bytes(24));
@@ -278,6 +280,16 @@ if($display==='preauction'){
  }catch(Throwable $e){$wednesdayDates=[];}
  $requestedReportDate=trim((string)($_GET['report_date']??''));
  $reportDate=(in_array($requestedReportDate,$wednesdayDates,true)?$requestedReportDate:($wednesdayDates?end($wednesdayDates):$seasonTo));
+ /* Friday reporting dates for the Wizara Summary, distinct from Wednesday pre-auction cut-offs. */
+ $wizaraFridayDates=[];
+ try{
+   $wf=new DateTime($from);while((int)$wf->format('N')!==5)$wf->modify('+1 day');
+   $wl=new DateTime($seasonTo);$now=new DateTime('today');if($now<$wl)$wl=$now;
+   while($wf<=$wl){$wizaraFridayDates[]=$wf->format('Y-m-d');$wf->modify('+7 days');}
+ }catch(Throwable $e){$wizaraFridayDates=[];}
+ if($salesReportView==='wizara'){
+   $reportDate=in_array($requestedReportDate,$wizaraFridayDates,true)?$requestedReportDate:($wizaraFridayDates?end($wizaraFridayDates):$seasonTo);
+ }
  /* All Pre Auction figures are cumulative only up to the selected Wednesday. */
  $to=$reportDate;
  $preDirectEndQ=$ddb->prepare("SELECT MAX(invoice_date) FROM public.direct_sales WHERE invoice_date BETWEEN :f AND :t");$preDirectEndQ->execute(['f'=>$from,'t'=>$to]);$preDirectEnd=$preDirectEndQ->fetchColumn();
@@ -364,7 +376,45 @@ if($display==='preauction'){
  $fq=$fdb->prepare("SELECT COALESCE(NULLIF(BTRIM(buyer_name),''),'Unspecified') name,SUM(COALESCE(kilos_to_be_sold,0)) kg,SUM(COALESCE(kilos_to_be_sold,0)*COALESCE(price_per_kilo_tzs,0)) val FROM public.farm_gate_contracts WHERE contract_date >= :f AND contract_date <= :t GROUP BY 1 HAVING SUM(COALESCE(kilos_to_be_sold,0))>0 ORDER BY kg DESC,val DESC");
  $fq->execute(['f'=>$from,'t'=>$to]);$preFarmBuyers=$fq->fetchAll();
  $preFarmEnd=$preFarm['end_date']??$preEnd;
- $dashboardTitle='Pre Auction Report';$dashboardSub='Coffee sales performance report';
+ /* Wizara report: derive auction comparisons and sales breakdown from actual transaction records. */
+ $wzClean=['number'=>'—','date'=>null,'rows'=>[]];$wzKagera=['number'=>'—','date'=>null,'rows'=>[]];
+ $wzCleanGrades=['AAA','AA','A','AB','B','PB','C','Lower Grades'];
+ $wzChannels=['Auction Sale','Local Sale','Direct Export','Local Roast'];
+ $wzTypes=['M-Arabica','H-Arabica','Robusta'];
+ $wzSales=[];foreach($wzTypes as $t){foreach($wzChannels as $ch)$wzSales[$t][$ch]=['kg'=>0.0,'val'=>0.0];}
+ if($salesReportView==='wizara'){
+  $wzEnd=$reportDate;
+  /* Most recent clean auction through selected reporting Friday. */
+  $wzQ=$cdb->prepare("SELECT auction_no,MAX(auction_date) d FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY auction_no ORDER BY d DESC,auction_no DESC LIMIT 1");
+  $wzQ->execute(['f'=>$from,'t'=>$wzEnd]);$wzAuction=$wzQ->fetch();
+  if($wzAuction){
+   $wzClean['number']=$wzAuction['auction_no'];$wzClean['date']=$wzAuction['d'];
+   $wzGrade="CASE WHEN UPPER(BTRIM(COALESCE(grade,''))) IN ('AAA','AA','A','AB','B','PB','C') THEN UPPER(BTRIM(grade)) ELSE 'Lower Grades' END";
+   $wzSold="UPPER(BTRIM(COALESCE(status,''))) IN ('SOLD','S')";
+   $wzQ=$cdb->prepare("SELECT $wzGrade g,SUM(COALESCE(n_kgs,0)) offered,SUM(CASE WHEN $wzSold THEN COALESCE(n_kgs,0) ELSE 0 END) sold,MIN(CASE WHEN $wzSold THEN price_per_50kg END) lo,MAX(CASE WHEN $wzSold THEN price_per_50kg END) hi,SUM(CASE WHEN $wzSold THEN COALESCE(n_kgs,0)*COALESCE(price_per_50kg,0) ELSE 0 END)/NULLIF(SUM(CASE WHEN $wzSold THEN COALESCE(n_kgs,0) ELSE 0 END),0) av FROM public.clean_auction_results WHERE auction_no=:a AND auction_date=:d GROUP BY 1");
+   $wzQ->execute(['a'=>$wzAuction['auction_no'],'d'=>$wzAuction['d']]);foreach($wzQ as $r)$wzClean['rows'][$r['g']]=$r;
+   $wzQ=$cdb->prepare("SELECT auction_no,MAX(auction_date) d FROM public.clean_auction_results WHERE auction_date<:d GROUP BY auction_no ORDER BY d DESC,auction_no DESC LIMIT 1");$wzQ->execute(['d'=>$wzAuction['d']]);$prev=$wzQ->fetch();
+   if($prev){$wzQ=$cdb->prepare("SELECT $wzGrade g,SUM(CASE WHEN $wzSold THEN COALESCE(n_kgs,0)*COALESCE(price_per_50kg,0) ELSE 0 END)/NULLIF(SUM(CASE WHEN $wzSold THEN COALESCE(n_kgs,0) ELSE 0 END),0) av FROM public.clean_auction_results WHERE auction_no=:a AND auction_date=:d GROUP BY 1");$wzQ->execute(['a'=>$prev['auction_no'],'d'=>$prev['d']]);foreach($wzQ as $r)if(isset($wzClean['rows'][$r['g']]))$wzClean['rows'][$r['g']]['prev']=$r['av'];}
+  }
+  /* Kagera auction: its own June-May season, with grade2 determining cherry vs clean. */
+  $wzQ=$kdb->prepare("SELECT auction_no,MAX(auction_date) d FROM public.kagera_auction_results WHERE auction_date BETWEEN :f AND :t GROUP BY auction_no ORDER BY d DESC,auction_no DESC LIMIT 1");
+  $wzQ->execute(['f'=>$kfrom,'t'=>$wzEnd]);$wzAuction=$wzQ->fetch();
+  $wzKind="CASE WHEN LOWER(COALESCE(grade2,'')) LIKE '%dry%cherry%' THEN 'Dry Cherry Coffee' WHEN LOWER(COALESCE(grade2,'')) LIKE '%clean%' THEN 'Clean Coffee' ELSE NULL END";
+  if($wzAuction){
+   $wzKagera['number']=$wzAuction['auction_no'];$wzKagera['date']=$wzAuction['d'];
+   $wzQ=$kdb->prepare("SELECT $wzKind g,SUM(COALESCE(kgs,0)) sold,MIN(price) lo,MAX(price) hi,SUM(COALESCE(kgs,0)*COALESCE(price,0))/NULLIF(SUM(COALESCE(kgs,0)),0) av FROM public.kagera_auction_results WHERE auction_no=:a AND auction_date=:d GROUP BY 1");$wzQ->execute(['a'=>$wzAuction['auction_no'],'d'=>$wzAuction['d']]);foreach($wzQ as $r)if($r['g'])$wzKagera['rows'][$r['g']]=$r;
+   $wzQ=$kdb->prepare("SELECT $wzKind g,SUM(COALESCE(kgs,0)) offered FROM public.kagera_auction_catalogue WHERE auction_no=:a AND auction_date=:d GROUP BY 1");$wzQ->execute(['a'=>$wzAuction['auction_no'],'d'=>$wzAuction['d']]);foreach($wzQ as $r)if($r['g'])$wzKagera['rows'][$r['g']]['offered']=$r['offered'];
+   $wzQ=$kdb->prepare("SELECT auction_no,MAX(auction_date) d FROM public.kagera_auction_results WHERE auction_date<:d GROUP BY auction_no ORDER BY d DESC LIMIT 1");$wzQ->execute(['d'=>$wzAuction['d']]);$prev=$wzQ->fetch();
+   if($prev){$wzQ=$kdb->prepare("SELECT $wzKind g,SUM(COALESCE(kgs,0)*COALESCE(price,0))/NULLIF(SUM(COALESCE(kgs,0)),0) av FROM public.kagera_auction_results WHERE auction_no=:a AND auction_date=:d GROUP BY 1");$wzQ->execute(['a'=>$prev['auction_no'],'d'=>$prev['d']]);foreach($wzQ as $r)if($r['g'])$wzKagera['rows'][$r['g']]['prev']=$r['av'];}
+  }
+  /* Reuse the same Local Sale net balance and category normalization as the existing report. */
+  $wzQ=$ddb->prepare("SELECT $dtype typ,$channelCase ch,SUM($qty) kg,SUM(($qty)*COALESCE(d.price_usd_50kg,0)/50.0) val FROM public.direct_sales d WHERE d.invoice_date BETWEEN :f AND :t AND $channelCase IS NOT NULL GROUP BY 1,2");
+  $wzQ->execute(['f'=>$from,'t'=>$wzEnd,'lf'=>$from,'lt'=>$wzEnd]);
+  foreach($wzQ as $r){$type=['Mild Arabica'=>'M-Arabica','Hard Arabica'=>'H-Arabica','Robusta'=>'Robusta'][$r['typ']]??null;if($type&&isset($wzSales[$type][$r['ch']])){$wzSales[$type][$r['ch']]=['kg'=>(float)$r['kg'],'val'=>(float)$r['val']];}}
+  $wzQ=$cdb->prepare("SELECT $act typ,SUM(COALESCE(n_kgs,0)) kg,SUM(COALESCE(n_kgs,0)*COALESCE(price_per_50kg,0)/50.0) val FROM public.clean_auction_results WHERE auction_date BETWEEN :f AND :t AND $sold GROUP BY 1");$wzQ->execute(['f'=>$from,'t'=>$wzEnd]);
+  foreach($wzQ as $r){$type=['Mild Arabica'=>'M-Arabica','Hard Arabica'=>'H-Arabica','Robusta'=>'Robusta'][$r['typ']]??null;if($type)$wzSales[$type]['Auction Sale']=['kg'=>(float)$r['kg'],'val'=>(float)$r['val']];}
+ }
+ $dashboardTitle='Sales Reports';$dashboardSub=$salesReportView==='wizara'?'Wizara Summary Report':'Pre Auction Report';
 }else
 if($display==='sales'){
  require_once __DIR__.'/kagera_database.php';
@@ -1923,11 +1973,18 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
             <label>Season</label>
             <select name="season" onchange="this.form.submit()"><option value="all" <?=$season==='all'?'selected':''?>>All Seasons</option><?php foreach($seasons ?: [$season] as $s): ?><option value="<?=htmlspecialchars($s)?>" <?=$s===$season?'selected':''?>><?=htmlspecialchars($s)?></option><?php endforeach ?></select>
             <label>Display</label>
-            <select name="display" onchange="this.form.submit()"><option value="sales" <?=$display==='sales'?'selected':''?>>Sales Dashboard</option><option value="preauction" <?=$display==='preauction'?'selected':''?>>Pre Auction Report</option><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option><option value="direct" <?=$display==='direct'?'selected':''?>>Direct Sales Summary</option><option value="totalclean" <?=$display==='totalclean'?'selected':''?>>Total Clean Coffee Summary</option><option value="farmgate" <?=$display==='farmgate'?'selected':''?>>Farmgate Contracts Summary</option></select>
+            <select name="display" onchange="this.form.submit()"><option value="sales" <?=$display==='sales'?'selected':''?>>Sales Dashboard</option><option value="preauction" <?=$display==='preauction'?'selected':''?>>Sales Reports</option><option value="kagera" <?=$display==='kagera'?'selected':''?>>Kagera Auction</option><option value="clean" <?=$display==='clean'?'selected':''?>>Clean Auction</option><option value="direct" <?=$display==='direct'?'selected':''?>>Direct Sales Summary</option><option value="totalclean" <?=$display==='totalclean'?'selected':''?>>Total Clean Coffee Summary</option><option value="farmgate" <?=$display==='farmgate'?'selected':''?>>Farmgate Contracts Summary</option></select>
+            <?php if($display==='preauction'): ?>
+            <label for="salesReportView">Report</label>
+            <select name="sales_report_view" id="salesReportView" onchange="this.form.submit()">
+              <option value="preauction" <?=$salesReportView==='preauction'?'selected':''?>>Pre Auction Report</option>
+              <option value="wizara" <?=$salesReportView==='wizara'?'selected':''?>>Wizara Summary Report</option>
+            </select>
+            <?php endif; ?>
             <?php if($display==='preauction'): ?>
             <label>Report Date</label>
-            <select name="report_date" onchange="this.form.submit()" title="Wednesday cut-off for the Pre Auction Report used at Thursday's 10:30 AM auction">
-              <?php foreach(array_reverse($wednesdayDates) as $wd): ?><option value="<?=htmlspecialchars($wd)?>" <?=$wd===$reportDate?'selected':''?>><?=date('D, d M Y',strtotime($wd))?></option><?php endforeach; ?>
+            <select name="report_date" onchange="this.form.submit()" title="Selected report cut-off date">
+              <?php foreach(array_reverse($salesReportView==='wizara'?$wizaraFridayDates:$wednesdayDates) as $wd): ?><option value="<?=htmlspecialchars($wd)?>" <?=$wd===$reportDate?'selected':''?>><?=date('D, d M Y',strtotime($wd))?></option><?php endforeach; ?>
             </select>
             <?php endif; ?>
             <?php if($display==='sales'): ?>
@@ -1950,6 +2007,64 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
 <div class="pre-export-bar" data-html2canvas-ignore="true"><div class="pre-export-wrap"><button type="button" id="preExportBtn" class="pre-export-btn">⇩ Export Report</button><div id="preExportMenu" class="pre-export-menu"><button type="button" data-format="pdf">PDF</button><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="doc">Word</button></div></div></div>
 <section class="pre-report">
  <div class="pre-paper" id="preAuctionReportPaper">
+ <?php if($salesReportView==='wizara'): ?>
+ <?php
+/* Included inside the authenticated Sales Reports dashboard. All values are
+   computed from the selected reporting Friday and the live database. */
+$wzNumber=static function($v,$digits=2){return $v===null||$v===''?'—':number_format((float)$v,$digits,'.',',');};
+$wzCell=static function($v,$digits=2)use($wzNumber){return $v===null||$v===''?'—':$wzNumber($v,$digits);};
+$wzTotalKg=0.0;$wzTotalVal=0.0;
+foreach($wzSales as $group)foreach($group as $r){$wzTotalKg+=$r['kg'];$wzTotalVal+=$r['val'];}
+$wzDateLabel=date('jS F Y',strtotime($reportDate));
+?>
+<style>
+.wizara-report{font-family:Arial,Helvetica,sans-serif;color:#1e2a24;font-size:11px;line-height:1.4}
+.wizara-report h1{font-size:16px;text-align:center;text-transform:uppercase;margin:0 0 18px;font-weight:800}
+.wizara-report h2{font-size:12px;text-align:center;margin:18px 0 8px;font-weight:800}
+.wizara-report p{font-size:11px;margin:8px 0 14px}
+.wizara-report .wz-table-scroll{overflow-x:auto;max-width:100%}
+.wizara-report table{border-collapse:collapse;width:100%;font-size:10px;table-layout:auto;margin:5px 0 20px}
+.wizara-report th,.wizara-report td{border:1px solid #52645b;padding:5px 6px;text-align:right;white-space:normal;overflow-wrap:break-word}
+.wizara-report th{background:#e8eee8;color:#173e2e;font-weight:700;text-align:center}
+.wizara-report td:first-child{text-align:left;font-weight:600}
+.wizara-report tr.wz-total td{background:#eaf2ed;font-weight:800;border-top:2px solid #365746}
+.wizara-report .wz-subnote{color:#526459;font-size:10px;margin-top:-12px}
+.wizara-report .wz-sales{font-size:9px}
+.wizara-report .wz-sales th,.wizara-report .wz-sales td{padding:5px 4px}
+.wizara-report .wz-sales td:first-child{min-width:74px}
+@media(max-width:800px){.wizara-report .wz-table-scroll{overflow-x:auto}.wizara-report .wz-sales{min-width:1020px}}
+</style>
+<article class="wizara-report">
+<h1>COFFEE SALES OVERVIEW SEASON ENDING <?=htmlspecialchars($wzDateLabel)?></h1>
+<h2>1. Market Situation as of <?=htmlspecialchars($wzDateLabel)?></h2>
+<?php
+$wzMarket=$coffeeMarketOnline['today']??null;
+$wzPrevious=$coffeeMarketOnline['previous']??null;
+?>
+<?php if($wzMarket && (float)($wzMarket['cents_lb']??0)>0): ?>
+<p>The New York Arabica Coffee Futures reference price is <strong><?=$wzNumber($wzMarket['cents_lb'],2)?> US cents per pound</strong>, equivalent to <strong>USD <?=$wzNumber(coffee_usd_per_50kg((float)$wzMarket['cents_lb']),2)?> per 50 kg</strong> (market observation: <?=htmlspecialchars((string)($wzMarket['date']??'not specified'))?>).
+<?php if($wzPrevious && isset($wzPrevious['cents_lb'])): ?> The previous comparable observation was <strong><?=$wzNumber($wzPrevious['cents_lb'],2)?> US cents per pound</strong>.<?php endif; ?></p>
+<?php else: ?><p>Verified terminal-market closing prices are unavailable for this reporting period. Market figures will be shown when a validated reference is available.</p><?php endif; ?>
+<h2>A. Auction Results No. <?=htmlspecialchars((string)$wzClean['number'])?>, Held on: <?=!empty($wzClean['date'])?date('j F Y',strtotime($wzClean['date'])):'—'?>, Ex-Warehouse</h2>
+<div class="wz-table-scroll"><table><thead><tr><th>Grade</th><th>Kgs Offered</th><th>Kgs Sold</th><th>Low USD/50kg</th><th>Average USD/50kg</th><th>High USD/50kg</th><th>Prev. Average Price USD/50kg</th></tr></thead><tbody>
+<?php $wzOff=0;$wzSold=0;$wzWeighted=0;$wzLow=null;$wzHigh=null;foreach($wzCleanGrades as $grade):$r=$wzClean['rows'][$grade]??[];$o=(float)($r['offered']??0);$kg=(float)($r['sold']??0);$wzOff+=$o;$wzSold+=$kg;$wzWeighted+=$kg*(float)($r['av']??0);if($kg>0){$wzLow=$wzLow===null?(float)$r['lo']:min($wzLow,(float)$r['lo']);$wzHigh=$wzHigh===null?(float)$r['hi']:max($wzHigh,(float)$r['hi']);} ?>
+<tr><td><?=htmlspecialchars($grade)?></td><td><?=$wzNumber($o,0)?></td><td><?=$wzNumber($kg,0)?></td><td><?=$kg?$wzCell($r['lo']??null):'—'?></td><td><?=$kg?$wzCell($r['av']??null):'—'?></td><td><?=$kg?$wzCell($r['hi']??null):'—'?></td><td><?=$wzCell($r['prev']??null)?></td></tr>
+<?php endforeach;?><tr class="wz-total"><td>Total</td><td><?=$wzNumber($wzOff,0)?></td><td><?=$wzNumber($wzSold,0)?></td><td><?=$wzCell($wzLow)?></td><td><?=$wzSold?$wzNumber($wzWeighted/$wzSold):'—'?></td><td><?=$wzCell($wzHigh)?></td><td>—</td></tr></tbody></table></div>
+<h2>B. Kagera Auction Results No. <?=htmlspecialchars((string)$wzKagera['number'])?>, Held on: <?=!empty($wzKagera['date'])?date('j F Y',strtotime($wzKagera['date'])):'—'?>, Ex-Warehouse</h2>
+<div class="wz-table-scroll"><table><thead><tr><th>Type of Coffee</th><th>Kgs Offered</th><th>Kgs Sold</th><th>Low TZS/kg</th><th>Average TZS/kg</th><th>High TZS/kg</th><th>Prev. Average Price TZS/kg</th></tr></thead><tbody>
+<?php $wzKO=0;$wzKS=0;foreach(['Dry Cherry Coffee','Clean Coffee'] as $kind):$r=$wzKagera['rows'][$kind]??[];$o=(float)($r['offered']??0);$kg=(float)($r['sold']??0);$wzKO+=$o;$wzKS+=$kg;?><tr><td><?=htmlspecialchars($kind)?></td><td><?=$wzNumber($o,0)?></td><td><?=$wzNumber($kg,0)?></td><td><?=$kg?$wzCell($r['lo']??null):'—'?></td><td><?=$kg?$wzCell($r['av']??null):'—'?></td><td><?=$kg?$wzCell($r['hi']??null):'—'?></td><td><?=$wzCell($r['prev']??null)?></td></tr><?php endforeach; ?>
+<tr class="wz-total"><td>Total</td><td><?=$wzNumber($wzKO,0)?></td><td><?=$wzNumber($wzKS,0)?></td><td>—</td><td>—</td><td>—</td><td>—</td></tr></tbody></table></div>
+<p class="wz-subnote">Kagera prices are shown in TZS/kg, reflecting the stored auction results. Clean Auction prices are in USD/50kg. Coffee classification uses Grade2.</p>
+<h2>C. Coffee Sales Summary From 1 July <?=htmlspecialchars(substr($from,0,4))?> to <?=htmlspecialchars($wzDateLabel)?></h2>
+<div class="wz-table-scroll"><table class="wz-sales"><thead><tr><th rowspan="2">Type of Coffee</th><?php foreach($wzChannels as $ch):?><th colspan="3"><?=htmlspecialchars($ch)?></th><?php endforeach;?><th colspan="3">Total</th></tr><tr><?php foreach($wzChannels as $ch):?><th>Kg</th><th>USD</th><th>USD/50kg</th><?php endforeach;?><th>Kg</th><th>USD</th><th>%</th></tr></thead><tbody>
+<?php foreach($wzTypes as $type):$typeKg=0;$typeVal=0;foreach($wzSales[$type] as $r){$typeKg+=$r['kg'];$typeVal+=$r['val'];} ?><tr><td><?=htmlspecialchars($type)?></td><?php foreach($wzChannels as $ch):$r=$wzSales[$type][$ch];?><td><?=$wzNumber($r['kg'],0)?></td><td><?=$wzNumber($r['val'],2)?></td><td><?=$r['kg']>0?$wzNumber($r['val']*50/$r['kg'],2):'—'?></td><?php endforeach;?><td><?=$wzNumber($typeKg,0)?></td><td><?=$wzNumber($typeVal,2)?></td><td><?=$wzTotalKg>0?$wzNumber($typeKg*100/$wzTotalKg,2):'—'?></td></tr><?php endforeach; ?>
+<tr class="wz-total"><td>Grand Total</td><?php foreach($wzChannels as $ch):$kg=0;$val=0;foreach($wzTypes as $type){$kg+=$wzSales[$type][$ch]['kg'];$val+=$wzSales[$type][$ch]['val'];}?><td><?=$wzNumber($kg,0)?></td><td><?=$wzNumber($val,2)?></td><td><?=$kg>0?$wzNumber($val*50/$kg,2):'—'?></td><?php endforeach;?><td><?=$wzNumber($wzTotalKg,0)?></td><td><?=$wzNumber($wzTotalVal,2)?></td><td><?=$wzTotalKg>0?'100.00':'—'?></td></tr>
+<tr><td>Channel Share (%)</td><?php foreach($wzChannels as $ch):$kg=0;foreach($wzTypes as $type)$kg+=$wzSales[$type][$ch]['kg'];?><td><?=$wzTotalKg>0?$wzNumber($kg*100/$wzTotalKg,2):'—'?></td><td colspan="2">—</td><?php endforeach;?><td colspan="3">—</td></tr>
+</tbody></table></div>
+<p class="wz-subnote">Sales totals reflect the dashboard's existing channel rules, including the net Local Sale balance. The example Word document is used as a layout reference, not as a source of live figures.</p>
+</article>
+
+ <?php else: ?>
   <h1 class="pre-main-title">COFFEE SALES OVERVIEW TRADE SEASON ENDING <?=strtoupper(date('jS F Y',strtotime($reportDate)))?></h1>
   <h2>1.0 MARKET SITUATION TODAY</h2>
   <p><?php
@@ -2030,7 +2145,8 @@ body:has(#directSummaryPanel) .direct-compact-stat em{font-style:normal;font-siz
   <p>As of <b><?= date('jS F Y',strtotime($reportDate)) ?></b>, <b><?=nf($preFarm['contracts']??0)?> contracts</b> of parchment coffee have been registered, and <b><?=nf($preFarm['buyers']??0)?> parchment coffee buyers</b> have been involved in consuming about <b><?=nf(($preFarm['kg']??0)/1000,3)?> MT</b> equivalent to <b>TZS <?=nf($preFarm['val']??0,2)?></b>.</p>
   <h3>6.1.1: Table 11: Coffee Buyers at Farmgate Market Season <?=htmlspecialchars($season)?> Ending <?= date('jS F Y',strtotime($reportDate)) ?>.</h3>
   <div class="pre-scroll"><table class="pre-farm-table"><thead><tr><th>S/N</th><th>Buyer</th><th>Quantity Sold (MT)</th><th>Value (TZS)</th><th>% Share</th></tr></thead><tbody><?php $i=1;$farmKg=(float)($preFarm['kg']??0);$farmVal=(float)($preFarm['val']??0);foreach($preFarmBuyers as$r):?><tr><td><?=$i++?></td><td><?=htmlspecialchars(farm_display_name((string)$r['name']))?></td><td><?=nf($r['kg']/1000,3)?></td><td><?=nf($r['val'],2)?></td><td><?=nf(pct($r['kg'],$farmKg),2)?></td></tr><?php endforeach;?><?php if(!$preFarmBuyers):?><tr><td colspan="5" class="empty">No farmgate contracts found for this season.</td></tr><?php endif;?><tr class="gt"><td colspan="2">Grand Total</td><td><?=nf($farmKg/1000,3)?></td><td><?=nf($farmVal,2)?></td><td><?=$farmKg>0?'100':'0'?></td></tr></tbody></table></div>
- </div>
+ <?php endif; /* sales report view */ ?>
+</div>
 </section>
 <?php elseif($display==='sales'): ?>
 <div class="sales-actions" data-html2canvas-ignore="true"><div class="sales-language-switch" role="group" aria-label="Dashboard language"><button type="button" id="salesLangEnglish" class="sales-lang-btn active" aria-pressed="true">English</button><button type="button" id="salesLangSwahili" class="sales-lang-btn" aria-pressed="false">Kiswahili</button></div><button type="button" id="salesGuideToggle" class="pre-export-btn" aria-controls="salesDashboardGuide" aria-expanded="false">Show Guide</button><div class="sales-export-control pre-export-wrap"><button type="button" id="salesExportButton" class="pre-export-btn" aria-haspopup="true" aria-expanded="false">⇩ Export Dashboard</button><div id="salesExportOptions" class="pre-export-menu" hidden><button type="button" data-type="pdf">PDF</button><button type="button" data-type="xlsx">Excel</button><button type="button" data-type="doc">Word</button><button type="button" data-type="png">PNG Image</button><button type="button" data-type="jpg">JPEG Image</button></div></div></div>
@@ -2732,7 +2848,7 @@ const compactChart=()=>window.innerWidth<640;\nnew Chart(ctx,{data:{labels:aucti
  btn.addEventListener('click',e=>{e.stopPropagation();menu.classList.toggle('show')});
  document.addEventListener('click',()=>menu.classList.remove('show'));
  const season=<?=json_encode($season??'')?>;
- const base='Pre_Auction_Report_'+String(season||'').replace('/','-');
+ const base=<?=json_encode($salesReportView==='wizara'?'Wizara_Summary_Report_':'Pre_Auction_Report_')?>+String(season||'').replace('/','-');
  function word(){const html='<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial;font-size:10pt}h1{text-align:center;font-size:14pt}h2{font-size:12pt}h3{font-size:11pt}table{border-collapse:collapse;width:100%;margin:6px 0 14px}th,td{border:1px solid #555;padding:4px}th{background:#d9e8f6;text-align:center}td{text-align:right}td:first-child,td:nth-child(2){text-align:left}.gt{font-weight:bold}</style></head><body>'+paper.innerHTML.replace(/<div class="pre-export-bar"[\s\S]*?<\/div>\s*<\/div>/,'')+'</body></html>';const b=new Blob(['\ufeff',html],{type:'application/msword'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=base+'.doc';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
  function excel(){if(!window.XLSX){alert('Excel export library is not available.');return}const wb=XLSX.utils.book_new();paper.querySelectorAll('table').forEach((t,i)=>{const ws=XLSX.utils.table_to_sheet(t,{raw:true});XLSX.utils.book_append_sheet(wb,ws,'Table '+(i+1))});XLSX.writeFile(wb,base+'.xlsx')}
  async function pdf(){
