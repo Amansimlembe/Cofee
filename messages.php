@@ -77,6 +77,14 @@ if($action){
  .bubble{max-width:90%}
 }
 @media(max-width:420px){.head .avatar{width:33px;height:33px}.head{gap:5px}.actions .action{padding:7px 5px;font-size:11px}.compose{gap:6px;padding:8px}.send{padding:0 10px}}
+
+/* Keyboard-safe embedded chat: the parent controls the frame height. */
+html,body{height:100%;max-height:100%;overscroll-behavior:none}
+.app{height:100%!important;max-height:100%!important;min-height:0!important}
+.main{min-height:0!important}
+.messages{min-height:0!important;overflow-y:auto!important;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.compose{flex:none;position:relative;z-index:2;padding-bottom:max(9px,env(safe-area-inset-bottom,0px))}
+.compose textarea{font-size:16px}
 </style></head><body><div class="app" id="app"><aside class="side"><div class="side-top"><div class="brand-row"><div class="brand">💬 Messages</div><button type="button" class="search-toggle" id="searchToggle" aria-label="Search colleagues" aria-expanded="false" title="Search colleagues"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button></div><input class="search" id="search" placeholder="Search colleagues…" aria-label="Search colleagues" hidden></div><div class="users" id="users"></div></aside><main class="main"><header class="head"><button class="back" id="back" aria-label="Back to contacts">‹</button><span class="avatar" id="headAvatar">✦</span><div style="min-width:0"><strong id="headName">Team conversations</strong><div class="hint" id="headStatus">Select a contact to chat</div></div><div class="actions"><button class="action" id="audio" title="Audio call" disabled>☎ Audio</button><button class="action" id="video" title="Video call" disabled>▣ Video</button></div></header><div class="notice" id="notice"<?=isset($startupError)?' style="display:block"':''?>><?=isset($startupError)?htmlspecialchars($startupError,ENT_QUOTES,'UTF-8'):''?></div><div class="messages" id="messages"><div class="empty"><b>Start a conversation</b><div>Select a colleague from the contact list to view messages.</div></div></div><form class="compose" id="compose"><textarea id="body" placeholder="Write a message…" aria-label="Message" disabled></textarea><button class="send" id="send" disabled>Send ➤</button></form></main></div><div class="callbox" id="callbox"><h2 id="calltitle">Calling…</h2><div class="videos"><video id="remote" autoplay playsinline></video><video id="local" autoplay muted playsinline></video></div><div class="callcontrols"><button class="accept" id="accept" style="display:none">Answer</button><button id="mute">Mute</button><button id="camera">Camera off</button><button class="hang" id="hang">End call</button></div></div><script>
 const csrf=<?=json_encode($chatCsrf??'')?>;let me=<?=json_encode($me??null)?>,selected=null,users=[],lastMessages='',currentCall=null,pc=null,stream=null,lastSignal=0,pendingCandidates=[],answering=false,renderedContacts='',messageBusy=false;
 const $=id=>document.getElementById(id);const escapeHTML=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -98,4 +106,22 @@ async function pollSignals(){if(!currentCall)return;const d=await api('signals',
 async function refreshCalls(){try{if(!currentCall){const d=await api('calls');const incoming=d.calls.find(c=>+c.callee_id===me&&c.status==='ringing');if(incoming){currentCall=incoming;lastSignal=0;$('callbox').style.display='flex';$('calltitle').textContent=(incoming.caller_name||'Colleague')+' is calling ('+incoming.kind+')';$('accept').style.display='';$('local').style.display='none';$('camera').style.display='none';}}else if(pc)await pollSignals();else{const d=await api('calls');if(!d.calls.some(c=>+c.id===+currentCall.id))await endCall();}}catch(e){console.warn(e)}}
 $('audio').onclick=()=>startCall('audio');$('video').onclick=()=>startCall('video');$('accept').onclick=acceptCall;$('hang').onclick=endCall;$('mute').onclick=()=>{if(!stream)return;const t=stream.getAudioTracks()[0];if(t){t.enabled=!t.enabled;$('mute').textContent=t.enabled?'Mute':'Unmute'}};$('camera').onclick=()=>{const t=stream?.getVideoTracks()[0];if(t){t.enabled=!t.enabled;$('camera').textContent=t.enabled?'Camera off':'Camera on'}};
 refreshUsers();setInterval(()=>{if(!document.hidden){refreshUsers();refreshMessages();refreshCalls()}},2500);refreshCalls();
+
+/* Ask the dashboard shell to fit this iframe above the Android keyboard. */
+(function(){
+  const field=document.getElementById('body');
+  const panel=document.getElementById('messages');
+  let lastHeight=0;
+  function scrollToLatest(){requestAnimationFrame(()=>{panel.scrollTop=panel.scrollHeight;});}
+  function signalKeyboard(active){
+    try{window.parent.postMessage({type:'tcb-chat-keyboard',active:!!active},window.location.origin);}catch(e){}
+  }
+  field.addEventListener('focus',()=>{signalKeyboard(true);scrollToLatest();setTimeout(scrollToLatest,180);});
+  field.addEventListener('blur',()=>{setTimeout(()=>signalKeyboard(false),100);});
+  window.addEventListener('message',e=>{
+    if(e.origin!==window.location.origin||!e.data||e.data.type!=='tcb-chat-viewport')return;
+    if(e.data.height!==lastHeight){lastHeight=e.data.height;scrollToLatest();}
+  });
+  window.addEventListener('resize',()=>{if(document.activeElement===field)scrollToLatest();});
+})();
 </script></body></html>

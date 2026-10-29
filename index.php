@@ -1340,6 +1340,10 @@ html,body{max-width:100%;overflow-x:hidden}
 .messages-frame { display:block; width:100%; height:100%; min-height:100%; border:0; margin:0; padding:0; background:transparent; }
 @media(max-width:900px){.messages-page-section{min-height:calc(100dvh - var(--shell-topbar) - 8px);height:calc(100dvh - var(--shell-topbar) - 8px)}}
 @media(max-width:600px){.messages-page-section{min-height:calc(100dvh - var(--shell-topbar) - 4px);height:calc(100dvh - var(--shell-topbar) - 4px)}}
+
+/* Only chat uses a keyboard-aware viewport; do not stretch its iframe. */
+#messages-calls.messages-page-section{min-height:0!important;max-height:none;overflow:hidden}
+#messages-calls .messages-frame{min-height:0!important;height:100%;}
 </style>
 
 </head>
@@ -2341,6 +2345,41 @@ function showSection(
    if(parent && el.closest('.submenu'))parent.classList.add('open');
  }
  restore();
+})();
+</script>
+
+<script>
+/* Android virtual keyboard: resize the embedded chat to the visible viewport.
+   Keeping the composer inside this resized frame prevents it being pushed away. */
+(function(){
+  const section=document.getElementById('messages-calls');
+  const frame=document.getElementById('messagesFrame');
+  if(!section||!frame)return;
+  let keyboardFocused=false;
+  function fitChat(){
+    const vv=window.visualViewport;
+    const viewportBottom=vv ? vv.offsetTop+vv.height : window.innerHeight;
+    const top=section.getBoundingClientRect().top;
+    const height=Math.max(180,Math.floor(viewportBottom-top-2));
+    section.style.setProperty('height',height+'px','important');
+    section.style.setProperty('min-height','0px','important');
+    frame.style.height=height+'px';
+    if(keyboardFocused){
+      try{frame.contentWindow.postMessage({type:'tcb-chat-viewport',height},window.location.origin)}catch(e){}
+    }
+  }
+  window.addEventListener('message',function(e){
+    if(e.origin!==window.location.origin||e.source!==frame.contentWindow||!e.data||e.data.type!=='tcb-chat-keyboard')return;
+    keyboardFocused=!!e.data.active;
+    fitChat();
+    setTimeout(fitChat,120);
+    setTimeout(fitChat,350);
+  });
+  if(window.visualViewport){window.visualViewport.addEventListener('resize',fitChat);window.visualViewport.addEventListener('scroll',fitChat);}
+  window.addEventListener('resize',fitChat);
+  document.addEventListener('click',()=>requestAnimationFrame(fitChat));
+  new ResizeObserver(fitChat).observe(document.querySelector('.topbar')||document.body);
+  fitChat();
 })();
 </script>
 </body>
