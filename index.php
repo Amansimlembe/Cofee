@@ -1452,7 +1452,8 @@ html,body{max-width:100%;overflow-x:hidden}
                     </a>
                 </li>
 
-            </ul>
+                <li class="menu-item"><div class="menu-link" onclick="openMessages(this)"><div class="menu-left"><span class="menu-icon">💬</span><span class="menu-text">Messages &amp; Calls</span></div></div></li>
+    </ul>
 
 
             <!-- COLLAPSED TOOLTIP -->
@@ -1569,6 +1570,7 @@ html,body{max-width:100%;overflow-x:hidden}
         </li>
 
 
+        <section id="messages-calls" class="section"><iframe id="messagesFrame" src="about:blank" title="Messages and Calls" style="width:100%;height:calc(100vh - 110px);min-height:600px;border:0;display:block"></iframe></section>
         <!-- COFFEE LICENSES -->
 
         <li class="menu-item">
@@ -2167,6 +2169,7 @@ function openDirectSales(category, clickedElement) {
 /* =========================================================
    COFFEE LICENCES NAVIGATION
 ========================================================= */
+function openMessages(clickedElement){transitionToSection('messages-calls');const frame=document.getElementById('messagesFrame');if(frame&&frame.getAttribute('src')==='about:blank')frame.src='messages.php';document.querySelectorAll('.menu-link, .submenu a').forEach(x=>x.classList.remove('active'));if(clickedElement)clickedElement.classList.add('active');document.getElementById('topbarTitle').textContent='Messages & Calls';}
 function openLicenses(clickedElement) {
     transitionToSection("coffee-licenses");
     const frame=document.getElementById("licensesFrame");
@@ -2277,7 +2280,7 @@ function showSection(
 (function(){
  const KEY='tcb:last-module:v2';
  const entries=[...document.querySelectorAll('.menu-link[onclick], .submenu a[onclick], .collapsed-tooltip a[onclick]')];
- const valid=/^(?:showSection\('dashboard'|openCleanAuction|openKageraAuction|openDirectSales|openFarmGate|openLicenses)/;
+ const valid=/^(?:showSection\('dashboard'|openCleanAuction|openKageraAuction|openDirectSales|openFarmGate|openLicenses|openMessages)/;
  function identify(el){
    const handler=(el.getAttribute('onclick')||'').trim();
    if(!valid.test(handler))return null;
@@ -2312,6 +2315,7 @@ function showSection(
    else if(id==='openKageraAuction')openKageraAuction(el);
    else if(id==='openFarmGate')openFarmGate(el);
    else if(id==='openLicenses')openLicenses(el);
+   else if(id==='openMessages')openMessages(el);
    restoringInitialModule=false;
    // Highlight the parent sidebar group for expanded menus.
    const parent=el.closest('.menu-item');
