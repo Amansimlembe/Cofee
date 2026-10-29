@@ -1334,6 +1334,12 @@ html,body{max-width:100%;overflow-x:hidden}
 #dashboard{overflow:hidden!important}
 #dashboardFrame{display:block;width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important}
 @media(max-width:900px){.main,.sidebar.collapsed ~ .main{max-width:calc(100% - var(--shell-sidebar))}}
+
+/* Independent messaging viewport follows the same responsive shell sizing. */
+.messages-page-section { width:100%; min-height:calc(100dvh - var(--shell-topbar) - 16px); height:calc(100dvh - var(--shell-topbar) - 16px); padding:0; overflow:hidden; }
+.messages-frame { display:block; width:100%; height:100%; min-height:100%; border:0; margin:0; padding:0; background:transparent; }
+@media(max-width:900px){.messages-page-section{min-height:calc(100dvh - var(--shell-topbar) - 8px);height:calc(100dvh - var(--shell-topbar) - 8px)}}
+@media(max-width:600px){.messages-page-section{min-height:calc(100dvh - var(--shell-topbar) - 4px);height:calc(100dvh - var(--shell-topbar) - 4px)}}
 </style>
 
 </head>
@@ -1452,7 +1458,6 @@ html,body{max-width:100%;overflow-x:hidden}
                     </a>
                 </li>
 
-                <li class="menu-item"><div class="menu-link" onclick="openMessages(this)"><div class="menu-left"><span class="menu-icon">💬</span><span class="menu-text">Messages &amp; Calls</span></div></div></li>
     </ul>
 
 
@@ -1570,7 +1575,6 @@ html,body{max-width:100%;overflow-x:hidden}
         </li>
 
 
-        <section id="messages-calls" class="section"><iframe id="messagesFrame" src="about:blank" title="Messages and Calls" style="width:100%;height:calc(100vh - 110px);min-height:600px;border:0;display:block"></iframe></section>
         <!-- COFFEE LICENSES -->
 
         <li class="menu-item">
@@ -1595,6 +1599,16 @@ html,body{max-width:100%;overflow-x:hidden}
 
         </li>
 
+
+        <!-- INDEPENDENT MESSAGING MODULE: sibling of Coffee Licenses -->
+        <li class="menu-item">
+            <div class="menu-link" onclick="openMessages(this)">
+                <div class="menu-left">
+                    <span class="menu-icon">💬</span>
+                    <span class="menu-text">Messages &amp; Calls</span>
+                </div>
+            </div>
+        </li>
 
     </ul>
 
@@ -1799,6 +1813,11 @@ html,body{max-width:100%;overflow-x:hidden}
         <section id="coffee-licenses" class="section license-page-section">
 <div class="frame-placeholder" role="status" aria-label="Loading Coffee Licences"><h2>Coffee Licences</h2><p>Preparing the latest information…</p><div class="frame-skeleton short"></div><div class="frame-skeleton big"></div><div class="frame-skeleton big"></div><div class="frame-skeleton"></div></div>
             <iframe id="licensesFrame" src="about:blank" title="Coffee Licences" class="license-frame"></iframe>
+        </section>
+
+        <!-- Independent Messages & Calls content: outside all auction sections -->
+        <section id="messages-calls" class="section messages-page-section">
+            <iframe id="messagesFrame" src="about:blank" title="Messages and Calls" class="messages-frame" loading="lazy"></iframe>
         </section>
 
 
