@@ -87,6 +87,11 @@ $default_users = [
         "username" => "aman@coffee.com",
         "password" => "Ammy@123"
     ],
+     [
+        "username" => "nyarusi@coffee.com",
+        "password" => "Nyarusi@123"
+    ],
+
 
     [
         "username" => "mtitu@coffee.com",
