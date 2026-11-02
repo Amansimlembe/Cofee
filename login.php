@@ -96,7 +96,7 @@ if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['signup_action'])){
  $act=(string)$_POST['signup_action'];
  if($act==='start'){
   $email=strtolower(trim((string)($_POST['email']??'')));$name=trim((string)($_POST['display_name']??''));$password=(string)($_POST['new_password']??'');
-  if(!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>100||mb_strlen($name)<2||mb_strlen($name)>150||strlen($password)<12)throw new RuntimeException('Enter a valid email, name and password of at least 12 characters.');
+  if(!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>100||mb_strlen($name)<2||mb_strlen($name)>150||strlen($password)<6)throw new RuntimeException('Enter a valid email, name and password of at least 6 characters.');
   $q=$pdo->prepare('SELECT 1 FROM users WHERE lower(username)=?');$q->execute([$email]);if($q->fetchColumn())throw new RuntimeException('This email is already registered. Please log in.');
   $q=$pdo->prepare('SELECT sent_at FROM signup_otps WHERE email=?');$q->execute([$email]);$last=$q->fetchColumn();if($last&&time()-strtotime($last)<60)throw new RuntimeException('Please wait one minute before requesting another code.');
   $otp=(string)random_int(100000,999999);if(!sendSignupOtp($email,$otp))throw new RuntimeException('Could not send email. Check email service configuration or try later.');
@@ -608,146 +608,67 @@ body {
      LOGIN PAGE
 ========================================================= -->
 
-<div class="login-page">
-
-    <div class="login-container">
-
-        <div class="login-card">
-
-
-            <div class="login-logo">
-                ☕
-            </div>
-
-
-            <h1>
-                Coffee Sales Analysis
-            </h1>
-
-
-            <p class="login-subtitle">
-                Tanzania Coffee Market Management System
-            </p>
-
-
-            <?php if ($login_error): ?>
-
-                <div class="login-error">
-                    <?= htmlspecialchars($login_error) ?>
-                </div>
-
-            <?php endif; ?>
-
-
-            <form method="POST">
-
-
-                <div class="form-group">
-
-                    <label for="username">
-                        Username
-                    </label>
-
-                    <input
-                        type="text"
-                        id="username"
-                        name="username"
-                        placeholder="Enter username"
-                        required
-                        autofocus
-                    >
-
-                </div>
-
-
-                <div class="form-group">
-
-                    <label for="password">
-                        Password
-                    </label>
-
-
-                    <div class="password-wrapper">
-
-                        <input
-                            type="password"
-                            id="password"
-                            name="password"
-                            placeholder="Enter password"
-                            required
-                        >
-
-
-                        <button
-                            type="button"
-                            class="password-toggle"
-                            onclick="togglePassword()">
-
-                            👁
-
-                        </button>
-
-                    </div>
-
-                </div>
-
-
-                <button
-                    type="submit"
-                    name="login"
-                    class="login-button"
-                    id="loginButton">
-
-                    <span class="login-default">
-                        Login
-                    </span>
-
-                    <span class="login-loading" aria-hidden="true">
-                        <span class="coffee-spinner"></span>
-                        <span>Logging in...</span>
-                    </span>
-
-                </button>
-
-
-            </form>
-
-
-            <div style="margin-top:24px;text-align:center;border-top:1px solid #e6dfdc;padding-top:22px">
-              <strong style="display:block;color:#3e2723;font-size:17px;margin-bottom:10px">New to Coffee Sales Analysis?</strong>
-              <a href="#signupPanel" style="display:block;background:#f4ebe7;color:#3e2723;padding:14px 18px;border:2px solid #795548;border-radius:9px;font-size:16px;font-weight:700;text-decoration:none">Sign Up — Create Account</a>
-            </div>
-            <div id="signupPanel" style="margin-top:18px;border-top:1px solid #ddd;padding-top:18px">
-              <h2 style="font-size:18px;margin-bottom:12px">Sign Up — <?=htmlspecialchars(ucfirst($signupStep))?></h2>
-              <?php if($signupMessage):?><p style="padding:10px;background:#fff4e8;margin-bottom:12px"><?=htmlspecialchars($signupMessage,ENT_QUOTES,'UTF-8')?></p><?php endif;?>
-              <?php if($signupStep==='start'):?>
-              <form method="post"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'])?>"><input type="hidden" name="signup_action" value="start">
-                <div class="form-group"><label>Full name</label><input name="display_name" maxlength="150" required></div>
-                <div class="form-group"><label>Email</label><input type="email" name="email" required></div>
-                <div class="form-group"><label>Password (12+ characters)</label><input type="password" name="new_password" minlength="12" required></div>
-                <button class="login-button" type="submit">Send email OTP</button></form>
-              <?php elseif($signupStep==='otp'):?>
-              <form method="post"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'])?>"><input type="hidden" name="signup_action" value="otp"><div class="form-group"><label>Six-digit email code</label><input name="otp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></div><button class="login-button">Verify email</button></form>
-              <?php else:?>
-              <form method="post" id="countryForm"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'])?>"><input type="hidden" name="signup_action" value="country"><div class="form-group"><label>Country you are currently in</label><select name="country" required style="width:100%;padding:12px"><option value="">Select country</option><?php foreach($countries as $iso=>$prefix):?><option value="<?=htmlspecialchars($iso)?>"><?=htmlspecialchars(['TZ'=>'Tanzania','KE'=>'Kenya','UG'=>'Uganda','RW'=>'Rwanda','BI'=>'Burundi','ZA'=>'South Africa'][$iso])?> (<?=htmlspecialchars($prefix)?>)</option><?php endforeach;?></select></div><input type="hidden" name="lat" id="signupLat"><input type="hidden" name="lon" id="signupLon"><p style="font-size:12px;margin-bottom:12px">Your browser will request permission to share your location. A country match is required.</p><button class="login-button" id="countrySubmit">Verify location & create account</button></form>
-              <script>document.getElementById('countryForm').addEventListener('submit',function(e){if(this.dataset.ready==='1')return;e.preventDefault();const form=this;if(!navigator.geolocation){alert('Location is not supported.');return;}navigator.geolocation.getCurrentPosition(p=>{document.getElementById('signupLat').value=p.coords.latitude;document.getElementById('signupLon').value=p.coords.longitude;form.dataset.ready='1';form.requestSubmit();},err=>alert('Location permission or GPS failed: '+err.message),{enableHighAccuracy:true,timeout:15000,maximumAge:0});});</script>
-              <?php endif;?>
-              <p style="font-size:11px;color:#777;margin-top:12px">Generated numbers identify users inside Messages only. They are not SIM/mobile telephone numbers.</p>
-            </div>
-            <div class="login-footer">
-
-                Coffee Sales Data Analysis System
-                <br>
-                Tanzania Coffee Market
-
-            </div>
-
-
-        </div>
-
-    </div>
-
+<?php $showSignup = (($_GET['view']??'')==='signup') || ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['signup_action'])) || ($signupStep!=='start' && !$login_error); ?>
+<style>
+body{background:#f5f3f0;color:#292524}
+.login-page{min-height:100vh;background:radial-gradient(circle at 12% 12%,#e8e0d8 0,transparent 38%),linear-gradient(145deg,#f8f7f5,#ece7e1);padding:32px 18px}
+.login-container{max-width:460px}
+.login-card{border:1px solid #e7e1db;border-radius:18px;padding:38px 38px 30px;box-shadow:0 20px 65px rgba(44,30,24,.10);animation:none}
+.login-logo{width:58px;height:58px;font-size:27px;margin-bottom:18px;box-shadow:none;border-radius:15px}
+.login-card h1{font-size:24px;letter-spacing:-.6px}
+.login-subtitle{margin-bottom:27px;line-height:1.5}
+.auth-switch{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#f4f1ee;border:1px solid #e9e3dd;border-radius:11px;padding:5px;margin-bottom:26px}
+.auth-switch button{border:0;border-radius:8px;padding:12px 8px;font-size:14px;font-weight:700;color:#786b64;background:transparent;cursor:pointer}
+.auth-switch button[aria-selected="true"]{color:#3e2723;background:white;box-shadow:0 2px 7px rgba(0,0,0,.08)}
+.auth-view[hidden]{display:none!important}
+.form-group{margin-bottom:17px}
+.form-group label{font-size:12px;letter-spacing:.1px}
+.form-group input,.form-group select{width:100%;height:46px;border:1px solid #dcd6d0;border-radius:8px;padding:0 13px;font-size:14px;background:white}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:#795548;box-shadow:0 0 0 3px rgba(121,85,72,.12)}
+.login-button{height:48px;margin-top:6px}
+.auth-note{color:#82766e;font-size:12px;line-height:1.6;text-align:center;margin-top:17px}
+.auth-step{font-size:13px;color:#766b64;margin:-9px 0 20px;text-align:center}
+.login-footer{margin-top:26px;padding-top:20px;border-top:1px solid #eee9e5;color:#8b817a;font-size:11px;line-height:1.7}
+@media(max-width:520px){.login-card{padding:29px 22px 24px}.login-page{padding:16px}}
+</style>
+<div class="login-page"><div class="login-container"><main class="login-card">
+<div class="login-logo" aria-hidden="true">☕</div>
+<h1>Coffee Sales Analysis</h1>
+<p class="login-subtitle">Secure access to the Tanzania Coffee Market Management System</p>
+<div class="auth-switch" role="tablist" aria-label="Account access">
+<button type="button" id="loginTab" role="tab" aria-controls="loginView" aria-selected="<?= $showSignup?'false':'true' ?>" onclick="showAuth('login')">Sign in</button>
+<button type="button" id="signupTab" role="tab" aria-controls="signupView" aria-selected="<?= $showSignup?'true':'false' ?>" onclick="showAuth('signup')">Create account</button>
 </div>
+<section id="loginView" class="auth-view" role="tabpanel" <?= $showSignup?'hidden':'' ?>>
+<?php if($login_error):?><div class="login-error"><?=htmlspecialchars($login_error,ENT_QUOTES,'UTF-8')?></div><?php endif;?>
+<form method="post" autocomplete="on">
+<div class="form-group"><label for="username">Email address</label><input id="username" name="username" type="text" autocomplete="username" placeholder="name@example.com" required></div>
+<div class="form-group"><label for="password">Password</label><div class="password-wrapper"><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" class="password-toggle" aria-label="Show or hide password" onclick="togglePassword()">👁</button></div></div>
+<button class="login-button" type="submit" name="login" id="loginButton"><span class="login-default">Sign in securely</span><span class="login-loading" aria-hidden="true"><span class="coffee-spinner"></span><span>Signing in...</span></span></button>
+</form><p class="auth-note">Use your registered email address and password.</p></section>
+<section id="signupView" class="auth-view" role="tabpanel" <?= $showSignup?'':'hidden' ?>>
+<h2 style="font-size:18px;color:#3e2723;text-align:center;margin-bottom:14px">Create your account</h2>
+<p class="auth-step"><?php if($signupStep==='start'):?>Step 1 of 3 · Account details<?php elseif($signupStep==='otp'):?>Step 2 of 3 · Verify your email<?php else:?>Step 3 of 3 · Confirm your country<?php endif;?></p>
+<?php if($signupMessage):?><div class="login-error" style="background:#f9f1e9;color:#68452f;border-color:#b18464"><?=htmlspecialchars($signupMessage,ENT_QUOTES,'UTF-8')?></div><?php endif;?>
+<?php if($signupStep==='start'):?>
+<form method="post"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'],ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="signup_action" value="start">
+<div class="form-group"><label for="display_name">Full name</label><input id="display_name" name="display_name" maxlength="150" autocomplete="name" placeholder="Your full name" required></div>
+<div class="form-group"><label for="email">Email address</label><input id="email" type="email" name="email" autocomplete="email" placeholder="name@example.com" required></div>
+<div class="form-group"><label for="new_password">Create password</label><input id="new_password" type="password" name="new_password" minlength="6" autocomplete="new-password" placeholder="At least 6 characters" required></div>
+<button class="login-button" type="submit">Continue with email verification</button></form>
+<?php elseif($signupStep==='otp'):?>
+<form method="post"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'],ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="signup_action" value="otp"><div class="form-group"><label for="otp">Six-digit verification code</label><input id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required></div><button class="login-button" type="submit">Verify email</button></form>
+<?php else:?>
+<form method="post" id="countryForm"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'],ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="signup_action" value="country"><div class="form-group"><label for="country">Country where you are located</label><select id="country" name="country" required><option value="">Select your country</option><?php foreach($countries as $iso=>$prefix):?><option value="<?=htmlspecialchars($iso,ENT_QUOTES,'UTF-8')?>"><?=htmlspecialchars(['TZ'=>'Tanzania','KE'=>'Kenya','UG'=>'Uganda','RW'=>'Rwanda','BI'=>'Burundi','ZA'=>'South Africa'][$iso],ENT_QUOTES,'UTF-8')?> (<?=htmlspecialchars($prefix,ENT_QUOTES,'UTF-8')?>)</option><?php endforeach;?></select></div><input type="hidden" name="lat" id="signupLat"><input type="hidden" name="lon" id="signupLon"><p class="auth-note" style="margin:0 0 15px">We will request location permission to check your selected country.</p><button class="login-button" type="submit">Verify location and finish</button></form>
+<script>document.getElementById('countryForm').addEventListener('submit',function(e){if(this.dataset.ready==='1')return;e.preventDefault();const form=this;if(!navigator.geolocation){alert('Location is not supported by this browser.');return;}navigator.geolocation.getCurrentPosition(p=>{document.getElementById('signupLat').value=p.coords.latitude;document.getElementById('signupLon').value=p.coords.longitude;form.dataset.ready='1';form.requestSubmit();},err=>alert('Location access failed: '+err.message),{enableHighAccuracy:true,timeout:15000,maximumAge:0});});</script>
+<?php endif;?>
+<p class="auth-note">Your assigned contact number is for in-app messaging, not cellular calls or SMS.</p>
+</section>
+<div class="login-footer">Coffee Sales Data Analysis System · Tanzania Coffee Market</div>
+</main></div></div>
+<script>
+function showAuth(view){const signup=view==='signup';document.getElementById('loginView').hidden=signup;document.getElementById('signupView').hidden=!signup;document.getElementById('loginTab').setAttribute('aria-selected',String(!signup));document.getElementById('signupTab').setAttribute('aria-selected',String(signup));history.replaceState(null,'',signup?'?view=signup':'login.php');}
+</script>
 <script>
 /* =========================================================
    LOGIN LOADING STATE
