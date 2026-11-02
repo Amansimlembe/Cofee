@@ -77,11 +77,24 @@ try {
 $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(150), ADD COLUMN IF NOT EXISTS country_code VARCHAR(2), ADD COLUMN IF NOT EXISTS chat_number VARCHAR(24), ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ");
 $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS users_chat_number_unique ON users(chat_number) WHERE chat_number IS NOT NULL");
 $pdo->exec("CREATE TABLE IF NOT EXISTS signup_otps (email VARCHAR(255) PRIMARY KEY, display_name VARCHAR(150) NOT NULL, password_hash VARCHAR(255) NOT NULL, otp_hash VARCHAR(255) NOT NULL, expires_at TIMESTAMPTZ NOT NULL, attempts INT NOT NULL DEFAULT 0, sent_at TIMESTAMPTZ NOT NULL DEFAULT now(), verified_at TIMESTAMPTZ)");
-function sendSignupOtp(string $to,string $otp):bool {
- $key=getenv('BREVO_API_KEY')?:''; $from=getenv('OTP_FROM_EMAIL')?:'';
- if(!$key||!filter_var($from,FILTER_VALIDATE_EMAIL)||!function_exists('curl_init'))return false;
- $payload=json_encode(['sender'=>['email'=>$from,'name'=>'Coffee Sales Analysis'],'to'=>[['email'=>$to]],'subject'=>'Your account verification code','textContent'=>"Your verification code is $otp. It expires in 10 minutes. Do not share it."]);
- $ch=curl_init('https://api.brevo.com/v3/smtp/email');curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$payload,CURLOPT_HTTPHEADER=>['api-key: '.$key,'Content-Type: application/json'],CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>12]);curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);return $code>=200&&$code<300;
+function sendSignupOtp(string $to,string $otp):array {
+ $key=trim((string)(getenv('BREVO_API_KEY')?:''));
+ $from=trim((string)(getenv('OTP_FROM_EMAIL')?:''));
+ if($key==='')return [false,'Email verification is not configured. The administrator must set BREVO_API_KEY on Render.'];
+ if(!filter_var($from,FILTER_VALIDATE_EMAIL))return [false,'Email sender is not configured. The administrator must set OTP_FROM_EMAIL to a verified sender.'];
+ if(!function_exists('curl_init'))return [false,'Email service is unavailable: the PHP cURL extension is missing.'];
+ $payload=json_encode(['sender'=>['email'=>$from,'name'=>'Coffee Sales Analysis'],'to'=>[['email'=>$to]],'subject'=>'Your Coffee Sales verification code','textContent'=>"Your verification code is $otp. It expires in 10 minutes. Do not share it."],JSON_THROW_ON_ERROR);
+ $ch=curl_init('https://api.brevo.com/v3/smtp/email');
+ curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$payload,CURLOPT_HTTPHEADER=>['api-key: '.$key,'Content-Type: application/json','Accept: application/json'],CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>20]);
+ $response=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$curlError=curl_error($ch);curl_close($ch);
+ if($response!==false&&$status>=200&&$status<300)return [true,''];
+ $remote=is_string($response)?json_decode($response,true):null;
+ $remoteMessage=is_array($remote)?(string)($remote['message']??''):'';
+ error_log('Signup OTP delivery failed: HTTP '.$status.'; '.substr($remoteMessage?:$curlError,0,350));
+ if($status===401||$status===403)return [false,'Email service authorization failed. Check the Brevo API key and sender verification in Render.'];
+ if($status===400)return [false,'Email service rejected the request. Verify OTP_FROM_EMAIL is an approved sender in Brevo.'];
+ if($status===429)return [false,'Email delivery limit reached. Please try again later.'];
+ return [false,'Email delivery is temporarily unavailable. Please try again later or contact the administrator.'];
 }
 function verifiedCountry(float $lat,float $lon):?string {
  if(!function_exists('curl_init'))return null;
@@ -99,7 +112,7 @@ if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['signup_action'])){
   if(!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>100||mb_strlen($name)<2||mb_strlen($name)>150||strlen($password)<6)throw new RuntimeException('Enter a valid email, name and password of at least 6 characters.');
   $q=$pdo->prepare('SELECT 1 FROM users WHERE lower(username)=?');$q->execute([$email]);if($q->fetchColumn())throw new RuntimeException('This email is already registered. Please log in.');
   $q=$pdo->prepare('SELECT sent_at FROM signup_otps WHERE email=?');$q->execute([$email]);$last=$q->fetchColumn();if($last&&time()-strtotime($last)<60)throw new RuntimeException('Please wait one minute before requesting another code.');
-  $otp=(string)random_int(100000,999999);if(!sendSignupOtp($email,$otp))throw new RuntimeException('Could not send email. Check email service configuration or try later.');
+  $otp=(string)random_int(100000,999999);[$sent,$deliveryError]=sendSignupOtp($email,$otp);if(!$sent)throw new RuntimeException($deliveryError);
   $q=$pdo->prepare("INSERT INTO signup_otps(email,display_name,password_hash,otp_hash,expires_at,attempts,sent_at,verified_at) VALUES(?,?,?,?,now()+interval '10 minutes',0,now(),NULL) ON CONFLICT(email) DO UPDATE SET display_name=excluded.display_name,password_hash=excluded.password_hash,otp_hash=excluded.otp_hash,expires_at=excluded.expires_at,attempts=0,sent_at=now(),verified_at=NULL");$q->execute([$email,$name,password_hash($password,PASSWORD_DEFAULT),password_hash($otp,PASSWORD_DEFAULT)]);
   $_SESSION['signup_email']=$email;$_SESSION['signup_step']='otp';$signupStep='otp';$signupMessage='A six-digit code has been sent to your email.';
  }elseif($act==='otp'){
@@ -617,9 +630,9 @@ body{background:#f5f3f0;color:#292524}
 .login-logo{width:58px;height:58px;font-size:27px;margin-bottom:18px;box-shadow:none;border-radius:15px}
 .login-card h1{font-size:24px;letter-spacing:-.6px}
 .login-subtitle{margin-bottom:27px;line-height:1.5}
-.auth-switch{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#f4f1ee;border:1px solid #e9e3dd;border-radius:11px;padding:5px;margin-bottom:26px}
-.auth-switch button{border:0;border-radius:8px;padding:12px 8px;font-size:14px;font-weight:700;color:#786b64;background:transparent;cursor:pointer}
-.auth-switch button[aria-selected="true"]{color:#3e2723;background:white;box-shadow:0 2px 7px rgba(0,0,0,.08)}
+.auth-switch{display:flex;justify-content:center;gap:4px;background:transparent;border:0;padding:0;margin:0 0 22px}
+.auth-switch button{border:0;border-radius:8px;padding:10px 15px;font-size:13px;font-weight:600;color:#786b64;background:transparent;cursor:pointer}
+.auth-switch button[aria-selected="true"]{color:#3e2723;background:#f4f1ee;box-shadow:none}
 .auth-view[hidden]{display:none!important}
 .form-group{margin-bottom:17px}
 .form-group label{font-size:12px;letter-spacing:.1px}
@@ -634,7 +647,7 @@ body{background:#f5f3f0;color:#292524}
 <div class="login-page"><div class="login-container"><main class="login-card">
 <div class="login-logo" aria-hidden="true">☕</div>
 <h1>Coffee Sales Analysis</h1>
-<p class="login-subtitle">Secure access to the Tanzania Coffee Market Management System</p>
+<p class="login-subtitle">Sign in to your account</p>
 <div class="auth-switch" role="tablist" aria-label="Account access">
 <button type="button" id="loginTab" role="tab" aria-controls="loginView" aria-selected="<?= $showSignup?'false':'true' ?>" onclick="showAuth('login')">Sign in</button>
 <button type="button" id="signupTab" role="tab" aria-controls="signupView" aria-selected="<?= $showSignup?'true':'false' ?>" onclick="showAuth('signup')">Create account</button>
@@ -644,10 +657,10 @@ body{background:#f5f3f0;color:#292524}
 <form method="post" autocomplete="on">
 <div class="form-group"><label for="username">Email address</label><input id="username" name="username" type="text" autocomplete="username" placeholder="name@example.com" required></div>
 <div class="form-group"><label for="password">Password</label><div class="password-wrapper"><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" class="password-toggle" aria-label="Show or hide password" onclick="togglePassword()">👁</button></div></div>
-<button class="login-button" type="submit" name="login" id="loginButton"><span class="login-default">Sign in securely</span><span class="login-loading" aria-hidden="true"><span class="coffee-spinner"></span><span>Signing in...</span></span></button>
-</form><p class="auth-note">Use your registered email address and password.</p></section>
+<button class="login-button" type="submit" name="login" id="loginButton"><span class="login-default">Sign in</span><span class="login-loading" aria-hidden="true"><span class="coffee-spinner"></span><span>Signing in...</span></span></button>
+</form></section>
 <section id="signupView" class="auth-view" role="tabpanel" <?= $showSignup?'':'hidden' ?>>
-<h2 style="font-size:18px;color:#3e2723;text-align:center;margin-bottom:14px">Create your account</h2>
+<h2 style="font-size:18px;color:#3e2723;text-align:center;margin-bottom:14px">Create account</h2>
 <p class="auth-step"><?php if($signupStep==='start'):?>Step 1 of 3 · Account details<?php elseif($signupStep==='otp'):?>Step 2 of 3 · Verify your email<?php else:?>Step 3 of 3 · Confirm your country<?php endif;?></p>
 <?php if($signupMessage):?><div class="login-error" style="background:#f9f1e9;color:#68452f;border-color:#b18464"><?=htmlspecialchars($signupMessage,ENT_QUOTES,'UTF-8')?></div><?php endif;?>
 <?php if($signupStep==='start'):?>
@@ -662,9 +675,9 @@ body{background:#f5f3f0;color:#292524}
 <form method="post" id="countryForm"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'],ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="signup_action" value="country"><div class="form-group"><label for="country">Country where you are located</label><select id="country" name="country" required><option value="">Select your country</option><?php foreach($countries as $iso=>$prefix):?><option value="<?=htmlspecialchars($iso,ENT_QUOTES,'UTF-8')?>"><?=htmlspecialchars(['TZ'=>'Tanzania','KE'=>'Kenya','UG'=>'Uganda','RW'=>'Rwanda','BI'=>'Burundi','ZA'=>'South Africa'][$iso],ENT_QUOTES,'UTF-8')?> (<?=htmlspecialchars($prefix,ENT_QUOTES,'UTF-8')?>)</option><?php endforeach;?></select></div><input type="hidden" name="lat" id="signupLat"><input type="hidden" name="lon" id="signupLon"><p class="auth-note" style="margin:0 0 15px">We will request location permission to check your selected country.</p><button class="login-button" type="submit">Verify location and finish</button></form>
 <script>document.getElementById('countryForm').addEventListener('submit',function(e){if(this.dataset.ready==='1')return;e.preventDefault();const form=this;if(!navigator.geolocation){alert('Location is not supported by this browser.');return;}navigator.geolocation.getCurrentPosition(p=>{document.getElementById('signupLat').value=p.coords.latitude;document.getElementById('signupLon').value=p.coords.longitude;form.dataset.ready='1';form.requestSubmit();},err=>alert('Location access failed: '+err.message),{enableHighAccuracy:true,timeout:15000,maximumAge:0});});</script>
 <?php endif;?>
-<p class="auth-note">Your assigned contact number is for in-app messaging, not cellular calls or SMS.</p>
+
 </section>
-<div class="login-footer">Coffee Sales Data Analysis System · Tanzania Coffee Market</div>
+
 </main></div></div>
 <script>
 function showAuth(view){const signup=view==='signup';document.getElementById('loginView').hidden=signup;document.getElementById('signupView').hidden=!signup;document.getElementById('loginTab').setAttribute('aria-selected',String(!signup));document.getElementById('signupTab').setAttribute('aria-selected',String(signup));history.replaceState(null,'',signup?'?view=signup':'login.php');}
