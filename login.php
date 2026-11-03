@@ -78,28 +78,43 @@ $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(150)
 $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS users_chat_number_unique ON users(chat_number) WHERE chat_number IS NOT NULL");
 $pdo->exec("CREATE TABLE IF NOT EXISTS signup_otps (email VARCHAR(255) PRIMARY KEY, display_name VARCHAR(150) NOT NULL, password_hash VARCHAR(255) NOT NULL, otp_hash VARCHAR(255) NOT NULL, expires_at TIMESTAMPTZ NOT NULL, attempts INT NOT NULL DEFAULT 0, sent_at TIMESTAMPTZ NOT NULL DEFAULT now(), verified_at TIMESTAMPTZ)");
 function sendSignupOtp(string $to,string $otp):array {
- $key=trim((string)(getenv('BREVO_API_KEY')?:''));
- $from=trim((string)(getenv('OTP_FROM_EMAIL')?:''));
- if($key==='')return [false,'Email verification is not configured. The administrator must set BREVO_API_KEY on Render.'];
- if(!filter_var($from,FILTER_VALIDATE_EMAIL))return [false,'Email sender is not configured. The administrator must set OTP_FROM_EMAIL to a verified sender.'];
- if(!function_exists('curl_init'))return [false,'Email service is unavailable: the PHP cURL extension is missing.'];
- $payload=json_encode(['sender'=>['email'=>$from,'name'=>'Coffee Sales Analysis'],'to'=>[['email'=>$to]],'subject'=>'Your Coffee Sales verification code','textContent'=>"Your verification code is $otp. It expires in 10 minutes. Do not share it."],JSON_THROW_ON_ERROR);
- $ch=curl_init('https://api.brevo.com/v3/smtp/email');
- curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$payload,CURLOPT_HTTPHEADER=>['api-key: '.$key,'Content-Type: application/json','Accept: application/json'],CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>20]);
- $response=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$curlError=curl_error($ch);curl_close($ch);
- if($response!==false&&$status>=200&&$status<300)return [true,''];
- $remote=is_string($response)?json_decode($response,true):null;
- $remoteMessage=is_array($remote)?(string)($remote['message']??''):'';
- error_log('Signup OTP delivery failed: HTTP '.$status.'; '.substr($remoteMessage?:$curlError,0,350));
- if($status===401||$status===403)return [false,'Email service authorization failed. Check the Brevo API key and sender verification in Render.'];
- if($status===400)return [false,'Email service rejected the request. Verify OTP_FROM_EMAIL is an approved sender in Brevo.'];
- if($status===429)return [false,'Email delivery limit reached. Please try again later.'];
- return [false,'Email delivery is temporarily unavailable. Please try again later or contact the administrator.'];
+ $sender=trim((string)(getenv('GMAIL_ADDRESS')?:''));
+ $appPassword=preg_replace('/\s+/', '', (string)(getenv('GMAIL_APP_PASSWORD')?:''));
+ if(!filter_var($sender,FILTER_VALIDATE_EMAIL)||$appPassword==='')return [false,'Email sending is not configured. Set GMAIL_ADDRESS and GMAIL_APP_PASSWORD in Render.'];
+ if(!filter_var($to,FILTER_VALIDATE_EMAIL))return [false,'Invalid recipient email.'];
+ $socket=@stream_socket_client('ssl://smtp.gmail.com:465',$errno,$errstr,12,STREAM_CLIENT_CONNECT);
+ if(!$socket){error_log('Gmail SMTP connection failed: '.$errno.' '.$errstr);return [false,'Could not connect to Gmail SMTP. Check your hosting provider’s SMTP restrictions.'];}
+ stream_set_timeout($socket,15);
+ try {
+  $read=function()use($socket):array {
+   $lines='';
+   do { $line=fgets($socket,2048);if($line===false)throw new RuntimeException('SMTP connection ended unexpectedly.');$lines.=$line; }while(strlen($line)<4||$line[3]==='-');
+   return [(int)substr($line,0,3),$lines];
+  };
+  $command=function(string $line,array $expected)use($socket,$read):void {
+   if(fwrite($socket,$line."\r\n")===false)throw new RuntimeException('SMTP write failed.');
+   [$status,$response]=$read();if(!in_array($status,$expected,true))throw new RuntimeException('SMTP response '.$status.': '.trim($response));
+  };
+  [$status]=$read();if($status!==220)throw new RuntimeException('SMTP greeting failed.');
+  $command('EHLO coffeesales.local',[250]);
+  $command('AUTH LOGIN',[334]);
+  $command(base64_encode($sender),[334]);
+  $command(base64_encode($appPassword),[235]);
+  $command('MAIL FROM:<'.$sender.'>',[250]);
+  $command('RCPT TO:<'.$to.'>',[250,251]);
+  $command('DATA',[354]);
+  $body="Your Coffee Sales verification code is: $otp\r\n\r\nThis code expires in 10 minutes. Do not share it.\r\n";
+  $message='From: Coffee Sales Analysis <'.$sender.">\r\n".'To: <'.$to.">\r\n"."Subject: Your Coffee Sales verification code\r\n"."MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n".$body;
+  $message=preg_replace('/(?m)^\./','..',$message);
+  $command(rtrim($message,"\r\n")."\r\n.",[250]);
+  try{$command('QUIT',[221]);}catch(Throwable $ignored){}
+  fclose($socket);return [true,''];
+ }catch(Throwable $e){error_log('Gmail OTP delivery failed: '.preg_replace('/[\r\n]+/',' ',substr($e->getMessage(),0,200)));fclose($socket);return [false,'Email could not be sent. Check your Gmail App Password and Render logs.'];}
 }
 function verifiedCountry(float $lat,float $lon):?string {
  if(!function_exists('curl_init'))return null;
  $url='https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=3&addressdetails=1&lat='.rawurlencode((string)$lat).'&lon='.rawurlencode((string)$lon);
- $ch=curl_init($url);curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>8,CURLOPT_USERAGENT=>'CoffeeSalesSignup/1.0 ('.(getenv('OTP_FROM_EMAIL')?:'admin@example.com').')']);$json=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);if($code!==200||!is_string($json))return null;return strtoupper((string)(json_decode($json,true)['address']['country_code']??''))?:null;
+ $ch=curl_init($url);curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>8,CURLOPT_USERAGENT=>'CoffeeSalesSignup/1.0 ('.(getenv('GMAIL_ADDRESS')?:'admin@example.com').')']);$json=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);if($code!==200||!is_string($json))return null;return strtoupper((string)(json_decode($json,true)['address']['country_code']??''))?:null;
 }
 $countries=['TZ'=>'+255','KE'=>'+254','UG'=>'+256','RW'=>'+250','BI'=>'+257','ZA'=>'+27'];
 $signupStep=$_SESSION['signup_step']??'start';$signupMessage='';
@@ -112,9 +127,9 @@ if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['signup_action'])){
   if(!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>100||mb_strlen($name)<2||mb_strlen($name)>150||strlen($password)<6)throw new RuntimeException('Enter a valid email, name and password of at least 6 characters.');
   $q=$pdo->prepare('SELECT 1 FROM users WHERE lower(username)=?');$q->execute([$email]);if($q->fetchColumn())throw new RuntimeException('This email is already registered. Please log in.');
   $q=$pdo->prepare('SELECT sent_at FROM signup_otps WHERE email=?');$q->execute([$email]);$last=$q->fetchColumn();if($last&&time()-strtotime($last)<60)throw new RuntimeException('Please wait one minute before requesting another code.');
-  $otp=(string)random_int(100000,999999);[$sent,$deliveryError]=sendSignupOtp($email,$otp);if(!$sent)throw new RuntimeException($deliveryError);
+  $otp=(string)random_int(1000,9999);[$sent,$deliveryError]=sendSignupOtp($email,$otp);if(!$sent)throw new RuntimeException($deliveryError);
   $q=$pdo->prepare("INSERT INTO signup_otps(email,display_name,password_hash,otp_hash,expires_at,attempts,sent_at,verified_at) VALUES(?,?,?,?,now()+interval '10 minutes',0,now(),NULL) ON CONFLICT(email) DO UPDATE SET display_name=excluded.display_name,password_hash=excluded.password_hash,otp_hash=excluded.otp_hash,expires_at=excluded.expires_at,attempts=0,sent_at=now(),verified_at=NULL");$q->execute([$email,$name,password_hash($password,PASSWORD_DEFAULT),password_hash($otp,PASSWORD_DEFAULT)]);
-  $_SESSION['signup_email']=$email;$_SESSION['signup_step']='otp';$signupStep='otp';$signupMessage='A six-digit code has been sent to your email.';
+  $_SESSION['signup_email']=$email;$_SESSION['signup_step']='otp';$signupStep='otp';$signupMessage='A four-digit code has been sent to your email.';
   }elseif($act==='resend_otp'){
    $email=(string)($_SESSION['signup_email']??'');
    if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('Signup session expired. Please start registration again.');
@@ -123,8 +138,8 @@ if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['signup_action'])){
    if($r['verified_at']!==null)throw new RuntimeException('This email has already been verified. Continue registration.');
    $wait=max(0,60-(time()-strtotime($r['sent_at'])));
    if($wait>0)throw new RuntimeException('Please wait '.$wait.' seconds before requesting another code.');
-   // Only replace the old OTP after Brevo accepts the new message.
-   $otp=(string)random_int(100000,999999);
+   // Only replace the old OTP after Gmail accepts the new message.
+   $otp=(string)random_int(1000,9999);
    [$sent,$deliveryError]=sendSignupOtp($email,$otp);
    if(!$sent)throw new RuntimeException($deliveryError);
    $q=$pdo->prepare("UPDATE signup_otps SET otp_hash=?,expires_at=now()+interval '10 minutes',attempts=0,sent_at=now() WHERE email=? AND verified_at IS NULL");
@@ -135,7 +150,7 @@ if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['signup_action'])){
   $email=(string)($_SESSION['signup_email']??'');$code=trim((string)($_POST['otp']??''));$q=$pdo->prepare('SELECT * FROM signup_otps WHERE email=?');$q->execute([$email]);$r=$q->fetch();
   if(!$r||strtotime($r['expires_at'])<time()||(int)$r['attempts']>=5)throw new RuntimeException('Code expired or too many attempts. Restart signup.');
   $pdo->prepare('UPDATE signup_otps SET attempts=attempts+1 WHERE email=?')->execute([$email]);
-  if(!preg_match('/^[0-9]{6}$/',$code)||!password_verify($code,$r['otp_hash']))throw new RuntimeException('Incorrect verification code.');
+  if(!preg_match('/^[0-9]{4}$/',$code)||!password_verify($code,$r['otp_hash']))throw new RuntimeException('Incorrect verification code.');
   $pdo->prepare('UPDATE signup_otps SET verified_at=now() WHERE email=?')->execute([$email]);$_SESSION['signup_step']='country';$signupStep='country';$signupMessage='Email verified. Select your country and allow location access.';
  }elseif($act==='country'){
   $email=(string)($_SESSION['signup_email']??'');$country=(string)($_POST['country']??'');$lat=filter_var($_POST['lat']??null,FILTER_VALIDATE_FLOAT);$lon=filter_var($_POST['lon']??null,FILTER_VALIDATE_FLOAT);
@@ -667,7 +682,7 @@ body{background:#f5f3f0;color:#292524}
 <p class="login-subtitle">Sign in to your account</p>
 <div class="auth-switch" role="tablist" aria-label="Account access">
 <button type="button" id="loginTab" role="tab" aria-controls="loginView" aria-selected="<?= $showSignup?'false':'true' ?>" onclick="showAuth('login')">Sign in</button>
-<button type="button" id="signupTab" role="tab" aria-controls="signupView" aria-selected="<?= $showSignup?'true':'false' ?>" onclick="showAuth('signup')">Create account</button>
+<button type="button" id="signupTab" role="tab" aria-controls="signupView" aria-selected="<?= $showSignup?'true':'false' ?>" onclick="showAuth('signup')">Sign Up</button>
 </div>
 <section id="loginView" class="auth-view" role="tabpanel" <?= $showSignup?'hidden':'' ?>>
 <?php if($login_error):?><div class="login-error"><?=htmlspecialchars($login_error,ENT_QUOTES,'UTF-8')?></div><?php endif;?>
@@ -685,9 +700,9 @@ body{background:#f5f3f0;color:#292524}
 <div class="form-group"><label for="display_name">Full name</label><input id="display_name" name="display_name" maxlength="150" autocomplete="name" placeholder="Your full name" required></div>
 <div class="form-group"><label for="email">Email address</label><input id="email" type="email" name="email" autocomplete="email" placeholder="name@example.com" required></div>
 <div class="form-group"><label for="new_password">Create password</label><input id="new_password" type="password" name="new_password" minlength="6" autocomplete="new-password" placeholder="At least 6 characters" required></div>
-<button class="login-button" type="submit">Continue with email verification</button></form>
+<button class="login-button" type="submit">Continue</button></form>
 <?php elseif($signupStep==='otp'):?>
-<form method="post"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'],ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="signup_action" value="otp"><div class="form-group"><label for="otp">Six-digit verification code</label><input id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required></div><button class="login-button" type="submit">Verify email</button></form>
+<form method="post"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'],ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="signup_action" value="otp"><div class="form-group"><label for="otp">Four-digit verification code</label><input id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4}" maxlength="4" placeholder="0000" required></div><button class="login-button" type="submit">Verify email</button></form>
 <form method="post" id="resendOtpForm" style="margin-top:12px;text-align:center"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'],ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="signup_action" value="resend_otp"><button type="submit" id="resendOtpButton" class="resend-otp-button">Resend verification code</button><p id="resendOtpHint" class="auth-note" style="margin-top:5px" aria-live="polite"></p></form>
 <script>
 (function(){
