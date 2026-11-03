@@ -115,6 +115,22 @@ if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['signup_action'])){
   $otp=(string)random_int(100000,999999);[$sent,$deliveryError]=sendSignupOtp($email,$otp);if(!$sent)throw new RuntimeException($deliveryError);
   $q=$pdo->prepare("INSERT INTO signup_otps(email,display_name,password_hash,otp_hash,expires_at,attempts,sent_at,verified_at) VALUES(?,?,?,?,now()+interval '10 minutes',0,now(),NULL) ON CONFLICT(email) DO UPDATE SET display_name=excluded.display_name,password_hash=excluded.password_hash,otp_hash=excluded.otp_hash,expires_at=excluded.expires_at,attempts=0,sent_at=now(),verified_at=NULL");$q->execute([$email,$name,password_hash($password,PASSWORD_DEFAULT),password_hash($otp,PASSWORD_DEFAULT)]);
   $_SESSION['signup_email']=$email;$_SESSION['signup_step']='otp';$signupStep='otp';$signupMessage='A six-digit code has been sent to your email.';
+  }elseif($act==='resend_otp'){
+   $email=(string)($_SESSION['signup_email']??'');
+   if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('Signup session expired. Please start registration again.');
+   $q=$pdo->prepare('SELECT sent_at, verified_at FROM signup_otps WHERE email=?');$q->execute([$email]);$r=$q->fetch();
+   if(!$r)throw new RuntimeException('Registration not found. Please start again.');
+   if($r['verified_at']!==null)throw new RuntimeException('This email has already been verified. Continue registration.');
+   $wait=max(0,60-(time()-strtotime($r['sent_at'])));
+   if($wait>0)throw new RuntimeException('Please wait '.$wait.' seconds before requesting another code.');
+   // Only replace the old OTP after Brevo accepts the new message.
+   $otp=(string)random_int(100000,999999);
+   [$sent,$deliveryError]=sendSignupOtp($email,$otp);
+   if(!$sent)throw new RuntimeException($deliveryError);
+   $q=$pdo->prepare("UPDATE signup_otps SET otp_hash=?,expires_at=now()+interval '10 minutes',attempts=0,sent_at=now() WHERE email=? AND verified_at IS NULL");
+   $q->execute([password_hash($otp,PASSWORD_DEFAULT),$email]);
+   $_SESSION['signup_step']='otp';$signupStep='otp';
+   $signupMessage='A new verification code has been sent. Use the latest code; it expires in 10 minutes.';
  }elseif($act==='otp'){
   $email=(string)($_SESSION['signup_email']??'');$code=trim((string)($_POST['otp']??''));$q=$pdo->prepare('SELECT * FROM signup_otps WHERE email=?');$q->execute([$email]);$r=$q->fetch();
   if(!$r||strtotime($r['expires_at'])<time()||(int)$r['attempts']>=5)throw new RuntimeException('Code expired or too many attempts. Restart signup.');
@@ -639,6 +655,7 @@ body{background:#f5f3f0;color:#292524}
 .form-group input,.form-group select{width:100%;height:46px;border:1px solid #dcd6d0;border-radius:8px;padding:0 13px;font-size:14px;background:white}
 .form-group input:focus,.form-group select:focus{outline:none;border-color:#795548;box-shadow:0 0 0 3px rgba(121,85,72,.12)}
 .login-button{height:48px;margin-top:6px}
+.resend-otp-button{border:0;background:transparent;color:#5d4037;font-size:13px;font-weight:700;cursor:pointer;padding:9px 12px}.resend-otp-button:hover{text-decoration:underline}.resend-otp-button:disabled{opacity:.5;cursor:not-allowed;text-decoration:none}
 .auth-note{color:#82766e;font-size:12px;line-height:1.6;text-align:center;margin-top:17px}
 .auth-step{font-size:13px;color:#766b64;margin:-9px 0 20px;text-align:center}
 .login-footer{margin-top:26px;padding-top:20px;border-top:1px solid #eee9e5;color:#8b817a;font-size:11px;line-height:1.7}
@@ -671,6 +688,15 @@ body{background:#f5f3f0;color:#292524}
 <button class="login-button" type="submit">Continue with email verification</button></form>
 <?php elseif($signupStep==='otp'):?>
 <form method="post"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'],ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="signup_action" value="otp"><div class="form-group"><label for="otp">Six-digit verification code</label><input id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required></div><button class="login-button" type="submit">Verify email</button></form>
+<form method="post" id="resendOtpForm" style="margin-top:12px;text-align:center"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'],ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="signup_action" value="resend_otp"><button type="submit" id="resendOtpButton" class="resend-otp-button">Resend verification code</button><p id="resendOtpHint" class="auth-note" style="margin-top:5px" aria-live="polite"></p></form>
+<script>
+(function(){
+ const button=document.getElementById('resendOtpButton'),hint=document.getElementById('resendOtpHint');
+ const lastSent=<?=json_encode((int)(function()use($pdo){$q=$pdo->prepare('SELECT EXTRACT(EPOCH FROM sent_at)::bigint FROM signup_otps WHERE email=?');$q->execute([(string)($_SESSION['signup_email']??'')]);return $q->fetchColumn()?:0;})())?>;
+ function update(){const left=Math.max(0,60-Math.floor(Date.now()/1000-lastSent));button.disabled=left>0;hint.textContent=left>0?'You can request another code in '+left+'s.':'Did not receive the email?';}
+ update();const interval=setInterval(()=>{update();if(!button.disabled)clearInterval(interval);},1000);
+})();
+</script>
 <?php else:?>
 <form method="post" id="countryForm"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['auth_csrf'],ENT_QUOTES,'UTF-8')?>"><input type="hidden" name="signup_action" value="country"><div class="form-group"><label for="country">Country where you are located</label><select id="country" name="country" required><option value="">Select your country</option><?php foreach($countries as $iso=>$prefix):?><option value="<?=htmlspecialchars($iso,ENT_QUOTES,'UTF-8')?>"><?=htmlspecialchars(['TZ'=>'Tanzania','KE'=>'Kenya','UG'=>'Uganda','RW'=>'Rwanda','BI'=>'Burundi','ZA'=>'South Africa'][$iso],ENT_QUOTES,'UTF-8')?> (<?=htmlspecialchars($prefix,ENT_QUOTES,'UTF-8')?>)</option><?php endforeach;?></select></div><input type="hidden" name="lat" id="signupLat"><input type="hidden" name="lon" id="signupLon"><p class="auth-note" style="margin:0 0 15px">We will request location permission to check your selected country.</p><button class="login-button" type="submit">Verify location and finish</button></form>
 <script>document.getElementById('countryForm').addEventListener('submit',function(e){if(this.dataset.ready==='1')return;e.preventDefault();const form=this;if(!navigator.geolocation){alert('Location is not supported by this browser.');return;}navigator.geolocation.getCurrentPosition(p=>{document.getElementById('signupLat').value=p.coords.latitude;document.getElementById('signupLon').value=p.coords.longitude;form.dataset.ready='1';form.requestSubmit();},err=>alert('Location access failed: '+err.message),{enableHighAccuracy:true,timeout:15000,maximumAge:0});});</script>
